@@ -114,7 +114,9 @@ int main(int argc, char** argv) {
     Check("plain: helper load", Has(PlainEngineError("forwarder LoadLibrary 126 (x)"), "helper DLL could not be loaded"));
     Check("plain: helper export", Has(PlainEngineError("forwarder export nrfwd_probe missing"), "different version"));
     Check("plain: NGX core", Has(PlainEngineError("NGX core Init: NVSDK_NGX_Result_FAIL_NotSupported"), "NGX core did not start") && Has(PlainEngineError("NGX core Init: NVSDK_NGX_Result_FAIL_NotSupported"), "NotSupported"));
-    Check("plain: model init", Has(PlainEngineError("snippet Init_Ext: X"), "refused to start"));
+    Check("plain: the model cannot run on this card", Has(PlainEngineError("CreateFeature(18): FeatureNotSupported"), "cannot run on your graphics card") && Has(PlainEngineError("CreateFeature(18): FeatureNotSupported"), "RTX 20, 30 and 40"));
+    Check("plain: another CreateFeature failure keeps its detail", Has(PlainEngineError("CreateFeature(18): OutOfGPUMemory"), "OutOfGPUMemory"));
+    Check("plain: model init",Has(PlainEngineError("snippet Init_Ext: X"), "refused to start"));
     Check("plain: device", Has(PlainEngineError("D3D12CreateDevice 0x887a0004"), "Direct3D 12"));
     Check("plain: unknown messages are shown as they are", PlainEngineError("something new") == "something new");
 

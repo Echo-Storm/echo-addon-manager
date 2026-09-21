@@ -106,6 +106,8 @@ std::string PlainEngineError(const std::string& raw) {
     if (StartsWith(raw, "NGX core Init")) return "the NVIDIA NGX core did not start: " + After(raw, ": ");
     if (StartsWith(raw, "snippet Init_Ext")) return "the model file refused to start: " + After(raw, ": ");
     if (StartsWith(raw, "D3D12CreateDevice")) return "could not create a Direct3D 12 device on this graphics card";
+    if (StartsWith(raw, "CreateFeature") && Has(raw, "FeatureNotSupported"))
+        return "this model file cannot run on your graphics card (some builds only support newer RTX cards; on RTX 20, 30 and 40 cards only a build made for them works)";
     if (StartsWith(raw, "CreateFeature")) return "the model could not create its Neural Rendering feature: " + After(raw, ": ");
     return raw;
 }
