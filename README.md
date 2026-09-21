@@ -126,8 +126,8 @@ powershell -File tools\build_all.ps1 -Only host,reshade,windowed   # everything 
 powershell -File tools\run_addon_tests.ps1               # offline tests, no game and no visible window
 ```
 
-Neural Rendering also needs NVIDIA's DLSS SDK in `addons/DLSS5NR01/external/ngx` (see the README there); it is not redistributable, so it is
-not in this repository. `tools\deploy.ps1 -What all -LsDir <Lossless Scaling folder>` copies a build into a Lossless Scaling folder with backups and refuses to
+Building Neural Rendering from source (not needed to use the release zip) also needs NVIDIA's DLSS SDK headers and static library in
+`addons/DLSS5NR01/external/ngx`. Download them yourself and follow the README in that folder; they are not redistributable, so they are not in this repository. `tools\deploy.ps1 -What all -LsDir <Lossless Scaling folder>` copies a build into a Lossless Scaling folder with backups and refuses to
 run while Lossless Scaling or your game is open. `tools\package.ps1` builds the release zip.
 
 ## Writing an addon
