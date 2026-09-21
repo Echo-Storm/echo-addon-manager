@@ -29,6 +29,9 @@ struct Result {
 // Install, update or repair, whichever the folder needs. Refuses while Lossless Scaling is running, and for a folder in a state it cannot mend.
 Result Install(const std::wstring& lsDir, const std::wstring& payloadDir);
 
+// Tests only: name every backups folder with this stamp instead of the time (empty: the time again). A folder that already exists gets a number added.
+void SetBackupStampForTest(const std::wstring& stamp);
+
 // Put Lossless Scaling's own Lossless.dll back. The addons and settings stay unless `removeAddons` (then the addons folder is moved to the backups).
 Result Uninstall(const std::wstring& lsDir, bool removeAddons);
 

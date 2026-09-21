@@ -1,0 +1,47 @@
+# The tests that need neither a GPU nor a game nor NVIDIA's SDK, from a clean checkout: what the GitHub Actions build runs on every push, and what anyone can run to
+# see that a checkout is healthy. It configures and builds what it needs (Dear ImGui and MinHook are fetched at pinned versions), runs the tests, and builds the sample
+# addon the way its README describes. It does not build Neural Rendering (that needs NVIDIA's SDK, which cannot be redistributed) and does not open any window.
+#   powershell -File tools\ci.ps1
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot -Parent
+$failed = @()
+
+function Section($text) { Write-Host ""; Write-Host "=== $text" }
+function Configure($src, $build, $extra = @()) {
+    if (Test-Path "$build\CMakeCache.txt") { return }
+    & cmake -S $src -B $build -G 'Visual Studio 17 2022' -A x64 @extra
+    if ($LASTEXITCODE -ne 0) { throw "cmake could not configure $src" }
+}
+function Build($build, $targets) {
+    & cmake --build $build --config Release --target @targets -- /nologo /verbosity:minimal
+    if ($LASTEXITCODE -ne 0) { throw "the build failed in $build" }
+}
+function Run($name, $exe, $testArgs = @()) {
+    Write-Host "--- $name"
+    & $exe @testArgs
+    if ($LASTEXITCODE -ne 0) { $script:failed += $name; Write-Host "FAILED: $name (exit $LASTEXITCODE)" }
+}
+
+Section 'the manager and its tests'
+Configure "$root\manager" "$root\manager\build"
+Build "$root\manager\build" @('Lossless', 'lsproxy_installtest', 'lsproxy_coretest', 'lsproxy_updatetest', 'lsproxy_sampletest')
+Run 'addon install' "$root\manager\build\Release\lsproxy_installtest.exe"
+Run 'addon handling' "$root\manager\build\Release\lsproxy_coretest.exe"
+Run 'update check (a local server, no internet)' "$root\manager\build\Release\lsproxy_updatetest.exe"
+Run 'sample addon' "$root\manager\build\Release\lsproxy_sampletest.exe"
+
+Section 'the installer'
+Configure "$root\installer" "$root\installer\build"
+Build "$root\installer\build" @('setup_core', 'setup_cli', 'setup_test', 'setup_payload_test', 'pack_payload', 'EchoAddonManagerSetup')
+Run 'installer core (fake Lossless Scaling folders)' "$root\installer\build\Release\setup_test.exe"
+Run 'installer file bundle' "$root\installer\build\Release\setup_payload_test.exe"
+Run 'Setup exe, silent mode' 'powershell' @('-NoProfile', '-File', "$root\installer\tests\setup_exe_test.ps1", '-Root', $root, '-NoWindow')
+
+Section 'the sample addon, built as its README says'
+Configure "$root\examples\SampleAddon" "$root\examples\SampleAddon\build"
+Build "$root\examples\SampleAddon\build" @('SampleAddon')
+if (-not (Test-Path "$root\examples\SampleAddon\build\Release\SampleAddon.dll")) { $failed += 'sample addon standalone build' }
+
+Write-Host ""
+if ($failed.Count) { Write-Host "FAILED: $($failed -join '; ')"; exit 1 }
+Write-Host 'ALL CI TESTS PASSED'

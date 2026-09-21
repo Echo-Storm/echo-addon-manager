@@ -43,7 +43,12 @@ add_dependencies(nr_harness nr_forwarder)
 # ---- the compatibility self-test: does this model file work on this graphics card? Started by the addon in its own process ----
 add_executable(nr_selftest src/selftest/nr_selftest.cpp)
 target_include_directories(nr_selftest PRIVATE src ${NGX_DIR}/include)
-target_link_libraries(nr_selftest PRIVATE ${NGX_LIB} d3d12 dxgi user32 advapi32 shlwapi ole32)
+target_link_libraries(nr_selftest PRIVATE ${NGX_LIB} d3d12 dxgi user32 advapi32 shlwapi ole32 version)
+# the addon's version, for the shareable report (--report): from addon.json, so it is never out of step
+file(READ ${CMAKE_SOURCE_DIR}/addon.json NR_ADDON_JSON)
+string(REGEX MATCH "\"version\": *\"([0-9.]+)\"" NR_ADDON_JSON_MATCH "${NR_ADDON_JSON}")
+target_compile_definitions(nr_selftest PRIVATE NR_ADDON_VERSION_TEXT="${CMAKE_MATCH_1}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/addon.json)
 add_dependencies(nr_selftest nr_forwarder)
 
 # ---- the addon ----

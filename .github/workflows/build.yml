@@ -1,0 +1,21 @@
+# Builds the manager, the installer and the sample addon, and runs the tests that need no GPU and no game, on every push and pull request.
+# Neural Rendering is not built here: it needs NVIDIA's DLSS SDK, which cannot be redistributed. The window tests are left to a machine with a desktop and a GPU.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        shell: pwsh
+        run: powershell -NoProfile -File tools/ci.ps1

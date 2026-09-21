@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+Bug fixes found by reading the code and the logs from real sessions, and the last items on the way to 1.0 that needed no one but the maintainer.
+
+- **Setup: Lossless Scaling running was missed when the folder was written another way.** The check compared path text exactly, so a folder given with a trailing or forward slash, a `..`, or its short (8.3) name
+  was not recognised as the folder of a running Lossless Scaling (the install then failed at the first file in use, and rolled back, but without saying why). Both sides are now brought to one spelling first (`CanonicalPath`).
+- **Setup: an update failed on read-only files.** An installed file marked read-only could not be replaced (the whole update rolled back). The flag is lifted for the swap and put back if the swap fails or is rolled back.
+- **Setup: two runs in the same second shared a backups folder** and the second overwrote the first's copies (the folder name is a time stamp to the second). A folder that exists gets a number added.
+- **Setup: only one window at a time**, so a second Setup cannot start a second install in the middle of the first. A drive root as the folder (`D:\`) no longer breaks the "restart as administrator" command line.
+  Choosing the folder *above* Lossless Scaling's (for example `D:\Utilities`) now uses the Lossless Scaling folder inside it when there is exactly one. The uninstall option that takes the addons out says that the addons' settings go with them.
+- **The tray icon comes back after a failed re-add.** A live log showed one failed re-add after Explorer restarted lose the icon for the whole session; the window now retries every two seconds for a minute, and treats an add that
+  Explorer carried out but reported as failed as done. The window test forces two failures and checks that the icon returns.
+- **A sample addon** (`examples/SampleAddon`): settings, a settings panel in the manager's look, a status line and a metric, about a hundred commented lines, with its own CMake file. It is loaded, started and drawn by the real manager
+  in a new offline test (`lsproxy_sampletest`, 12 checks) and built standalone by the CI script, so the addon the guide points to cannot silently stop working.
+- **A written compatibility promise for the addon API** (`docs/api-compatibility.md`): for 1.x, existing exports, `IHost` calls (new ones only at the end), capability bits, events, `addon.json` keys, the settings layout and the pinned Dear ImGui commit do
+  not change; what is outside the promise; what guards it.
+- **A questions-and-answers page** (`docs/faq.md`) and a **model compatibility page** (`docs/model-compatibility.md`). `nr_selftest.exe --report <file>` writes a short text file to share (graphics card, driver, Windows, the model file's name,
+  version and size, the result and a ready-made table row; no folders, user name or hash), the addon passes it on every test and shows an **Open the compatibility report** button, and the scenario matrix checks the report's contents.
+- **Automated builds:** `tools/ci.ps1` and `.github/workflows/build.yml` build the manager, the installer and the sample addon from a clean checkout and run the tests that need no GPU (addon handling, install, update check, sample addon,
+  the installer core, its file bundle, and the Setup exe's silent mode). Neural Rendering and the window tests need NVIDIA's SDK and a desktop, so they stay with the regular runner.
+
 ## 0.6.0 (2026-09-21)
 
 Upgrading from 0.5.0: run `EchoAddonManagerSetup.exe` from the new zip (it offers **Update**), or copy the new files over the old ones as before. Nothing to migrate. The addon API is unchanged (1.0.0).

@@ -21,7 +21,7 @@ function Build($dir, $targets) {
     & cmake --build . --config Release --target @targets 2>&1 | Select-String -Pattern ' error ' | ForEach-Object { Write-Host $_.Line }
     Pop-Location
 }
-Build "$root\manager\build" @('lsproxy_installtest', 'lsproxy_coretest', 'lsproxy_featurestest', 'lsproxy_guitest', 'lsproxy_updatetest')
+Build "$root\manager\build" @('lsproxy_installtest', 'lsproxy_coretest', 'lsproxy_featurestest', 'lsproxy_guitest', 'lsproxy_updatetest', 'lsproxy_sampletest')
 
 Run 'install' "$root\manager\build\Release\lsproxy_installtest.exe" @()
 Run 'core (addon handling)' "$root\manager\build\Release\lsproxy_coretest.exe" @()
@@ -31,6 +31,7 @@ Run 'features (Windowed off at start-up)' "$root\manager\build\Release\lsproxy_f
 # must be 0 (a std::thread still joinable at that point crashes the process)
 Run 'exit with the ReShade watcher running' "$root\manager\build\Release\lsproxy_featurestest.exe" @('abrupt')
 Run 'exit with the GPU sampler running' "$root\manager\build\Release\lsproxy_coretest.exe" @('abrupt-gpu')
+Run 'sample addon (examples\SampleAddon, loaded, started and drawn by the real manager)' "$root\manager\build\Release\lsproxy_sampletest.exe" @()
 Run 'update check (against a local server, no internet needed)' "$root\manager\build\Release\lsproxy_updatetest.exe" @()
 Run 'window (defaults)' "$root\manager\build\Release\lsproxy_guitest.exe" @()
 Run 'window (saved placement)' "$root\manager\build\Release\lsproxy_guitest.exe" @('place')

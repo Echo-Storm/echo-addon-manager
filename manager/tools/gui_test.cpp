@@ -40,6 +40,7 @@ static void Check(const char* what, bool ok, const std::string& detail = "") {
 static const wchar_t* kClass = L"EchoAddonManagerClass";
 static constexpr UINT kHotkeyMsgId = 0x4C50;   // the id the window registers its hotkey under
 
+static bool TrayAdded() { return lsproxy::window::tray::Added(); }
 static bool WaitFor(bool (*cond)(), int ms) {
     for (int t = 0; t < ms; t += 20) { if (cond()) return true; Sleep(20); }
     return cond();
@@ -208,6 +209,15 @@ int wmain(int argc, wchar_t** argv) {
     const UINT wmTaskbar = RegisterWindowMessageW(L"TaskbarCreated");
     SendMessageW(hwnd, wmTaskbar, 0, 0);
     Check("a restarted taskbar is handled", WindowThere());
+    Check("...and the icon is back afterwards", WaitFor(TrayAdded, 3000));
+
+    // Explorer can be slow to take the icon after a restart (a live log once showed one failed re-add lose the icon for the whole session): the window keeps trying.
+    // The next two attempts to add the icon are made to fail; the icon must come back by itself.
+    lsproxy::window::tray::FailNextAddsForTest(2);
+    SendMessageW(hwnd, wmTaskbar, 0, 0);
+    Check("a failed re-add leaves no icon for now", !TrayAdded());
+    Check("the window retries by itself and the icon comes back", WaitFor(TrayAdded, 15000));
+    Check("the window is still fine after the retries", WindowThere());
 
     // teardown: destroying the window ends the loop; the window class and the window go away
     SendMessageW(hwnd, WM_DESTROY, 0, 0);

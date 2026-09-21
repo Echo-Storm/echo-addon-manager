@@ -1,0 +1,9 @@
+{
+    "name": "Sample Addon",
+    "version": "1.0.0",
+    "author": "Echo Addon Manager project",
+    "description": "A small example addon: settings, a settings panel, a status line and a metric.",
+    "min_host_version": "1.0.0",
+    "dependencies": [],
+    "tags": ["example"]
+}

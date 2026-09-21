@@ -13,7 +13,9 @@ std::wstring TipText(const std::wstring& hotkeyLabel);
 
 bool Add(HWND hwnd, HICON icon, const std::wstring& hotkeyLabel);   // false: the icon could not be added (the hotkey still works)
 void Remove();
-void ReAdd(HWND hwnd, HICON icon, const std::wstring& hotkeyLabel);   // Explorer restarted and forgot the icon
+void Forget();                 // Explorer restarted and its tray forgot the icon: the next Add starts from nothing
+bool Added();                  // is the icon in the tray right now?
+void FailNextAddsForTest(int n);   // the next n calls of Add fail without asking Windows (the window test uses it to try the retry)
 void SetTip(const std::wstring& hotkeyLabel);
 void Balloon(const wchar_t* title, const wchar_t* text);
 

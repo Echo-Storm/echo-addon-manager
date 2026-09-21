@@ -808,6 +808,12 @@ LSPROXY_EXPORT void AddonRenderSettings() {
             ImGui::SameLine();
             if (ImGui::SmallButton("Check again")) ScanRequirements();
             Tip("Look again at the graphics card, the NVIDIA driver, the model file and the helper DLL. Use it after putting a file in place.");
+            const std::wstring reportFile = g_addonDir + L"\\compatibility_report.txt";
+            if (GetFileAttributesW(reportFile.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Open the compatibility report")) ShellExecuteW(nullptr, L"open", reportFile.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                Tip("A short text file about the last compatibility test: your graphics card, driver, Windows, the model file's name, version and size, and the result. Paste it into an issue or the compatibility table. It holds no folders, user name or file hash.");
+            }
             { std::string msg; bool ok; { std::lock_guard<std::mutex> lk(g_reqMu); msg = g_placeMsg; ok = g_placeOk; }
               if (!msg.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? lsp::theme::V(lsp::theme::kAccent) : lsp::theme::V(lsp::theme::kWarn)); ImGui::TextWrapped("%s", msg.c_str()); ImGui::PopStyleColor(); } }
         }

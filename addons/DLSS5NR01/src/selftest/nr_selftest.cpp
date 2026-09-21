@@ -1,7 +1,10 @@
 // nr_selftest — asks one question: does this model file work on this graphics card? It runs in its own process, so whatever the model does (including
 // crashing) cannot take Lossless Scaling down with it. The Neural Rendering addon starts it from the Requirements section and reads the last line.
 //
-//   nr_selftest.exe --model <path to nvngx_dlssnr.dll> [--lsdir <Lossless Scaling folder>] [--luid <high>:<low>] [--size WxH]
+//   nr_selftest.exe --model <path to nvngx_dlssnr.dll> [--lsdir <Lossless Scaling folder>] [--luid <high>:<low>] [--size WxH] [--report <file>]
+//
+// --report writes a short text file to share (card, driver, Windows, the model file's name, version and size, the result, and a line for the table in
+// docs/model-compatibility.md): no folders, no user name, no hash. It is written whatever the result is.
 //
 // It follows the same path as the engine (and nr_harness, the research tool): a Direct3D 12 device on the NVIDIA card, the driver's NGX core, the
 // helper DLL (nvngx.dll_dlss5nr01.dll beside this program) which is the only caller the model accepts, the model's own initialisation, creating
@@ -41,7 +44,54 @@ void Say(const char* fmt, ...) {
     fputs(b, stdout); fputc('\n', stdout); fflush(stdout);
 }
 
+// What the report says about this machine, filled in as it becomes known (Finish can be reached from any step)
+struct ReportInfo {
+    std::wstring path;                 // --report <file>: where to write it; empty: no report
+    std::string gpu, memory, driver, model, modelSize, modelVersion, size;
+} g_report;
+
+std::string OsVersion() {
+    typedef LONG(WINAPI* RtlGetVersionFn)(OSVERSIONINFOW*);
+    OSVERSIONINFOW v = {}; v.dwOSVersionInfoSize = sizeof v;
+    HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+    RtlGetVersionFn fn = nt ? reinterpret_cast<RtlGetVersionFn>(GetProcAddress(nt, "RtlGetVersion")) : nullptr;
+    char b[64] = "unknown";
+    if (fn && fn(&v) == 0) snprintf(b, sizeof b, "%lu.%lu.%lu", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber);
+    return b;
+}
+
+// A text file a person can paste into an issue: which card, driver, Windows and model file (its name, version and size only: no folders, no user name, no hash) and what the test said.
+void WriteReport(int code, const char* key, const char* words) {
+    if (g_report.path.empty()) return;
+    SYSTEMTIME t; GetLocalTime(&t);
+    char date[32]; snprintf(date, sizeof date, "%04u-%02u-%02u", t.wYear, t.wMonth, t.wDay);
+    const std::string card = g_report.gpu.empty() ? std::string("none found") : g_report.gpu;
+    const std::string driver = g_report.driver.empty() ? std::string("unknown") : g_report.driver;
+    const std::string model = g_report.model.empty() ? std::string("nvngx_dlssnr.dll") : g_report.model;
+    const std::string modelDesc = g_report.modelVersion.empty() && g_report.modelSize.empty() ? std::string("not found")
+        : (g_report.modelVersion.empty() ? std::string("unknown version") : "version " + g_report.modelVersion) + (g_report.modelSize.empty() ? "" : ", " + g_report.modelSize);
+    std::string row = "| " + card + (g_report.memory.empty() ? "" : " (" + g_report.memory + ")") + " | " + driver + " | " +
+        (g_report.modelVersion.empty() ? std::string("unknown") : g_report.modelVersion) + (g_report.modelSize.empty() ? "" : " (" + g_report.modelSize + ")") + " | " +
+        (code == 0 ? "PASS" : "FAIL " + std::string(key)) + " | " + NR_ADDON_VERSION_TEXT + " |";
+    char head[256];
+    snprintf(head, sizeof head, "result:          %s (code %d)\r\n", code == 0 ? "PASS" : key, code);
+    std::string text = "Neural Rendering compatibility report\r\n=====================================\r\n";
+    text += head;
+    text += std::string("what it said:    ") + words + "\r\n";
+    text += "graphics card:   " + card + (g_report.memory.empty() ? "" : " (" + g_report.memory + ")") + "\r\n";
+    text += "NVIDIA driver:   " + driver + "\r\n";
+    text += "Windows:         " + OsVersion() + "\r\n";
+    text += "model file:      " + model + ", " + modelDesc + "\r\n";
+    if (!g_report.size.empty()) text += "test picture:    " + g_report.size + "\r\n";
+    text += std::string("addon:           ") + NR_ADDON_VERSION_TEXT + " (nr_selftest)\r\n";
+    text += std::string("date:            ") + date + "\r\n\r\n";
+    text += "For the table in docs/model-compatibility.md:\r\n| Card | Driver | Model version | Result | Addon |\r\n|---|---|---|---|---|\r\n" + row + "\r\n";
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, g_report.path.c_str(), L"wb") == 0 && f) { fwrite(text.data(), 1, text.size(), f); fclose(f); }
+}
+
 int Finish(int code, const char* key, const char* words) {
+    WriteReport(code, key, words);
     Say("SELFTEST %d %s %s", code, key, words);
     return code;
 }
@@ -189,6 +239,34 @@ struct Helper {
     }
 };
 
+std::string Narrow(const std::wstring& w) {
+    if (w.empty()) return std::string();
+    const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
+    std::string s(static_cast<size_t>(n), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), s.data(), n, nullptr, nullptr);
+    return s;
+}
+
+// The model file's version as its resource says it ("310.8" for 310.8.0.0), without loading the file; empty when it has none.
+std::string ModelVersionText(const std::wstring& path) {
+    DWORD ignored = 0;
+    const DWORD size = GetFileVersionInfoSizeW(path.c_str(), &ignored);
+    if (!size) return std::string();
+    std::vector<char> block(size);
+    if (!GetFileVersionInfoW(path.c_str(), 0, size, block.data())) return std::string();
+    VS_FIXEDFILEINFO* fixedInfo = nullptr;
+    UINT len = 0;
+    if (!VerQueryValueW(block.data(), L"\\", reinterpret_cast<void**>(&fixedInfo), &len) || !fixedInfo || len < sizeof(VS_FIXEDFILEINFO)) return std::string();
+    unsigned p[4] = { HIWORD(fixedInfo->dwFileVersionMS), LOWORD(fixedInfo->dwFileVersionMS), HIWORD(fixedInfo->dwFileVersionLS), LOWORD(fixedInfo->dwFileVersionLS) };
+    int n = 4;
+    while (n > 2 && p[n - 1] == 0) --n;
+    char b[48] = {};
+    if (n == 2) snprintf(b, sizeof b, "%u.%u", p[0], p[1]);
+    else if (n == 3) snprintf(b, sizeof b, "%u.%u.%u", p[0], p[1], p[2]);
+    else snprintf(b, sizeof b, "%u.%u.%u.%u", p[0], p[1], p[2], p[3]);
+    return b;
+}
+
 std::wstring ArgAfter(int argc, wchar_t** argv, const wchar_t* flag) {
     for (int i = 1; i + 1 < argc; ++i) if (std::wstring(argv[i]) == flag) return argv[i + 1];
     return std::wstring();
@@ -218,6 +296,20 @@ int wmain(int argc, wchar_t** argv) {
     if (width < 128 || height < 72 || width > 3840 || height > 2160) { width = 1280; height = 720; }
     const std::wstring luidArg = ArgAfter(argc, argv, L"--luid");
 
+    // the shareable report: only the model file's name, version and size (learned without loading it) go in, never a folder
+    g_report.path = ArgAfter(argc, argv, L"--report");
+    {
+        char sz[32]; snprintf(sz, sizeof sz, "%ux%u", width, height); g_report.size = sz;
+        const size_t slash = model.find_last_of(L"\\/");
+        g_report.model = Narrow(slash == std::wstring::npos ? model : model.substr(slash + 1));
+        WIN32_FILE_ATTRIBUTE_DATA fa = {};
+        if (GetFileAttributesExW(model.c_str(), GetFileExInfoStandard, &fa)) {
+            const double mb = ((static_cast<unsigned long long>(fa.nFileSizeHigh) << 32) | fa.nFileSizeLow) / (1024.0 * 1024.0);
+            char m[32]; snprintf(m, sizeof m, "%.1f MB", mb); g_report.modelSize = m;
+            g_report.modelVersion = ModelVersionText(model);
+        }
+    }
+
     // NGX and the model write their own files under the data path: keep them out of the Lossless Scaling folder
     wchar_t tmp[MAX_PATH] = {};
     GetTempPathW(MAX_PATH, tmp);
@@ -246,6 +338,16 @@ int wmain(int argc, wchar_t** argv) {
     char gpuName[128] = {};
     WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1, gpuName, sizeof gpuName - 1, nullptr, nullptr);
     Say("graphics card: %s", gpuName);
+    g_report.gpu = gpuName;
+    { char m[32]; snprintf(m, sizeof m, "%llu GB", static_cast<unsigned long long>((desc.DedicatedVideoMemory + (512ull << 20)) >> 30)); g_report.memory = m; }
+    {   // the driver's number as NVIDIA writes it: the user-mode driver version 32.0.16.1692 is driver 616.92
+        LARGE_INTEGER umd = {};
+        if (SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd))) {
+            const unsigned low = static_cast<unsigned>(umd.LowPart);
+            const unsigned five = (HIWORD(low) % 10) * 10000 + LOWORD(low);
+            char d[32]; snprintf(d, sizeof d, "%u.%02u", five / 100, five % 100); g_report.driver = d;
+        }
+    }
 
     Gpu gpu;
     if (!gpu.Create(adapter)) return Finish(11, "D3D12", "a Direct3D 12 device could not be created on the graphics card");

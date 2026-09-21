@@ -365,7 +365,8 @@ SelfTestResult RunSelfTest(const std::wstring& addonDir, const std::wstring& mod
         r.text = "the compatibility test program (nr_selftest.exe) is missing from the addon folder";
         return r;
     }
-    const ProcessResult p = RunProcess(L"\"" + exe + L"\" --model \"" + modelPath + L"\" --lsdir \"" + lsDir + L"\"", timeoutMs);
+    DeleteFileW((addonDir + L"\\compatibility_report.txt").c_str());   // a report left by an earlier run must not be taken for this one's (a crashed test writes none)
+    const ProcessResult p = RunProcess(L"\"" + exe + L"\" --model \"" + modelPath + L"\" --lsdir \"" + lsDir + L"\" --report \"" + addonDir + L"\\compatibility_report.txt\"", timeoutMs);
     if (!p.started) {
         r.key = "UNEXPECTED";
         r.text = "the test program could not be started (error " + std::to_string(p.startError) + ")";

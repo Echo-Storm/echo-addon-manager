@@ -33,3 +33,4 @@ addons/DLSS5NR01/external/ngx/*
 addons/DLSS5NR01/external/*
 !addons/DLSS5NR01/external/ngx/
 build_setup/
+imgui.ini

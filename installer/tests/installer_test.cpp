@@ -359,6 +359,77 @@ int wmain(int argc, wchar_t** argv) {
         Check("uninstalling a folder with ours but no original is refused", !Uninstall([&] { const fs::path p = MakeLs(L"uninstall_broken"); fs::copy_file(g_ours, p / L"Lossless.dll", fs::copy_options::overwrite_existing); return p.wstring(); }(), false).ok);
     }
 
+    printf("== awkward paths, read-only files, backups made in the same second\n");
+    {
+        // Lossless Scaling is running, but the person's folder is written another way than the process's own path
+        const fs::path ls = MakeLs(L"awkward running folder");
+        STARTUPINFOW si = {}; si.cb = sizeof si;
+        PROCESS_INFORMATION pi = {};
+        std::wstring cmd = L"\"" + (ls / L"LosslessScaling.exe").wstring() + L"\" /c ping -n 40 127.0.0.1 >nul";
+        const bool started = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi) != 0;
+        Sleep(400);
+        Check("a stand-in Lossless Scaling could be started", started);
+        const std::wstring plain = ls.wstring();
+        wchar_t shortName[MAX_PATH] = {};
+        const DWORD shortLen = GetShortPathNameW(plain.c_str(), shortName, MAX_PATH);
+        std::wstring fwd = plain, upper = plain;
+        for (wchar_t& c : fwd) if (c == L'\\') c = L'/';
+        for (wchar_t& c : upper) c = static_cast<wchar_t>(towupper(c));
+        const std::wstring dotdot = (ls.parent_path() / L"nowhere" / L".." / ls.filename()).wstring();
+        Check("running: seen when the folder is given with a trailing backslash", LosslessScalingRunning(plain + L"\\"));
+        Check("running: seen with forward slashes", LosslessScalingRunning(fwd));
+        Check("running: seen in capitals", LosslessScalingRunning(upper));
+        Check("running: seen with a .. in the path", LosslessScalingRunning(dotdot));
+        Check("running: seen by the folder's short (8.3) name", shortLen > 0 && shortLen < MAX_PATH && LosslessScalingRunning(shortName), Narrow(shortName));
+        Check("running: still not seen for another folder", !LosslessScalingRunning((g_root / L"elsewhere").wstring()) && !LosslessScalingRunning(L""));
+        const std::string before = Hash(ls / L"Lossless.dll");
+        Check("install through the short name is refused while it runs, and changes nothing", shortLen > 0 && !Install(shortName, pay.wstring()).ok && Hash(ls / L"Lossless.dll") == before && Gone(ls / L"backups"));
+        if (started) { TerminateProcess(pi.hProcess, 0); WaitForSingleObject(pi.hProcess, 5000); CloseHandle(pi.hProcess); CloseHandle(pi.hThread); }
+        Sleep(200);
+    }
+    {
+        // the folder written with a trailing backslash or forward slashes installs like any other
+        const fs::path ls = MakeLs(L"slashes");
+        std::wstring fwd = ls.wstring() + L"/";
+        for (wchar_t& c : fwd) if (c == L'\\') c = L'/';
+        const Result r = Install(fwd, pay.wstring());
+        Check("a folder given with forward slashes and a trailing slash installs", r.ok && Inspect(ls.wstring()).situation == Situation::Installed && UntouchedByInstall(ls), r.message);
+        Check("...and uninstalls through a trailing backslash", Uninstall(ls.wstring() + L"\\", false).ok && Inspect(ls.wstring()).situation == Situation::NotInstalled);
+    }
+    {
+        // read-only files: a Lossless.dll copied off read-only media, and installed files someone marked read-only
+        const fs::path ls = MakeLs(L"read only files");
+        SetFileAttributesW((ls / L"Lossless.dll").c_str(), FILE_ATTRIBUTE_READONLY);
+        Result r = Install(ls.wstring(), pay.wstring());
+        Check("a read-only Lossless.dll is no obstacle to installing", r.ok && Inspect(ls.wstring()).situation == Situation::Installed, r.message);
+        const fs::path files[] = {ls / L"Lossless.dll", ls / L"LP-icon.ico", ls / L"addons" / L"DLSS5NR01" / L"DLSS5NR01.dll", ls / L"addons" / L"DLSS5NR01" / L"addon.json"};
+        for (const auto& f : files) SetFileAttributesW(f.c_str(), FILE_ATTRIBUTE_READONLY);
+        const fs::path payB = MakePayload(L"payload_readonly_b", g_ours, "B");
+        r = Install(ls.wstring(), payB.wstring());
+        Check("read-only installed files are replaced by an update", r.ok && Has(Read(ls / L"addons" / L"DLSS5NR01" / L"addon.json"), "\"B\"") && Read(ls / L"LP-icon.ico") == "icon B", r.message);
+        Check("...and the folder is still Installed, with the person's things untouched", Inspect(ls.wstring()).situation == Situation::Installed && UntouchedByInstall(ls));
+        std::error_code ec;
+        for (fs::recursive_directory_iterator it(ls, ec), end; !ec && it != end; it.increment(ec)) SetFileAttributesW(it->path().c_str(), FILE_ATTRIBUTE_NORMAL);
+    }
+    {
+        // backups made in the same second must not overwrite each other (the folder name has a time stamp: fixed here to force it)
+        SetBackupStampForTest(L"same-second");
+        const fs::path ls = MakeLs(L"same second");
+        Result first = Install(ls.wstring(), pay.wstring());   // A: the plain folder becomes installed
+        std::vector<Result> updates;
+        for (const char* tag : {"B", "C", "D"}) updates.push_back(Install(ls.wstring(), MakePayload(L"payload_ss_" + Widen(tag), g_ours, tag).wstring()));
+        SetBackupStampForTest(L"");
+        bool allOk = first.ok;
+        std::vector<std::wstring> dirs;
+        for (const auto& u : updates) { allOk = allOk && u.ok; dirs.push_back(u.backupDir); }
+        Check("four installs in the same second all work", allOk);
+        bool distinct = !dirs.empty();
+        for (size_t i = 0; i < dirs.size(); ++i) for (size_t j = i + 1; j < dirs.size(); ++j) if (dirs[i] == dirs[j] || dirs[i].empty()) distinct = false;
+        Check("each one keeps its own backups folder", distinct);
+        Check("the first update's backup still holds what it replaced (A), the second's holds B", updates.size() == 3 &&
+              Has(Read(fs::path(updates[0].backupDir) / L"addons" / L"DLSS5NR01" / L"addon.json"), "\"A\"") && Has(Read(fs::path(updates[1].backupDir) / L"addons" / L"DLSS5NR01" / L"addon.json"), "\"B\""));
+    }
+
     RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\EchoAddonManager_SetupTest");
     std::error_code ec;
     fs::remove_all(g_root, ec);

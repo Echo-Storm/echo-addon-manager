@@ -4,7 +4,8 @@
 #   * the wizard window: it opens (on a folder, and with none given), and closes itself, without changing anything
 # Needs the exes built (run_addon_tests.ps1 does that) and the manager's Lossless.dll.
 #   powershell -File setup_exe_test.ps1 -Root <repository folder>
-param([Parameter(Mandatory = $true)][string]$Root)
+# -NoWindow skips the checks that open the wizard window (a machine with no desktop, such as a build server, cannot show one).
+param([Parameter(Mandatory = $true)][string]$Root, [switch]$NoWindow)
 $ErrorActionPreference = 'Stop'
 $setup = "$Root\installer\build\Release\EchoAddonManagerSetup.exe"
 $fakes = "$Root\installer\build\Release"
@@ -98,6 +99,7 @@ try {
     Check 'while Lossless Scaling runs from that folder, install is refused and nothing changes' ($r.Code -ne 0 -and (Hash "$ls2\Lossless.dll") -eq (Hash "$fakes\fake_original.dll") -and -not (Test-Path "$ls2\Lossless_original.dll")) "$($r.Code) $($r.Log)"
 } finally { Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
 
+if (-not $NoWindow) {
 Write-Host '== the wizard window (opens by itself, closes by itself)'
 $ls3 = MakeLs 'ls3'
 $before = Hash "$ls3\Lossless.dll"
@@ -110,8 +112,26 @@ foreach ($case in @(
     if (-not $closed) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
     Check "the window $($case.Name) opens and closes itself with exit code 0" ($closed -and $p.ExitCode -eq 0) "closed=$closed code=$($p.ExitCode)"
 }
+Write-Host '== only one Setup window at a time'
+$name = "test$PID"
+$common = @('--folder', "`"$ls3`"", '--payload', "`"$payload`"", '--instance-name', $name)
+$first = Start-Process -FilePath $setup -ArgumentList ($common + @('--test-close-ms', '6000')) -PassThru
+Start-Sleep -Milliseconds 2000
+$second = Start-Process -FilePath $setup -ArgumentList ($common + @('--test-close-ms', '6000')) -PassThru
+$secondEnded = $second.WaitForExit(8000)
+if (-not $secondEnded) { Stop-Process -Id $second.Id -Force -ErrorAction SilentlyContinue }
+Check 'a second Setup started while one is open ends at once with exit code 4, opening nothing' ($secondEnded -and $second.ExitCode -eq 4) "ended=$secondEnded code=$($second.ExitCode)"
+$firstEnded = $first.WaitForExit(20000)
+if (-not $firstEnded) { Stop-Process -Id $first.Id -Force -ErrorAction SilentlyContinue }
+Check 'the first one is unaffected and closes normally (exit code 0)' ($firstEnded -and $first.ExitCode -eq 0) "ended=$firstEnded code=$($first.ExitCode)"
+$third = Start-Process -FilePath $setup -ArgumentList ($common + @('--test-close-ms', '1500')) -PassThru
+$thirdEnded = $third.WaitForExit(20000)
+if (-not $thirdEnded) { Stop-Process -Id $third.Id -Force -ErrorAction SilentlyContinue }
+Check 'once the first has closed, Setup can be opened again' ($thirdEnded -and $third.ExitCode -eq 0) "ended=$thirdEnded code=$($third.ExitCode)"
 Check 'opening the window changed nothing in the folder' ((Hash "$ls3\Lossless.dll") -eq $before -and -not (Test-Path "$ls3\Lossless_original.dll") -and -not (Test-Path "$ls3\backups"))
 Check 'the window left no write-test file behind' (-not (Get-ChildItem $ls3 -Force -Filter '.echo_setup_write_test_*' -ErrorAction SilentlyContinue))
+
+}   # end of the window checks
 
 $mine = (Get-ItemProperty 'HKCU:\Software\EchoAddonManager' -ErrorAction SilentlyContinue).LastFolder
 Check 'the person''s remembered folder was not touched by any of it' (-not $mine -or $mine -eq $rememberedBefore) "now: $mine"

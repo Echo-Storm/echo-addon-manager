@@ -216,6 +216,22 @@ target_link_libraries(lsproxy_coretest d3d11 dxgi d3dcompiler bcrypt minhook)
 add_dependencies(lsproxy_coretest lsproxy_testaddon)
 add_custom_command(TARGET lsproxy_coretest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:lsproxy_testaddon> $<TARGET_FILE_DIR:lsproxy_coretest>)
 
+# The sample addon (examples/SampleAddon, the one docs/addon-authors.md points to) and its offline test: it is loaded, started and drawn by the real
+# AddonManager. cmake --build . --config Release --target lsproxy_sampletest
+add_library(lsproxy_sampleaddon SHARED EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/../examples/SampleAddon/SampleAddon.cpp
+    ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
+target_include_directories(lsproxy_sampleaddon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${imgui_SOURCE_DIR})
+set_target_properties(lsproxy_sampleaddon PROPERTIES PREFIX "" OUTPUT_NAME "SampleAddon")
+add_executable(lsproxy_sampletest EXCLUDE_FROM_ALL tools/sample_test.cpp
+    ${ADDON_SOURCES} ${FEATURE_SOURCES} ${EVENT_SOURCES} ${HOST_SOURCES} ${CONFIG_SOURCES} ${LOG_SOURCES}
+    src/gui/icon_loader.cpp src/core/d3d11_hook.cpp src/core/shader_hook.cpp
+    ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
+target_include_directories(lsproxy_sampletest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
+target_compile_definitions(lsproxy_sampletest PRIVATE SAMPLE_ADDON_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../examples/SampleAddon")
+target_link_libraries(lsproxy_sampletest d3d11 dxgi d3dcompiler bcrypt minhook)
+add_dependencies(lsproxy_sampletest lsproxy_sampleaddon)
+add_custom_command(TARGET lsproxy_sampletest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:lsproxy_sampleaddon> $<TARGET_FILE_DIR:lsproxy_sampletest>)
+
 # Offline test of the built-in features (ReShade passthrough on a hidden window, the Windowed virtual display through DXGI). Run it twice:
 # once plain, once with the argument "off" (Windowed switched off): cmake --build . --config Release --target lsproxy_featurestest
 add_executable(lsproxy_featurestest EXCLUDE_FROM_ALL tools/features_test.cpp

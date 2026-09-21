@@ -30,9 +30,10 @@ DllInfo InspectDll(const std::wstring& path) {
 
 bool LosslessScalingRunning(const std::wstring& dir) {
     bool running = false;
+    if (dir.empty()) return false;
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return false;
-    const std::wstring here = LowerCase(dir);
+    const std::wstring here = CanonicalPath(dir);   // the folder however it was written: trailing or forward slashes, "..", a short 8.3 name, a link
     PROCESSENTRY32W p = {};
     p.dwSize = sizeof p;
     for (BOOL ok = Process32FirstW(snap, &p); ok && !running; ok = Process32NextW(snap, &p)) {
@@ -42,9 +43,9 @@ bool LosslessScalingRunning(const std::wstring& dir) {
         wchar_t path[MAX_PATH * 2] = {};
         DWORD n = static_cast<DWORD>(sizeof path / sizeof path[0]);
         if (QueryFullProcessImageNameW(h, 0, path, &n)) {
-            std::wstring image = LowerCase(path);
+            const std::wstring image = std::wstring(path);
             const size_t at = image.find_last_of(L"\\/");
-            if (at != std::wstring::npos && image.substr(0, at) == here) running = true;
+            if (at != std::wstring::npos && CanonicalPath(image.substr(0, at)) == here) running = true;
         } else {
             running = true;
         }

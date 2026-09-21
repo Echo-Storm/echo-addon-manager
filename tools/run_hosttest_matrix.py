@@ -219,6 +219,24 @@ def selftest_exe_checks(nr_dir, snippet):
         lines = [l for l in p.stdout.splitlines() if l.startswith('SELFTEST ')]
         ok = p.returncode == want and bool(lines) and lines[-1].split()[1] == str(want)
         print('  %s  %s  (exit %s)' % ('PASS' if ok else 'FAIL', what, p.returncode)); bad += 0 if ok else 1
+
+    # --report: a shareable text file, written whatever the result, that names the card, the driver and the model file's version and size, and never a folder
+    for what, cmd, want in cases[:2]:
+        rep = os.path.join(tmp, 'report_%d.txt' % want)
+        p = subprocess.run(cmd + ['--report', rep], capture_output=True, text=True, timeout=180)
+        text = open(rep, encoding='utf-8', errors='replace').read() if os.path.exists(rep) else ''
+        row = [l for l in text.splitlines() if l.startswith('| ') and 'Card' not in l]
+        checks = [
+            ('is written', bool(text)),
+            ('says the result', ('result:          %s' % ('PASS (code 0)' if want == 0 else 'MODEL_LOAD (code 14)')) in text),
+            ('names the graphics card and a driver number', 'graphics card:' in text and 'NVIDIA driver:   ' in text and 'NVIDIA driver:   unknown' not in text),
+            ('has the row for the compatibility table', len(row) == 1 and row[0].count('|') == 6 and ('PASS' if want == 0 else 'FAIL MODEL_LOAD') in row[0]),
+            ('names no folder and no user name', chr(92) not in text and ':/' not in text and os.environ.get('USERNAME', '@@') not in text),
+        ]
+        if want == 0:
+            checks.append(('gives the model file version and size', bool(__import__('re').search(r'model file:\s+nvngx_dlssnr\.dll, version [0-9.]+, [0-9.]+ MB', text))))
+        for name, ok in checks:
+            print('  %s  the report for "%s" %s' % ('PASS' if ok else 'FAIL', what, name)); bad += 0 if ok else 1
     return 1 if bad else 0
 
 

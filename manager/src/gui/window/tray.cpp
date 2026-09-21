@@ -11,6 +11,7 @@ namespace tray {
 namespace {
 NOTIFYICONDATAW g_nid = {};
 bool g_added = false;
+int g_failNext = 0;
 
 enum MenuId { kToggle = 1, kOpenAddons, kOpenLog, kOpenLogs };
 
@@ -40,7 +41,14 @@ bool Add(HWND hwnd, HICON icon, const std::wstring& hotkeyLabel) {
     g_nid.uCallbackMessage = kMessage;
     g_nid.hIcon = icon ? icon : LoadIconW(nullptr, IDI_APPLICATION);
     wcsncpy_s(g_nid.szTip, TipText(hotkeyLabel).c_str(), _TRUNCATE);
-    g_added = Shell_NotifyIconW(NIM_ADD, &g_nid) != FALSE;
+    if (g_failNext > 0) {
+        --g_failNext;
+        g_added = false;
+    } else {
+        g_added = Shell_NotifyIconW(NIM_ADD, &g_nid) != FALSE;
+        // Explorer can time out an add that it did carry out; the next add then fails because the icon is already there. A modify tells the two apart.
+        if (!g_added) { g_nid.uFlags = NIF_TIP; g_added = Shell_NotifyIconW(NIM_MODIFY, &g_nid) != FALSE; g_nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP; }
+    }
     if (g_added) LOG_INFO("GUI", "Tray icon added");
     else LOG_WARN("GUI", "Could not add the tray icon; the manager can only be reopened with its hotkey");
     return g_added;
@@ -51,10 +59,11 @@ void Remove() {
     g_added = false;
 }
 
-void ReAdd(HWND hwnd, HICON icon, const std::wstring& hotkeyLabel) {
-    g_added = false;   // the taskbar is new: our old registration is gone with it
-    Add(hwnd, icon, hotkeyLabel);
-}
+void Forget() { g_added = false; }   // the taskbar is new: our old registration is gone with it
+
+bool Added() { return g_added; }
+
+void FailNextAddsForTest(int n) { g_failNext = n; }
 
 void Balloon(const wchar_t* title, const wchar_t* text) {
     if (!g_added) return;

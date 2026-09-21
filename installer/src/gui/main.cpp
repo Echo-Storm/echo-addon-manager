@@ -210,7 +210,7 @@ Page& MainPage(App& a) {
     if (a.advice.blocked) p.links.push_back({kRecheck, L"Check again\nAfter closing Lossless Scaling"});
     if (a.advice.canUninstall && canChange && !a.advice.blocked) {
         p.links.push_back({kUninstall, L"Uninstall\nPuts Lossless Scaling's own Lossless.dll back. Your addons and settings stay."});
-        p.links.push_back({kUninstallAll, L"Uninstall and take the addons out too\nThe addons folder is moved to the backups folder, not deleted."});
+        p.links.push_back({kUninstallAll, L"Uninstall and take the addons out too\nThe addons folder, with your addons' settings, is moved to the backups folder, not deleted."});
     }
     p.links.push_back({kOther, L"Use a different folder..."});
     Finish(p);
@@ -330,7 +330,9 @@ void StartWork(HWND hwnd, App& a, bool uninstall, bool removeAddons) {
 bool RestartElevated(App& a) {
     wchar_t exe[MAX_PATH];
     GetModuleFileNameW(nullptr, exe, MAX_PATH);
-    const std::wstring args = L"--folder \"" + a.folder + L"\"" + (a.tempDir.empty() || a.payloadDir.empty() || a.payloadDir.find(a.tempDir) == 0 ? L"" : L" --payload \"" + a.payloadDir + L"\"");
+    // A folder that ends in a backslash (a drive root) would escape the closing quote in the command line: such a backslash is written twice.
+    const std::wstring folderArg = (!a.folder.empty() && a.folder.back() == L'\\') ? a.folder + L"\\" : a.folder;
+    const std::wstring args = L"--folder \"" + folderArg + L"\"" + (a.tempDir.empty() || a.payloadDir.empty() || a.payloadDir.find(a.tempDir) == 0 ? L"" : L" --payload \"" + a.payloadDir + L"\"");
     return reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"runas", exe, args.c_str(), nullptr, SW_SHOWNORMAL)) > 32;
 }
 
@@ -352,7 +354,16 @@ HRESULT OnButton(HWND hwnd, App& a, int id) {
         return S_FALSE;
     case kBrowse: {
         const std::wstring picked = PickFile(hwnd, true);
-        if (!picked.empty()) { a.folder = picked; Refresh(a); RememberChoice(a); Navigate(hwnd, MainPage(a)); }
+        if (!picked.empty()) {
+            a.folder = picked;
+            Refresh(a);
+            if (a.state.situation == Situation::NotLosslessScaling) {   // the parent of the folder was picked: use the Lossless Scaling folder inside it, if there is exactly one
+                const auto inside = ScanDrive(picked);
+                if (inside.size() == 1) { a.folder = inside[0]; Refresh(a); a.note = L"Lossless Scaling was inside the folder you chose, so Setup uses that one."; }
+            }
+            RememberChoice(a);
+            Navigate(hwnd, MainPage(a));
+        }
         return S_FALSE;
     }
     case kAdmin:
@@ -507,6 +518,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     } else if (silent) {
         a.folder = Flag(args, L"--folder");
         code = RunSilent(a, args, out);
+    } else if (HANDLE once = CreateMutexW(nullptr, TRUE, (L"Local\\EchoAddonManagerSetup" + Flag(args, L"--instance-name")).c_str()); GetLastError() == ERROR_ALREADY_EXISTS) {
+        // A second window over the same folder could start a second install in the middle of the first: one Setup window at a time.
+        if (a.testCloseMs == 0) MessageBoxW(nullptr, L"Echo Addon Manager Setup is already open. Look for its window on the taskbar.", L"Echo Addon Manager Setup", MB_OK | MB_ICONINFORMATION);
+        code = 4;
+        if (once) CloseHandle(once);
     } else {
         INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_STANDARD_CLASSES};
         InitCommonControlsEx(&icc);
@@ -526,6 +542,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         if (FAILED(hr)) { code = 3; out.Line("the window could not be created: 0x" + std::to_string(static_cast<unsigned long>(hr))); }
         if (a.worker.joinable()) a.worker.join();
         CoUninitialize();
+        if (once) { ReleaseMutex(once); CloseHandle(once); }
     }
     if (out.file) fclose(out.file);
     if (!a.tempDir.empty()) { std::error_code ec; fs::remove_all(a.tempDir, ec); }

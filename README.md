@@ -127,6 +127,7 @@ installed**, and it is the only thing the manager ever sends over the internet (
 | Windows SmartScreen or your antivirus objects to a file | The files in this project are not signed (see [the roadmap](ROADMAP.md)). If your antivirus removes `nr_selftest.exe`, the *Test compatibility* button says the test program is missing; nothing else is affected. |
 | Neural Rendering says the model file is missing | It needs your own `nvngx_dlssnr.dll` next to `LosslessScaling.exe`. Use Setup's **Copy my nvngx_dlssnr.dll...** or the addon's **Browse for the model file...**, then **Test compatibility**. |
 | Windowed mode does nothing | Its virtual display has to be in place before Lossless Scaling starts, so after switching it on, restart Lossless Scaling. |
+| A question that is not here | The [questions and answers](docs/faq.md) cover the rest, and [model compatibility](docs/model-compatibility.md) lists which model builds have been reported to work on which cards. |
 | Something else, or you want to undo it | Run Setup and choose **Uninstall** (your addons and settings stay, or take the addons out too). What was replaced is in the `backups` folder. To report a bug, make a **diagnostics file** on the Settings tab: it collects your logs and settings into a zip and uploads nothing. |
 
 ## Installing by hand
@@ -186,7 +187,7 @@ The installer is its own small CMake project in [`installer/`](installer/).
 
 ## Writing an addon
 
-See [docs/addon-authors.md](docs/addon-authors.md): the exports, the host interface, live status and metrics, the shared look, and the rules that are easy to trip over.
+Start from the [sample addon](examples/SampleAddon): a small, commented, tested addon with settings, a panel in the manager's look, a status line and a metric. Then see [docs/addon-authors.md](docs/addon-authors.md) for the exports, the host interface, live status and metrics, the shared look and the rules that are easy to trip over, and [docs/api-compatibility.md](docs/api-compatibility.md) for what stays stable.
 
 ## Credits
 

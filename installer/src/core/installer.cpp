@@ -12,12 +12,25 @@ namespace setup {
 
 namespace {
 
+std::wstring g_stampForTest;
+
 std::wstring Stamp() {
+    if (!g_stampForTest.empty()) return g_stampForTest;
     SYSTEMTIME t;
     GetLocalTime(&t);
     wchar_t b[32];
     swprintf(b, 32, L"%04u%02u%02u-%02u%02u%02u", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     return b;
+}
+
+// A backups folder that does not exist yet: the stamp is only accurate to the second, and a second run in the same second must not write into (and over) the first's.
+std::wstring FreshBackupDir(const std::wstring& wanted) {
+    if (!Exists(wanted)) return wanted;
+    for (int n = 2; n < 1000; ++n) {
+        const std::wstring next = wanted + L"-" + std::to_wstring(n);
+        if (!Exists(next)) return next;
+    }
+    return wanted;
 }
 
 struct Failure { std::string why; };
@@ -71,17 +84,28 @@ void Place(Journal& j, const std::wstring& src, const std::wstring& dst, const s
         if (!MakeDirs(ParentOf(saved)) || !CopyFileW(dst.c_str(), saved.c_str(), FALSE)) throw Failure{ "could not save " + Narrow(rel) + " to the backups" };
     }
     if (!MakeDirs(ParentOf(dst))) throw Failure{ "could not create the folder for " + Narrow(rel) };
+    // a read-only file cannot be replaced: lift the flag for the swap (the old file is in the backups; the flag comes back if the swap fails or is rolled back)
+    const DWORD oldAttributes = had ? GetFileAttributesW(dst.c_str()) : INVALID_FILE_ATTRIBUTES;
+    const bool wasReadOnly = oldAttributes != INVALID_FILE_ATTRIBUTES && (oldAttributes & FILE_ATTRIBUTE_READONLY) != 0;
     const std::wstring tmp = dst + L".setup-new";
     if (!CopyFileW(src.c_str(), tmp.c_str(), FALSE)) throw Failure{ "could not write " + Narrow(rel) };
     if (Sha256File(tmp) != want) { DeleteFileW(tmp.c_str()); throw Failure{ Narrow(rel) + " did not copy correctly" }; }
+    if (wasReadOnly) SetFileAttributesW(dst.c_str(), oldAttributes & ~static_cast<DWORD>(FILE_ATTRIBUTE_READONLY));
     bool moved = false;
     for (int attempt = 0; attempt < 6 && !moved; ++attempt) {
         moved = MoveFileExW(tmp.c_str(), dst.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
         if (!moved) Sleep(150);
     }
-    if (!moved) { DeleteFileW(tmp.c_str()); throw Failure{ "could not put " + Narrow(rel) + " in place (is it in use?)" }; }
+    if (!moved) {
+        DeleteFileW(tmp.c_str());
+        if (wasReadOnly) SetFileAttributesW(dst.c_str(), oldAttributes);
+        throw Failure{ "could not put " + Narrow(rel) + " in place (is it in use?)" };
+    }
     j.Did(had ? "replaced " + Narrow(rel) + " (the old one is in the backups)" : "added " + Narrow(rel),
-          [dst, saved, had] { if (had) CopyFileW(saved.c_str(), dst.c_str(), FALSE); else DeleteFileW(dst.c_str()); });
+          [dst, saved, had, wasReadOnly, oldAttributes] {
+              if (had) { CopyFileW(saved.c_str(), dst.c_str(), FALSE); if (wasReadOnly) SetFileAttributesW(dst.c_str(), oldAttributes); }
+              else DeleteFileW(dst.c_str());
+          });
 }
 
 void CopyTree(Journal& j, const std::wstring& srcRoot, const std::wstring& dstRoot, const std::wstring& backupRoot, const std::wstring& relRoot) {
@@ -107,6 +131,8 @@ Result Fail(Result r, const std::string& why) {
 
 } // namespace
 
+void SetBackupStampForTest(const std::wstring& stamp) { g_stampForTest = stamp; }
+
 PayloadInfo CheckPayload(const std::wstring& payloadDir) {
     PayloadInfo p;
     const std::wstring dll = JoinPath(payloadDir, L"Lossless.dll");
@@ -128,7 +154,7 @@ Result Install(const std::wstring& lsDir, const std::wstring& payloadDir) {
     if (before.situation == Situation::Installed && advice.action == Action::None) return Fail(r, advice.headline);
 
     Journal j(r.log);
-    const std::wstring backupDir = JoinPath(lsDir, L"backups\\installer-" + Stamp());
+    const std::wstring backupDir = FreshBackupDir(JoinPath(lsDir, L"backups\\installer-" + Stamp()));
     const std::wstring lossless = JoinPath(lsDir, L"Lossless.dll"), original = JoinPath(lsDir, L"Lossless_original.dll");
     try {
         if (!MakeDirs(backupDir)) throw Failure{ "could not create the backups folder" };
@@ -192,7 +218,7 @@ Result Uninstall(const std::wstring& lsDir, bool removeAddons) {
     if (before.situation != Situation::Installed && before.situation != Situation::AfterLsUpdate) return Fail(r, Advise(before, "").headline);
 
     Journal j(r.log);
-    const std::wstring backupDir = JoinPath(lsDir, L"backups\\uninstall-" + Stamp());
+    const std::wstring backupDir = FreshBackupDir(JoinPath(lsDir, L"backups\\uninstall-" + Stamp()));
     const std::wstring lossless = JoinPath(lsDir, L"Lossless.dll"), original = JoinPath(lsDir, L"Lossless_original.dll");
     try {
         if (!MakeDirs(backupDir)) throw Failure{ "could not create the backups folder" };

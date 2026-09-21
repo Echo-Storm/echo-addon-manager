@@ -35,6 +35,9 @@ namespace lsproxy {
 namespace {
 
 constexpr const wchar_t* kWindowClass = L"EchoAddonManagerClass";
+constexpr UINT_PTR kTrayTimer = 0x4C52;     // the tray icon could not be added (Explorer busy or just restarted): try again shortly
+constexpr UINT kTrayRetryMs = 2000;
+constexpr int kTrayTries = 30;
 constexpr UINT_PTR kUpdateTimer = 0x4C51;   // once a minute: is the daily update check due, and is there something to announce?
 
 // Everything the window and its thread share. One window per process. It is allocated once and never destroyed: static destructors run
@@ -47,6 +50,7 @@ struct Shell {
     bool minimized = false;
     bool bringAddonsForward = false;        // set by a drop: show the Addons tab so the confirmation is seen
     float displayScale = 1.0f;              // what Windows asks for (monitor dpi / 96)
+    int trayTries = 0;                      // failed attempts to put the icon in the tray since it was last wanted
     UINT taskbarCreated = 0;                // broadcast when Explorer restarts and the tray icons have to be added again
     HICON trayIcon = nullptr;
     window::WindowDevice device;
@@ -99,11 +103,21 @@ void OnClose(HWND hwnd) {
     cfg.Save();
 }
 
+// Put the icon in the tray; when Windows says no, try again every couple of seconds for a minute (a restarted Explorer often is not ready at once).
+void EnsureTrayIcon(HWND hwnd) {
+    if (window::tray::Added()) { KillTimer(hwnd, kTrayTimer); g.trayTries = 0; return; }
+    if (window::tray::Add(hwnd, g.trayIcon, window::hotkey::Registered() ? window::hotkey::LabelFromConfig() : L"")) { KillTimer(hwnd, kTrayTimer); g.trayTries = 0; return; }
+    if (++g.trayTries < kTrayTries) SetTimer(hwnd, kTrayTimer, kTrayRetryMs, nullptr);
+    else KillTimer(hwnd, kTrayTimer);
+}
+
 LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam)) return true;
 
     if (g.taskbarCreated && msg == g.taskbarCreated) {   // Explorer restarted: its tray forgot our icon
-        window::tray::ReAdd(hwnd, g.trayIcon, window::hotkey::Registered() ? window::hotkey::LabelFromConfig() : L"");
+        window::tray::Forget();
+        g.trayTries = 0;
+        EnsureTrayIcon(hwnd);
         return 0;
     }
 
@@ -157,6 +171,11 @@ LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
 
     case WM_TIMER:
+        if (wParam == kTrayTimer) {
+            KillTimer(hwnd, kTrayTimer);
+            EnsureTrayIcon(hwnd);
+            return 0;
+        }
         if (wParam == kUpdateTimer) {
             update::Tick();
             const std::string notice = update::TakeNotice();
@@ -248,7 +267,8 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
     DragAcceptFiles(hwnd, TRUE);   // drop an addon on the window to install it
     g.trayIcon = icons.little;
     g.taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
-    window::tray::Add(hwnd, g.trayIcon, L"");
+    g.trayTries = 0;
+    EnsureTrayIcon(hwnd);
     GuiManager::ApplyHotkey();     // registers the hotkey and puts it in the tray tip
     update::Tick();                // the daily update check, if it is on and due
     SetTimer(hwnd, kUpdateTimer, 60 * 1000, nullptr);
@@ -315,6 +335,7 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
     }
 
     KillTimer(hwnd, kUpdateTimer);
+    KillTimer(hwnd, kTrayTimer);
     GpuStats::Instance().Shutdown();
     PersistPlacement();
     window::hotkey::Remove(hwnd);

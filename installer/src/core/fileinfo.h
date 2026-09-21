@@ -24,5 +24,8 @@ std::string Narrow(const std::wstring& text);         // UTF-16 to UTF-8
 std::wstring Widen(const std::string& text);          // UTF-8 to UTF-16
 std::wstring JoinPath(const std::wstring& a, const std::wstring& b);
 std::wstring LowerCase(std::wstring text);
+// One spelling for a folder or file path, so two paths can be compared: made absolute, with '.' and '..' and forward slashes resolved, short (8.3) names and
+// links followed when the path exists, no trailing separator (except a drive root) and lower case. Empty in, empty out.
+std::wstring CanonicalPath(const std::wstring& path);
 
 } // namespace setup

@@ -32,6 +32,28 @@ std::wstring JoinPath(const std::wstring& a, const std::wstring& b) {
     return (last == L'\\' || last == L'/') ? a + b : a + L"\\" + b;
 }
 
+std::wstring CanonicalPath(const std::wstring& path) {
+    if (path.empty()) return std::wstring();
+    std::wstring full(32768, L'\0');
+    const DWORD n = GetFullPathNameW(path.c_str(), static_cast<DWORD>(full.size()), full.data(), nullptr);   // lexical: '.', '..', '/' and a trailing separator
+    if (n == 0 || n >= full.size()) full = path; else full.resize(n);
+    // what the file system says the path really is: short names and links resolved (only possible when it exists)
+    HANDLE h = CreateFileW(full.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (h != INVALID_HANDLE_VALUE) {
+        std::wstring real(32768, L'\0');
+        const DWORD m = GetFinalPathNameByHandleW(h, real.data(), static_cast<DWORD>(real.size()), VOLUME_NAME_DOS);
+        CloseHandle(h);
+        if (m > 0 && m < real.size()) {
+            real.resize(m);
+            if (real.rfind(L"\\\\?\\UNC\\", 0) == 0) real = L"\\\\" + real.substr(8);
+            else if (real.rfind(L"\\\\?\\", 0) == 0) real = real.substr(4);
+            full = real;
+        }
+    }
+    while (full.size() > 3 && (full.back() == L'\\' || full.back() == L'/')) full.pop_back();
+    return LowerCase(full);
+}
+
 std::wstring LowerCase(std::wstring text) {
     for (wchar_t& c : text) c = static_cast<wchar_t>(towlower(c));
     return text;
