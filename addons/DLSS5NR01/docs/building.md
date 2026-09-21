@@ -7,6 +7,9 @@
 - The NVIDIA DLSS SDK headers and static library in `external/ngx` (see
   `external/ngx/README.md` for the exact files). The SDK's license does not allow redistributing
   them, so they are not in the repository. CMake stops with a clear message if they are missing.
+  `powershell -File tools\fetch_ngx_sdk.ps1 -AcceptNvidiaLicense` fetches exactly these files from
+  NVIDIA's own public repository (pinned to one commit and checked by SHA-256); it runs only when
+  you say you accept NVIDIA's licence.
 - Internet access at configure time: CMake fetches Dear ImGui (the docking branch commit that
   matches the layout compiled into the manager) and MinHook.
 

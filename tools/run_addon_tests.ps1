@@ -29,4 +29,9 @@ Run 'features (Windowed off at start-up)' "$root\manager\build\Release\lsproxy_f
 Run 'window (defaults)' "$root\manager\build\Release\lsproxy_guitest.exe" @()
 Run 'window (saved placement)' "$root\manager\build\Release\lsproxy_guitest.exe" @('place')
 Run 'window (saved placement, interface size 150 %)' "$root\manager\build\Release\lsproxy_guitest.exe" @('scaled')
+# Neural Rendering's requirements check: only when that addon has been configured (it needs the NVIDIA SDK to configure, though not to run this test)
+if (Test-Path "$root\addons\DLSS5NR01\build\CMakeCache.txt") {
+    Build "$root\addons\DLSS5NR01\build" @('nr_reqtest')
+    Run 'Neural Rendering requirements check' "$root\addons\DLSS5NR01\build\Release\nr_reqtest.exe" @()
+}
 if ($fail) { Write-Host "$fail test program(s) failed"; exit 1 } else { Write-Host 'all addon tests passed' }

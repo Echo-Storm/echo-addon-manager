@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- New **Requirements** section at the top of the panel (and a red line above it when something stops the addon from running): graphics card, NVIDIA
+  driver (NGX core), model file, helper DLL and engine state, each OK, NOTE or MISSING with a hint, and the engine's error messages in words. A model file
+  that is not the tested build (310.8, 158.2 MB) is a note, a file under 20 MB counts as missing. The result is also written to the log at start-up. Nothing
+  is loaded or downloaded to do this. New offline test `nr_reqtest`.
+
 ## 0.2.1 (2026-09-21)
 
 - The last `lspnr` names are gone: the helper DLL is now `nvngx.dll_dlss5nr01.dll` (it must still contain `nvngx.dll`, which the DLSSNR snippet checks in its caller's path), the test tools are `nr_hosttest` and `nr_harness`, and the helper's exported functions start with `nrfwd_`. Nothing changes on screen. `tools\deploy.ps1` moves a stale `nvngx.dll_lspnr.dll` aside.

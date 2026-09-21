@@ -34,6 +34,20 @@ Scaling is about to show.
    (DLSS 5)*.
 
 To update, replace the two DLLs while Lossless Scaling is closed. To uninstall, delete the folder.
+
+### Checking that everything is in place
+
+At the top of the panel, the **Requirements** section lists what Neural Rendering needs and what was found: the NVIDIA graphics card, the NVIDIA
+driver's NGX core (`_nvngx.dll`, found through the driver's registry entry), the model file, this addon's helper DLL and the engine's state. Each
+row is OK, NOTE or MISSING, and a row that is not OK says what to do. It opens by itself when something is missing, and a red line above it says
+what stops Neural Rendering from running. Nothing is loaded or downloaded to do this: it reads file names, sizes and version numbers.
+
+- **Model file**: a copy of a different version, or of a different size than the one this addon was tested with (310.8, 158.2 MB), is a NOTE, not an
+  error: it may well work. A file far smaller than the model (under 20 MB) is treated as missing, since it cannot be the model.
+- **Check again** looks again after you have put a file in place. Changing the model path under *Advanced* checks again when you leave the field.
+- **Open the Lossless Scaling folder** opens the folder the model file goes in.
+
+This addon does not download the model file, and this project does not say where to get it.
 Settings live in Echo Addon Manager's `addons\config.json` under the key `DLSS5NR01`; delete
 that block to reset them.
 
@@ -221,7 +235,7 @@ addon uses the swap chain vtable precisely so they do.
 
 | Message | Cause |
 |---|---|
-| snippet probe 0x... | `nvngx_dlssnr.dll` was not found or is not a DLSSNR snippet. Check the path. |
+| snippet probe 0x... | `nvngx_dlssnr.dll` was not found or is not a DLSSNR snippet. Check the path. The Requirements section says this in words ("the model file could not be loaded") and shows what it found. |
 | snippet Init_Ext: ... | NGX refused to initialise on this adapter. Virtual display adapters and non-NVIDIA cards do this. |
 | CreateFeature(18): FeatureNotSupported | This snippet build does not create its feature on your GPU. On Ampere, only one of the two circulating 310.8.0 builds works. |
 | adapter LUID not found | The GPU that ran LSFG disappeared (device change). The engine restarts on the next tap. |

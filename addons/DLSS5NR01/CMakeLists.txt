@@ -43,12 +43,12 @@ add_dependencies(nr_harness nr_forwarder)
 # ---- the addon ----
 add_library(DLSS5NR01 SHARED
     src/addon/addon.cpp src/addon/bridge.cpp src/addon/frame_tap.cpp src/addon/dispatch_hook.cpp
-    src/addon/present_hook.cpp src/addon/compose11.cpp
+    src/addon/present_hook.cpp src/addon/compose11.cpp src/addon/requirements.cpp
     src/engine/nr_engine.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(DLSS5NR01 PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
-target_link_libraries(DLSS5NR01 PRIVATE minhook_static ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32)
+target_link_libraries(DLSS5NR01 PRIVATE minhook_static ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32 shell32)
 set_target_properties(DLSS5NR01 PROPERTIES PREFIX "" OUTPUT_NAME "DLSS5NR01")
 # Keep a PDB and a linker map next to the Release DLL so the offsets in a crash backtrace can be resolved.
 if(MSVC)
@@ -65,3 +65,8 @@ add_executable(nr_hosttest tools/addon_host_test.cpp
 target_include_directories(nr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(nr_hosttest PRIVATE d3d11 dxgi d3dcompiler)
 add_dependencies(nr_hosttest DLSS5NR01)
+
+# ---- offline test of the requirements checker (no model, no NVIDIA SDK needed at run time) ----
+add_executable(nr_reqtest tools/requirements_test.cpp src/addon/requirements.cpp)
+target_include_directories(nr_reqtest PRIVATE src)
+target_link_libraries(nr_reqtest PRIVATE dxgi)

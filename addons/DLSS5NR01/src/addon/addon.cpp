@@ -22,6 +22,8 @@
 #include "addon/dispatch_hook.h"
 #include "addon/present_hook.h"
 #include "addon/compose11.h"
+#include "addon/requirements.h"
+#include <shellapi.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #include <windows.h>
@@ -299,6 +301,37 @@ static void ApplyTapRoles() {
 // ------------------------------------------------------------------ engine lifecycle
 static std::wstring Narrow2Wide(const std::string& s) { std::wstring w(s.size(), L' '); int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), &w[0], (int)w.size()); w.resize(n > 0 ? n : 0); return w; }
 static std::string Wide2Narrow(const std::wstring& w) { std::string s(w.size() * 3, ' '); int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), &s[0], (int)s.size(), nullptr, nullptr); s.resize(n > 0 ? n : 0); return s; }
+
+// ---- Requirements (requirements.h). What is on this machine is gathered off the UI thread (it reads file headers, including the model's, which is
+// large); the engine's own state is added when the panel is drawn, so it is always current.
+static std::mutex g_reqMu; static req::Inputs g_reqIn; static bool g_reqHave = false;
+static std::thread g_reqThread; static std::atomic<bool> g_reqBusy{ false };
+static std::wstring ModelPathNow() {
+    std::string sp; { std::lock_guard<std::mutex> lk(g_cfgMu); sp = g_cfg.snippetPath; }
+    return sp.empty() ? g_lsDir + L"\\nvngx_dlssnr.dll" : Narrow2Wide(sp);
+}
+static void ScanRequirementsBody(const std::wstring& model, const std::wstring& addonDir) {
+    const req::Inputs in = req::Gather(model, addonDir);
+    const req::Report rep = req::Evaluate(in);
+    for (const auto& r : rep.rows) Log("requirements: %s: %s%s", r.label.c_str(), r.value.c_str(), r.level == req::Level::Ok ? "" : (r.level == req::Level::Note ? "  [note]" : "  [MISSING]"));
+    std::lock_guard<std::mutex> lk(g_reqMu); g_reqIn = in; g_reqHave = true;
+}
+static void ScanRequirementsGuarded(const std::wstring& model, const std::wstring& addonDir) {   // no objects here: __try cannot unwind them
+    __try { ScanRequirementsBody(model, addonDir); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { Log("requirements: the check crashed (0x%08lx)", GetExceptionCode()); }
+}
+static void ScanRequirements() {
+    if (g_reqBusy.exchange(true)) return;
+    if (g_reqThread.joinable()) g_reqThread.join();   // the previous scan has finished (it clears the flag last)
+    const std::wstring model = ModelPathNow(), addonDir = g_addonDir;
+    g_reqThread = std::thread([model, addonDir] { ScanRequirementsGuarded(model, addonDir); g_reqBusy = false; });
+}
+static req::Report RequirementsNow(bool engineFailed, bool engineReady, bool engineRunning, const char* engineError) {
+    req::Inputs in; { std::lock_guard<std::mutex> lk(g_reqMu); in = g_reqIn; }
+    in.engine = engineFailed ? req::EngineState::Failed : (engineRunning ? req::EngineState::Running : (engineReady ? req::EngineState::Ready : req::EngineState::NotStarted));
+    if (engineFailed && engineError) in.engineError = engineError;
+    return req::Evaluate(in);
+}
 
 static void StartEngine(LUID luid) {
     if (g_engineStarting.exchange(true)) return;
@@ -667,6 +700,26 @@ LSPROXY_EXPORT void AddonRenderSettings() {
     if (g_killed) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kDanger)); ImGui::Text("DISABLED: %s", g_killReason.c_str()); ImGui::PopStyleColor(); ImGui::SameLine(); if (ImGui::SmallButton("Re-arm")) { g_killed = false; g_watchdogHits = 0; g_watchdogKill = false; g_rearms = 0; } Tip("Turn Neural Render back on after it switched itself off. If it switches off again, the reason above is still true."); }
     else { ImGui::PushStyleColor(ImGuiCol_Text, g_nrRuns ? lsp::theme::V(lsp::theme::kAccent) : lsp::theme::V(lsp::theme::kWarn)); ImGui::Text("%s", status.c_str()); ImGui::PopStyleColor(); }
     if (g_engine.IsFailed()) { ImGui::TextColored(lsp::theme::V(lsp::theme::kDanger), "engine: %s", g_engine.Stats().lastError); ImGui::SameLine(); if (ImGui::SmallButton("Retry engine")) { g_engineLuidValid = false; if (g_tapLuidValid) StartEngine(g_tapLuid); } Tip("Try to start the DLSS model again on the current graphics card."); }
+    {   // ---- Requirements: what this needs, what was found, and what to do about anything missing
+        bool have; { std::lock_guard<std::mutex> lk(g_reqMu); have = g_reqHave; }
+        const bool failed = g_engine.IsFailed();
+        const req::Report rep = RequirementsNow(failed, g_engine.IsReady(), g_nrRuns > 0, g_engine.Stats().lastError);
+        if (have && rep.overall == req::Level::Missing) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kDanger)); ImGui::TextWrapped("Neural Rendering cannot run yet. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
+        if (lsp::SectionHeader("Requirements", have && rep.overall != req::Level::Ok)) {
+            if (!have) ImGui::TextDisabled("Checking...");
+            for (const auto& row : rep.rows) {
+                const ImVec4 col = row.level == req::Level::Ok ? lsp::theme::V(lsp::theme::kAccent) : (row.level == req::Level::Note ? lsp::theme::V(lsp::theme::kWarn) : lsp::theme::V(lsp::theme::kDanger));
+                ImGui::TextColored(col, row.level == req::Level::Ok ? "OK     " : (row.level == req::Level::Note ? "NOTE   " : "MISSING"));
+                ImGui::SameLine(ImGui::GetFontSize() * 5.2f); ImGui::Text("%s", row.label.c_str()); ImGui::SameLine(ImGui::GetFontSize() * 13.0f); ImGui::TextWrapped("%s", row.value.c_str());
+                if (!row.hint.empty()) { ImGui::Indent(ImGui::GetFontSize() * 1.7f); ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)); ImGui::TextWrapped("%s", row.hint.c_str()); ImGui::PopStyleColor(); ImGui::Unindent(ImGui::GetFontSize() * 1.7f); }
+            }
+            if (ImGui::SmallButton("Check again")) ScanRequirements();
+            Tip("Look again at the graphics card, the NVIDIA driver, the model file and the helper DLL. Use it after putting a file in place.");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Open the Lossless Scaling folder")) ShellExecuteW(nullptr, L"open", g_lsDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            Tip("Where the model file, nvngx_dlssnr.dll, goes: next to LosslessScaling.exe.");
+        }
+    }
     // ---- Saved looks, at the top. Pick one to apply it; Save updates it (or asks for a name); Save as new keeps the current sliders under a
     // ---- new name; Delete asks first. A look is the sliders below (model knobs, picture, HUD areas), not the hotkeys or advanced settings.
     {
@@ -975,6 +1028,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         Tip("If the model takes longer than this for 30 frames in a row, Neural Render switches itself off so it can never hurt your frame rate. It re-arms itself after 10 seconds, up to three times per session.");
         char sp[512]; strncpy(sp, c.snippetPath.c_str(), sizeof sp); sp[sizeof sp - 1] = 0;
         if (ImGui::InputText("Model file path (blank = Lossless Scaling folder)", sp, sizeof sp)) { c.snippetPath = sp; changed = true; }
+        if (ImGui::IsItemDeactivatedAfterEdit()) { { std::lock_guard<std::mutex> lk(g_cfgMu); g_cfg.snippetPath = c.snippetPath; } ScanRequirements(); }
         Tip("Full path to nvngx_dlssnr.dll. Leave blank to use the copy next to LosslessScaling.exe.");
         if (ImGui::SmallButton("Restart engine")) { g_engineLuidValid = false; g_killed = false; if (g_tapLuidValid) StartEngine(g_tapLuid); }
         Tip("Tear the model down and start it again on the graphics card Lossless Scaling is using.");
@@ -1006,6 +1060,7 @@ static void AddonInitializeBody(IHost* host, ImGuiContext* ctx, void* allocFunc,
     g_logFile = _wfopen((g_lsDir + L"\\logs\\DLSS5NR01.log").c_str(), L"w");
     InstallCrashDiagnostics();
     LoadConfig(); ApplyTapRoles();
+    ScanRequirements();
     host->SubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_READY, OnDeviceEvent, nullptr);
     host->SubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent, nullptr);
     Log("DLSS5NR01 initialised (host version 0x%x), addon dir %ls", host->GetHostVersion(), g_addonDir.c_str());
@@ -1038,6 +1093,7 @@ LSPROXY_EXPORT void AddonShutdown() {
     DispatchHook::Uninstall();
     if (g_host) { g_host->UnsubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_READY, OnDeviceEvent); g_host->UnsubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent); }
     if (g_initThread.joinable()) g_initThread.join();
+    if (g_reqThread.joinable()) g_reqThread.join();
     { std::lock_guard<std::mutex> lk(g_tapMu); g_bridge.Shutdown(); g_compose.Shutdown(); g_engine.Shutdown(); }
     SaveConfig();
     if (g_logFile) { fclose(g_logFile); g_logFile = nullptr; }
