@@ -3,6 +3,12 @@
 This is the long version of the README's install section: what to expect on first run, what
 every setting does, how to pick the working scale, and what to do when something is off.
 
+## What was tested
+
+Everything here was developed and tested with **World of Warcraft** (the beta client), on Lossless Scaling 3.2.2.0, Windows 11 and an RTX 4070 Ti SUPER (RTX 30 was the
+earlier development card). Other games and setups are untested; the addon does not depend on anything game-specific, so it may well work elsewhere, but that has not been
+seen.
+
 ## What this addon is, and is not
 
 It runs NVIDIA's DLSS 5 Neural Rendering model on the frames Lossless Scaling has already

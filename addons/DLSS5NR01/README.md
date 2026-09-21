@@ -5,6 +5,10 @@
 > where to get it. Put your copy in the Lossless Scaling folder, next to `LosslessScaling.exe` (the addon's **Browse for the model file...** button copies it there for you),
 > then press **Test compatibility** in the addon's panel.
 
+> [!NOTE]
+> **Tested with World of Warcraft.** This project was developed and tested against World of Warcraft (the beta client, `WowB.exe`), on Lossless Scaling 3.2.2.0,
+> Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested. DLSS 5 Neural Rendering in particular has only been tried in World of Warcraft.
+
 An addon for Echo Addon Manager, the addon manager for Lossless Scaling, that runs NVIDIA DLSS 5
 Neural Rendering (DLSSNR) on the frames Lossless Scaling captures and applies the result to every
 frame Lossless Scaling presents, real and generated. Nothing is injected into the game. No ReShade.

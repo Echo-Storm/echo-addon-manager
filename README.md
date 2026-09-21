@@ -8,6 +8,10 @@
 > `LosslessScaling.exe` (the addon's **Browse for the model file...** button copies it there for you), then press **Test compatibility** in the addon's panel.
 > Everything else here, including the manager, ReShade input passthrough and Windowed mode, works without it.
 
+> [!NOTE]
+> **Tested with World of Warcraft.** This project was developed and tested against World of Warcraft (the beta client, `WowB.exe`), on Lossless Scaling 3.2.2.0,
+> Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested. DLSS 5 Neural Rendering in particular has only been tried in World of Warcraft.
+
 Echo Addon Manager loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it a proper addon system: one window
 to install, switch on and tune addons, a live view of frame time and GPU load while a game runs, and one-click backup of every setting. It ships with the
 **DLSS 5 Neural Rendering** addon and two built-in features, **ReShade input passthrough** and **Windowed mode**, and it is free and MIT-licensed. It is an unofficial project, not
@@ -31,8 +35,8 @@ affiliated with the Lossless Scaling developers; read the [disclaimer](DISCLAIME
 <sub>These pictures are rendered offscreen by the project's own preview tool (`tools/ui_preview.ps1`), so the Performance numbers and log lines are sample data, not a
 measurement. The Neural Rendering panel comes from the offline test host.</sub>
 
-Status: **0.4.1.** Built and tested against Lossless Scaling **3.2.2.0** (the official build) on Windows 11 with an RTX 4070 Ti SUPER; other
-setups are untested.
+Status: **0.4.1.** Built and tested with **World of Warcraft** against Lossless Scaling **3.2.2.0** (the official build) on Windows 11 with an RTX 4070 Ti SUPER; other
+games and setups are untested.
 
 ## What you get
 
@@ -47,6 +51,9 @@ setups are untested.
 - **Live status on the addon card and in the status bar**, published by the addon itself.
 - **Back up and restore.** Save every addon's settings and the manager's to one file; load it back after a confirmation (the current settings are
   kept aside first). One button makes a **diagnostics zip** with your logs and settings for a bug report; nothing is uploaded anywhere.
+- **A quiet update check.** Once a day the manager asks github.com whether a newer release of this project exists, and says so in the status bar and on the About
+  tab. It is **on by default** and can be turned off in *Settings > Updates*; *Check now* always works. It only compares version numbers: nothing is downloaded or
+  installed, and it is the only thing the manager ever sends over the internet (GitHub sees your IP address and the program's name and version, as with any download).
 - **Interface size** from 75% to 200%, sharp on any display, per-monitor DPI aware.
 - **Safe by design.** A faulting addon cannot take Lossless Scaling down with it, settings are written atomically, and a corrupt settings file is
   kept rather than overwritten. Optional SHA-256 checks of addon DLLs against a trust list.

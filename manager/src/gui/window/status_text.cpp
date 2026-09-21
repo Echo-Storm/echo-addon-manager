@@ -9,6 +9,11 @@ std::string StatusCounts(int total, int on) {
            std::to_string(on) + " on";
 }
 
+std::string WithUpdate(std::string line, const std::string& latest) {
+    if (!latest.empty()) line += "   |   Update available: " + latest;
+    return line;
+}
+
 std::string WithLiveStatus(std::string counts, const std::string& who, const std::string& text) {
     if (!text.empty()) counts += "   |   " + who + ": " + text;
     return counts;

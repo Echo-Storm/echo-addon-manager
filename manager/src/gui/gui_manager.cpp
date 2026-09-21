@@ -15,6 +15,7 @@
 #include "../config/config_manager.h"
 #include "../host/gpu_stats.h"
 #include "../log/logger.h"
+#include "../update/update_check.h"
 #include "../../sdk/include/lsproxy/version.h"
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
@@ -34,6 +35,7 @@ namespace lsproxy {
 namespace {
 
 constexpr const wchar_t* kWindowClass = L"EchoAddonManagerClass";
+constexpr UINT_PTR kUpdateTimer = 0x4C51;   // once a minute: is the daily update check due, and is there something to announce?
 
 // Everything the window and its thread share. One window per process. It is allocated once and never destroyed: static destructors run
 // under the loader lock when the DLL unloads, which is no place to release D3D objects.
@@ -154,6 +156,23 @@ LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (static_cast<int>(wParam) == window::hotkey::kId) ShowManager(g.hidden);
         return 0;
 
+    case WM_TIMER:
+        if (wParam == kUpdateTimer) {
+            update::Tick();
+            const std::string notice = update::TakeNotice();
+            if (!notice.empty()) {
+                if (g.hidden) {   // nobody is looking at the window: say it from the notification area
+                    wchar_t wide[256] = {};
+                    MultiByteToWideChar(CP_UTF8, 0, notice.c_str(), -1, wide, 255);
+                    window::tray::Balloon(L"A new version is available", wide);
+                } else {
+                    widgets::ToastShow(notice, widgets::ToastType::Info, 8.0f);
+                }
+            }
+            return 0;
+        }
+        break;
+
     case WM_SYSCOMMAND:
         if ((wParam & 0xfff0) == SC_KEYMENU) return 0;   // Alt alone does not open the (absent) system menu
         break;
@@ -231,6 +250,8 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
     g.taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     window::tray::Add(hwnd, g.trayIcon, L"");
     GuiManager::ApplyHotkey();     // registers the hotkey and puts it in the tray tip
+    update::Tick();                // the daily update check, if it is on and due
+    SetTimer(hwnd, kUpdateTimer, 60 * 1000, nullptr);
     if (cfg.GlobalGetOr<bool>("ui", "open_on_start", true)) {
         ShowWindow(hwnd, place.maximized ? SW_SHOWMAXIMIZED : SW_SHOWDEFAULT);
         UpdateWindow(hwnd);
@@ -293,6 +314,7 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
         if (occluded || GetForegroundWindow() != hwnd) MsgWaitForMultipleObjects(0, nullptr, FALSE, occluded ? 250 : 100, QS_ALLINPUT);
     }
 
+    KillTimer(hwnd, kUpdateTimer);
     GpuStats::Instance().Shutdown();
     PersistPlacement();
     window::hotkey::Remove(hwnd);

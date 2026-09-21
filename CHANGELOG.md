@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **An update check.** Once a day the manager asks github.com for the latest release of this project and compares its version number with yours. If there is a newer one, the status bar says
+  "Update available: 0.5.0", the About tab and the Settings tab show it with an **Open the download page** button, and a notice appears once (a toast, or a balloon from the notification area
+  when the window is hidden). It **never downloads or installs anything**. It is **on by default** and can be turned off in *Settings > Updates*; **Check now** (Settings and About) always works.
+  It is the manager's only network access: an HTTPS request to api.github.com that GitHub sees as your IP address plus the program's name and version. The page it opens is built from the
+  release's tag on this project's own address, never taken from the answer, and an oversized, slow or unreadable answer is refused. New offline test `lsproxy_updatetest` (46 checks, against a small
+  server of its own on the loopback address, so it needs no internet; add `live` to also ask the real GitHub).
+- **The README, the addon README, the user guide and `INSTALL.txt` say what this was tested with:** World of Warcraft (the beta client), Lossless Scaling 3.2.2.0, Windows 11, RTX 4070 Ti SUPER; other
+  games and setups are untested.
+- Test hygiene: the features test starts each run with a fresh temporary folder (a leftover from the abrupt-exit run could make a later run with the same process id fail), and the window test
+  switches the update check off so it never touches the internet.
+
 ## 0.4.1 (2026-09-21)
 
 Upgrading from 0.4.0: copy the new files over the old ones. Nothing to migrate. This release is about how the panels look; nothing else changed.

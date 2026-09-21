@@ -177,6 +177,10 @@ int main(int argc, char** argv) {
     const bool startOn = !(argc > 1 && !strcmp(argv[1], "off"));
 
     const fs::path dir = fs::temp_directory_path() / ("lsp_featurestest_" + std::to_string(GetCurrentProcessId()));
+    {   // a fresh folder every run: process ids are reused, and an earlier run (the abrupt one) must not leave a switched-on feature behind
+        std::error_code cleanup;
+        fs::remove_all(dir, cleanup);
+    }
     fs::create_directories(dir);
     ConfigManager::Instance().Load((dir / "config.json").wstring());
 
@@ -186,6 +190,10 @@ int main(int argc, char** argv) {
         features::SetOn(0, true);   // ReShade passthrough: starts its watcher thread
         Sleep(300);
         printf("abrupt exit with the ReShade watcher running\n");
+        {
+            std::error_code cleanup;
+            fs::remove_all(dir, cleanup);   // its settings are saved by now; leave no folder behind
+        }
         exit(0);   // runs the static destructors, as a DLL's are run when the process ends
     }
 

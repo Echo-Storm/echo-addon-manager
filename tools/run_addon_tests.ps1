@@ -3,6 +3,7 @@
 #   * lsproxy_coretest           the manager's addon handling: scan, manifests, load, init, switch, remove, install, security, a faulting addon
 #   * lsproxy_featurestest       the built-in features: ReShade passthrough on a hidden window (subclass, restore, a layered subclass), and Windowed
 #                                mode's virtual display through DXGI and user32 (run twice: switched on and off at start-up)
+#   * lsproxy_updatetest        the update check: version numbers, GitHub's answer, when a check is due, and the check itself against a small local server
 #   * lsproxy_guitest            the manager window: hidden start, show and hide, the hotkey message, close to the tray, saved placement (run three
 #                                times: plain, with a saved placement, with the interface size at 150 %), teardown; and the pure window logic
 #   powershell -File run_addon_tests.ps1
@@ -20,7 +21,7 @@ function Build($dir, $targets) {
     & cmake --build . --config Release --target @targets 2>&1 | Select-String -Pattern ' error ' | ForEach-Object { Write-Host $_.Line }
     Pop-Location
 }
-Build "$root\manager\build" @('lsproxy_installtest', 'lsproxy_coretest', 'lsproxy_featurestest', 'lsproxy_guitest')
+Build "$root\manager\build" @('lsproxy_installtest', 'lsproxy_coretest', 'lsproxy_featurestest', 'lsproxy_guitest', 'lsproxy_updatetest')
 
 Run 'install' "$root\manager\build\Release\lsproxy_installtest.exe" @()
 Run 'core (addon handling)' "$root\manager\build\Release\lsproxy_coretest.exe" @()
@@ -30,6 +31,7 @@ Run 'features (Windowed off at start-up)' "$root\manager\build\Release\lsproxy_f
 # must be 0 (a std::thread still joinable at that point crashes the process)
 Run 'exit with the ReShade watcher running' "$root\manager\build\Release\lsproxy_featurestest.exe" @('abrupt')
 Run 'exit with the GPU sampler running' "$root\manager\build\Release\lsproxy_coretest.exe" @('abrupt-gpu')
+Run 'update check (against a local server, no internet needed)' "$root\manager\build\Release\lsproxy_updatetest.exe" @()
 Run 'window (defaults)' "$root\manager\build\Release\lsproxy_guitest.exe" @()
 Run 'window (saved placement)' "$root\manager\build\Release\lsproxy_guitest.exe" @('place')
 Run 'window (saved placement, interface size 150 %)' "$root\manager\build\Release\lsproxy_guitest.exe" @('scaled')

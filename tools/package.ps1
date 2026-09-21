@@ -56,6 +56,11 @@ download, this project does not download it, and it does not say where to get it
 LosslessScaling.exe (the addon's "Browse for the model file..." button copies it there for you), then press "Test compatibility" in the addon's
 panel. Everything else here works without it.
 
+Tested with World of Warcraft (the beta client), Lossless Scaling 3.2.2.0, Windows 11, RTX 4070 Ti SUPER. Other games and setups are untested.
+
+The manager checks github.com once a day for a newer release of this project (on by default; turn it off in Settings > Updates). It only compares version
+numbers: nothing is downloaded or installed, and it is the only thing the manager sends over the internet.
+
 Install (Lossless Scaling 3.2.2.0 was the tested version)
 -------
 1. Close Lossless Scaling and open its folder, for example

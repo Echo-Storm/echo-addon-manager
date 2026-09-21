@@ -6,6 +6,7 @@
 #include "../../diag/diagnostics.h"
 #include "../../host/gpu_stats.h"
 #include "../../log/logger.h"
+#include "../../update/update_check.h"
 #include "../../../sdk/include/lsproxy/version.h"
 #include "../widgets/file_dialog.h"
 #include "../widgets/toast.h"
@@ -192,6 +193,36 @@ void RenderTabSettings(AddonManager* manager) {
     bool autoLoad = config.GlobalGetOr<bool>(nullptr, "auto_load", true);
     if (ImGui::Checkbox("Load enabled addons when Lossless Scaling starts", &autoLoad)) { config.GlobalSet(nullptr, "auto_load", autoLoad); config.Save(); }
     widgets::Tip("Off = start with nothing loaded, then press Load now on the addon you want.");
+
+    // ---- Updates
+    ImGui::Dummy(ImVec2(0, S(16)));
+    lsp::SectionLabel("Updates");
+    ImGui::Dummy(ImVec2(0, S(2)));
+    {
+        bool daily = config.GlobalGetOr<bool>("updates", "check", true);
+        if (ImGui::Checkbox("Check for a new version once a day", &daily)) { config.GlobalSet("updates", "check", daily); config.Save(); }
+        widgets::Tip("On by default. Turn it off and the manager never contacts the internet on its own; Check now still works when you press it.");
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        ImGui::TextWrapped("Asks github.com for the latest release of this project and compares its version number with yours. That sends your IP address and the "
+                           "program's name and version, like any download. Nothing is downloaded or installed, and this is the only thing the manager ever sends over the internet.");
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, S(4)));
+        const update::Status st = update::Current();
+        const bool checking = st.state == update::State::Checking;
+        if (checking) ImGui::BeginDisabled();
+        if (lsp::Button(checking ? "Checking..." : "Check now", lsp::icons::kCheck)) update::StartCheckAsync();
+        if (checking) ImGui::EndDisabled();
+        widgets::Tip("Asks GitHub now, whatever the setting above says.");
+        if (st.state == update::State::Available) {
+            ImGui::SameLine();
+            if (lsp::Button("Open the download page", lsp::icons::kExternal, lsp::ButtonKind::Primary)) ShellExecuteA(nullptr, "open", st.url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            widgets::Tip("Opens this project's release page in your browser. You download and install it yourself.");
+        }
+        const std::string line = update::DescribeStatus(st);
+        ImGui::PushStyleColor(ImGuiCol_Text, st.state == update::State::Available ? lsp::theme::V(lsp::theme::kAccent) : (st.state == update::State::Failed ? lsp::theme::V(lsp::theme::kWarn) : ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]));
+        ImGui::TextWrapped("%s", line.c_str());
+        ImGui::PopStyleColor();
+    }
 
     // ---- Logging and support
     ImGui::Dummy(ImVec2(0, S(16)));

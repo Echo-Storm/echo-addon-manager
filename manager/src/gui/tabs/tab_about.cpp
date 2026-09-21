@@ -1,6 +1,7 @@
 #include "tab_about.h"
 #include "../gui_scale.h"
 #include "../widgets/status_bar.h"
+#include "../../update/update_check.h"
 #include "../../../sdk/include/lsproxy/version.h"
 #include "imgui.h"
 #include "lsproxy/lsp_widgets.h"
@@ -43,6 +44,26 @@ void RenderTabAbout() {
     char versionStr[64];
     snprintf(versionStr, sizeof(versionStr), "v%s", LSPROXY_VERSION_STRING);
     CenteredText(versionStr, true);
+    {   // is there a newer one? (the daily check, or the button)
+        const update::Status st = update::Current();
+        const std::string line = update::DescribeStatus(st);
+        if (st.state == update::State::Available) {
+            ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kAccent));
+            CenteredText(line.c_str());
+            ImGui::PopStyleColor();
+            const float bw2 = ImGui::CalcTextSize("Open the download page").x + ImGui::GetFontSize() * 4.0f;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (ImGui::GetContentRegionAvail().x - bw2) * 0.5f);
+            if (lsp::Button("Open the download page", lsp::icons::kExternal, lsp::ButtonKind::Primary, ImVec2(bw2, 0))) OpenUrl(st.url.c_str());
+        } else {
+            if (st.state != update::State::Idle) CenteredText(line.c_str(), true);
+            const bool checking = st.state == update::State::Checking;
+            const float bw2 = ImGui::CalcTextSize("Check for updates").x + ImGui::GetFontSize() * 3.0f;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (ImGui::GetContentRegionAvail().x - bw2) * 0.5f);
+            if (checking) ImGui::BeginDisabled();
+            if (lsp::Button("Check for updates", lsp::icons::kCheck, lsp::ButtonKind::Flat, ImVec2(bw2, 0))) update::StartCheckAsync();
+            if (checking) ImGui::EndDisabled();
+        }
+    }
     ImGui::Dummy(ImVec2(0, S(6)));
     CenteredText("An addon manager for Lossless Scaling: shaders, behaviour, and anything else an addon adds.", true);
 
