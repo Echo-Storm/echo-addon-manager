@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-labelledby="t d">
+  <title id="t">Echo Addon Manager</title>
+  <desc id="d">The addon manager for Lossless Scaling. Three stacked frames form the Echo mark; on the right, three addon cards with switches, one on.</desc>
+  <defs>
+    <radialGradient id="glow" cx="18%" cy="50%" r="60%">
+      <stop offset="0" stop-color="#7cb342" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#7cb342" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rule" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#7cb342"/>
+      <stop offset="1" stop-color="#7cb342" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect x="0.5" y="0.5" width="1199" height="319" rx="14" fill="#181818" stroke="#2a2a2a"/>
+  <rect x="0.5" y="0.5" width="1199" height="319" rx="14" fill="url(#glow)"/>
+
+  <!-- the Echo mark on its tile -->
+  <rect x="60" y="66" width="188" height="188" rx="40" fill="#1f1f1f" stroke="#4a6b28" stroke-width="2"/>
+  <g transform="translate(76,82) scale(6.5)" fill="none" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M13.7 1.5h6.6a2.2 2.2 0 0 1 2.2 2.2v6.6a2.2 2.2 0 0 1-2.2 2.2h-6.6a2.2 2.2 0 0 1-2.2-2.2v-6.6a2.2 2.2 0 0 1 2.2-2.2Z" stroke="#4a6b28" stroke-width="1.15"/>
+    <path d="M9.2 6h6.6a2.2 2.2 0 0 1 2.2 2.2v6.6a2.2 2.2 0 0 1-2.2 2.2h-6.6a2.2 2.2 0 0 1-2.2-2.2v-6.6a2.2 2.2 0 0 1 2.2-2.2Z" stroke="#7cb342" stroke-width="1.15"/>
+    <path d="M4.7 10.5h6.6a2.2 2.2 0 0 1 2.2 2.2v6.6a2.2 2.2 0 0 1-2.2 2.2h-6.6a2.2 2.2 0 0 1-2.2-2.2v-6.6a2.2 2.2 0 0 1 2.2-2.2Z" fill="#7cb342" stroke="#9ccc65" stroke-width="1.15"/>
+  </g>
+
+  <!-- words -->
+  <g font-family="'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif">
+    <text x="290" y="142" font-size="50" font-weight="700" fill="#e8e8e8" letter-spacing="-0.5">Echo Addon Manager</text>
+    <rect x="292" y="160" width="300" height="3" rx="1.5" fill="url(#rule)"/>
+    <text x="291" y="200" font-size="16" font-weight="600" fill="#7cb342" letter-spacing="3">THE ADDON MANAGER FOR LOSSLESS SCALING</text>
+    <text x="291" y="234" font-size="17" fill="#8a8a8a">DLSS 5 Neural Rendering  ·  ReShade passthrough  ·  Windowed mode</text>
+  </g>
+
+  <!-- three addon cards: the first one is on -->
+  <g>
+    <rect x="900" y="58" width="250" height="60" rx="8" fill="#243618" stroke="#4a6b28"/>
+    <rect x="916" y="72" width="32" height="32" rx="6" fill="#1f1f1f" stroke="#3a3a3a"/>
+    <path transform="translate(50,0)" d="M882 79.5 891 84.5V93.5L882 98.5 873 93.5V84.5Z M882 88.5V98.5 M873 84.5 882 88.5 891 84.5" fill="none" stroke="#7cb342" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <rect x="962" y="74" width="92" height="8" rx="4" fill="#e8e8e8" opacity="0.85"/>
+    <rect x="962" y="92" width="112" height="6" rx="3" fill="#7cb342" opacity="0.75"/>
+    <rect x="1094" y="76" width="44" height="24" rx="12" fill="#4a6b28"/>
+    <circle cx="1126" cy="88" r="9" fill="#e8e8e8"/>
+
+    <rect x="900" y="130" width="250" height="60" rx="8" fill="#1f1f1f" stroke="#2a2a2a"/>
+    <rect x="916" y="144" width="32" height="32" rx="6" fill="#1f1f1f" stroke="#3a3a3a"/>
+    <path transform="translate(50,0)" d="M882 151.5 891 156.5V165.5L882 170.5 873 165.5V156.5Z M882 160.5V170.5 M873 156.5 882 160.5 891 156.5" fill="none" stroke="#7cb342" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <rect x="962" y="146" width="104" height="8" rx="4" fill="#e8e8e8" opacity="0.7"/>
+    <rect x="962" y="164" width="86" height="6" rx="3" fill="#666" opacity="0.7"/>
+    <rect x="1094" y="148" width="44" height="24" rx="12" fill="#323232"/>
+    <circle cx="1106" cy="160" r="9" fill="#666"/>
+
+    <rect x="900" y="202" width="250" height="60" rx="8" fill="#1f1f1f" stroke="#2a2a2a"/>
+    <rect x="916" y="216" width="32" height="32" rx="6" fill="#1f1f1f" stroke="#3a3a3a"/>
+    <path transform="translate(50,0)" d="M882 223.5 891 228.5V237.5L882 242.5 873 237.5V228.5Z M882 232.5V242.5 M873 228.5 882 232.5 891 228.5" fill="none" stroke="#7cb342" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <rect x="962" y="218" width="100" height="8" rx="4" fill="#e8e8e8" opacity="0.7"/>
+    <rect x="962" y="236" width="96" height="6" rx="3" fill="#666" opacity="0.7"/>
+    <rect x="1094" y="220" width="44" height="24" rx="12" fill="#323232"/>
+    <circle cx="1106" cy="232" r="9" fill="#666"/>
+  </g>
+</svg>

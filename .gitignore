@@ -1,0 +1,34 @@
+# build output and release packages
+build/
+out/
+dist/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.zip
+*.log
+*.map
+
+# IDE and local CMake state
+.vs/
+.vscode/
+.idea/
+CMakeUserPresets.json
+CMakeSettings.json
+
+# renders and test dumps
+*.bmp
+*.bin
+captures/
+__pycache__/
+
+# NVIDIA's DLSS SDK is not redistributable: download it yourself (addons/LSP-NeuralRender/external/ngx/README.md)
+addons/LSP-NeuralRender/external/ngx/*
+!addons/LSP-NeuralRender/external/ngx/README.md
+# anything else dropped into external/ (SDK drops, snippets) stays out of the repo
+addons/LSP-NeuralRender/external/*
+!addons/LSP-NeuralRender/external/ngx/
