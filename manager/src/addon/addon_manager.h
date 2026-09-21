@@ -13,7 +13,8 @@ class HostImpl;
 
 class AddonManager {
 public:
-    explicit AddonManager(HostImpl* host);
+    explicit AddonManager(HostImpl* host);                                   // addons live in "addons" beside the running program
+    AddonManager(HostImpl* host, const std::wstring& addonsPath);            // or in a folder of your choosing (the offline tests use this)
     ~AddonManager();
 
     void ScanAddons();

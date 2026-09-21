@@ -71,12 +71,17 @@ static uint32_t ParseVersionInt(const std::string& text) {
     return (major << 16) | ((minor & 0xFF) << 8) | (patch & 0xFF);
 }
 
-AddonManager::AddonManager(HostImpl* host) : m_host(host) {
+static std::wstring DefaultAddonsPath() {
     wchar_t buffer[MAX_PATH];
     GetModuleFileNameW(NULL, buffer, MAX_PATH);
-    fs::path exePath(buffer);
-    m_addonsPath = (exePath.parent_path() / "addons").wstring();
-    m_configPath = (exePath.parent_path() / "addons" / "config.json").wstring();
+    return (fs::path(buffer).parent_path() / "addons").wstring();
+}
+
+AddonManager::AddonManager(HostImpl* host) : AddonManager(host, DefaultAddonsPath()) {}
+
+AddonManager::AddonManager(HostImpl* host, const std::wstring& addonsPath) : m_host(host) {
+    m_addonsPath = addonsPath;
+    m_configPath = (fs::path(addonsPath) / "config.json").wstring();
 
     if (!fs::exists(m_addonsPath)) {
         fs::create_directory(m_addonsPath);
