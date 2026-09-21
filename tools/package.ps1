@@ -1,4 +1,5 @@
-# Builds Release and assembles dist\EchoAddonManager-<version>-x64.zip: the manager, the addons that build, an install note, and the licences.
+# Builds Release and assembles dist\EchoAddonManager-<version>-x64.zip: the manager, the addons that build, EchoAddonManagerSetup.exe (one file that carries them all),
+# an install note, and the licences.
 # NVIDIA's DLSS SDK and the DLSSNR snippet are never packaged. Neural Rendering is left out (with a note) when it did not build.
 #   powershell -File tools\package.ps1 [-Version 0.5.0] [-SkipBuild]
 param(
@@ -43,6 +44,55 @@ foreach ($a in $addons) {
 }
 if (-not ($included -contains 'DLSS5NR01')) { Write-Host 'Neural Rendering did not build: it is not in this package.' }
 
+# The single-file installer: the files above (only the ones that get installed) are packed into a bundle that becomes a resource of Setup.exe.
+# It is built in its own folder (installer\build_setup), so the test build of the installer, which carries no files, stays as the tests expect.
+$setupBuild = "$root\installer\build_setup"
+$payloadDir = "$dist\payload-$Version"
+if (Test-Path $payloadDir) { Remove-Item -Recurse -Force $payloadDir }
+New-Item -ItemType Directory -Force $payloadDir | Out-Null
+Copy-Item "$stage\Lossless.dll", "$stage\LP-icon.ico", "$stage\LP-icon.png" $payloadDir
+Copy-Item "$stage\addons" "$payloadDir\addons" -Recurse
+if (-not (Test-Path "$setupBuild\CMakeCache.txt")) { & cmake -S "$root\installer" -B $setupBuild -G 'Visual Studio 17 2022' -A x64 | Out-Null }
+& cmake --build $setupBuild --config Release --target pack_payload | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'the installer packer did not build' }
+$bundle = "$dist\payload-$Version.bin"
+& "$setupBuild\Release\pack_payload.exe" $payloadDir $bundle
+if ($LASTEXITCODE -ne 0) { throw 'packing the installer files failed' }
+& cmake -S "$root\installer" -B $setupBuild "-DSETUP_PAYLOAD=$bundle" | Out-Null
+& cmake --build $setupBuild --config Release --target EchoAddonManagerSetup 2>&1 | Select-String -Pattern ' error |warning C' | ForEach-Object { Write-Host $_.Line }
+$setupExe = "$setupBuild\Release\EchoAddonManagerSetup.exe"
+if (-not (Test-Path $setupExe)) { throw 'the Setup exe did not build' }
+
+# Check the finished exe as a person would use it: it must report the version it carries, and install into a fake Lossless Scaling folder byte for byte
+$check = "$env:TEMP\setup_check_$PID"
+if (Test-Path $check) { Remove-Item -Recurse -Force $check }
+New-Item -ItemType Directory $check | Out-Null
+$vlog = "$check\version.log"
+$p = Start-Process $setupExe -ArgumentList '--version', '--no-remember', '--log', "`"$vlog`"" -PassThru -Wait -WindowStyle Hidden
+$said = if (Test-Path $vlog) { (Get-Content $vlog -Raw).Trim() } else { '' }
+if ($p.ExitCode -ne 0 -or $said -ne "payload $Version") { throw "the Setup exe reports '$said' (exit $($p.ExitCode)), expected 'payload $Version'" }
+$fakeOriginal = "$root\installer\build\Release\fake_original.dll"
+if (Test-Path $fakeOriginal) {
+    $fake = "$check\ls"
+    New-Item -ItemType Directory $fake | Out-Null
+    Copy-Item "$env:SystemRoot\System32\cmd.exe" "$fake\LosslessScaling.exe"
+    Copy-Item $fakeOriginal "$fake\Lossless.dll"
+    $ilog = "$check\install.log"
+    $p = Start-Process $setupExe -ArgumentList '--silent', 'install', '--folder', "`"$fake`"", '--no-remember', '--log', "`"$ilog`"" -PassThru -Wait -WindowStyle Hidden
+    if ($p.ExitCode -ne 0) { throw "the Setup exe could not install into a test folder: $(Get-Content $ilog -Raw)" }
+    $bad = @(Get-ChildItem $payloadDir -Recurse -File | Where-Object {
+        $rel = $_.FullName.Substring($payloadDir.Length + 1)
+        (Get-FileHash $_.FullName).Hash -ne (Get-FileHash "$fake\$rel" -ErrorAction SilentlyContinue).Hash })
+    if ($bad.Count) { throw "the Setup exe installed files that differ from the package: $($bad.Name -join ', ')" }
+    if ((Get-FileHash "$fake\Lossless_original.dll").Hash -ne (Get-FileHash $fakeOriginal).Hash) { throw 'the Setup exe did not keep the original Lossless.dll' }
+    Write-Host "  Setup exe checked: reports $Version and installs $((Get-ChildItem $payloadDir -Recurse -File).Count) files byte for byte into a test folder"
+} else {
+    Write-Host '  (Setup exe installed-files check skipped: build the installer tests first to get the stand-in Lossless.dll)'
+}
+Remove-Item -Recurse -Force $check -ErrorAction SilentlyContinue
+Copy-Item $setupExe "$stage\EchoAddonManagerSetup.exe"
+Remove-Item -Recurse -Force $payloadDir
+
 Copy-Item "$root\LICENSE" "$stage\LICENSE.txt"
 Copy-Item "$root\NOTICE.md", "$root\DISCLAIMER.md", "$root\CHANGELOG.md" $stage
 @"
@@ -62,7 +112,14 @@ RTX 4070 Ti SUPER. Other games and setups are untested.
 The manager checks github.com once a day for a newer release of this project (on by default; turn it off in Settings > Updates). It only compares version
 numbers: nothing is downloaded or installed, and it is the only thing the manager sends over the internet.
 
-Install (Lossless Scaling 3.2.2.0 was the tested version)
+Easiest: run EchoAddonManagerSetup.exe
+-------
+Close Lossless Scaling, run EchoAddonManagerSetup.exe and follow it: it finds the Lossless Scaling folder (or lets you pick it, for copies that are not
+from Steam), installs, updates, repairs the install after a Lossless Scaling update, and uninstalls. Everything it replaces is backed up first, your settings
+and other addons are never touched, and it undoes itself if anything goes wrong. Like every file in this project it is unsigned, so Windows SmartScreen may
+warn you ("More info", then "Run anyway"); it runs without administrator rights unless the Lossless Scaling folder needs them. Or do it by hand:
+
+Install by hand (Lossless Scaling 3.2.2.0 was the tested version)
 -------
 1. Close Lossless Scaling and open its folder, for example
    C:\Program Files (x86)\Steam\steamapps\common\Lossless Scaling
@@ -77,10 +134,10 @@ Updating: close Lossless Scaling and copy the new files over the old ones. Your 
 From 0.1.0: Neural Rendering is now addons\DLSS5NR01 (it was addons\LSP-NeuralRender) and its saved settings and looks move to the new name by themselves
 the first time it starts. ReShade passthrough and Windowed mode are built in (Features tab). The old LSP-NeuralRender, LSP-ReShade and LSP-Windowed
 folders are ignored by the manager; you can remove them.
-After a Lossless Scaling update: it may put its own Lossless.dll back. Delete the stale Lossless_original.dll, rename the new
+After a Lossless Scaling update: it may put its own Lossless.dll back. Run EchoAddonManagerSetup.exe again (it offers "Repair"), or by hand: delete the stale Lossless_original.dll, rename the new
 Lossless.dll to Lossless_original.dll, and copy ours in again.
 
-Uninstall: delete our Lossless.dll, rename Lossless_original.dll back to Lossless.dll, and delete the addons folder if you like.
+Uninstall: run EchoAddonManagerSetup.exe and choose Uninstall, or by hand: delete our Lossless.dll, rename Lossless_original.dll back to Lossless.dll, and delete the addons folder if you like.
 
 Licence: MIT (LICENSE.txt). Credits and third-party licences: NOTICE.md.
 "@ | Set-Content -Encoding UTF8 "$stage\INSTALL.txt"

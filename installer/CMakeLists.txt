@@ -11,7 +11,8 @@ add_library(setup_core STATIC
     src/core/fileinfo.cpp
     src/core/lsfolder.cpp
     src/core/state.cpp
-    src/core/installer.cpp)
+    src/core/installer.cpp
+    src/core/payload.cpp)
 target_include_directories(setup_core PUBLIC src/core)
 
 # Command line front end: detect, status, install, uninstall (also what the tests drive)
@@ -37,3 +38,33 @@ add_fake(fake_other        "Something Else"     "Nobody"                     "1.
 add_executable(setup_test EXCLUDE_FROM_ALL tests/installer_test.cpp)
 target_link_libraries(setup_test PRIVATE setup_core)
 add_dependencies(setup_test fake_original fake_original_new fake_ours_old fake_other)
+
+# Offline test of the file bundle the installer carries: cmake --build . --config Release --target setup_payload_test
+add_executable(setup_payload_test EXCLUDE_FROM_ALL tests/payload_test.cpp)
+target_link_libraries(setup_payload_test PRIVATE setup_core)
+
+# ---------------------------------------------------------------------------------------------------------------------------------------
+# The Setup exe: a wizard (Windows' TaskDialog) over the core, with a silent mode. The files it installs are a resource of the exe:
+#   pack_payload <folder like the release zip> payload.bin, then configure with -DSETUP_PAYLOAD=<payload.bin> and build EchoAddonManagerSetup.
+# Without SETUP_PAYLOAD the exe carries nothing (it says so); --payload <folder> then supplies the files (tests, development).
+add_executable(pack_payload tools/pack_payload.cpp)
+target_link_libraries(pack_payload PRIVATE setup_core)
+
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/../manager/sdk/include/lsproxy/version.h" _ver_line REGEX "LSPROXY_VERSION_STRING \"")
+string(REGEX REPLACE ".*\"([0-9]+\\.[0-9]+\\.[0-9]+)\".*" "\\1" SETUP_VERSION "${_ver_line}")
+string(REPLACE "." "," SETUP_VERSION_CSV "${SETUP_VERSION},0")
+set(SETUP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/../manager/LP-icon.ico")
+set(SETUP_PAYLOAD "" CACHE FILEPATH "the file bundle to build into the Setup exe (made by pack_payload)")
+if(SETUP_PAYLOAD)
+    set(SETUP_HAS_PAYLOAD 1)
+    set(SETUP_PAYLOAD_RC "${SETUP_PAYLOAD}")
+else()
+    set(SETUP_HAS_PAYLOAD 0)
+    set(SETUP_PAYLOAD_RC "")
+endif()
+configure_file(src/gui/setup.rc.in ${CMAKE_CURRENT_BINARY_DIR}/setup.rc @ONLY)
+add_executable(EchoAddonManagerSetup WIN32 src/gui/main.cpp ${CMAKE_CURRENT_BINARY_DIR}/setup.rc)
+target_link_libraries(EchoAddonManagerSetup PRIVATE setup_core)
+if(SETUP_PAYLOAD)
+    set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/setup.rc PROPERTIES OBJECT_DEPENDS "${SETUP_PAYLOAD}")
+endif()

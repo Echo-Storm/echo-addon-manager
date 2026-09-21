@@ -32,3 +32,4 @@ addons/DLSS5NR01/external/ngx/*
 # anything else dropped into external/ (SDK drops, snippets) stays out of the repo
 addons/DLSS5NR01/external/*
 !addons/DLSS5NR01/external/ngx/
+build_setup/

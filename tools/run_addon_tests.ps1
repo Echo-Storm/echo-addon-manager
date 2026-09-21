@@ -38,8 +38,14 @@ Run 'window (saved placement, interface size 150 %)' "$root\manager\build\Releas
 # The installer's core (find the folder, tell whose Lossless.dll is whose, install / update / repair / uninstall with rollback), on fake folders in %TEMP%.
 # It needs the manager's Lossless.dll, built above by build_all.ps1.
 if (-not (Test-Path "$root\installer\build\CMakeCache.txt")) { & cmake -S "$root\installer" -B "$root\installer\build" -G 'Visual Studio 17 2022' -A x64 2>&1 | Select-String -Pattern 'error' | ForEach-Object { Write-Host $_.Line } }
-Build "$root\installer\build" @('setup_core', 'setup_cli', 'setup_test')
+Build "$root\installer\build" @('setup_core', 'setup_cli', 'setup_test', 'setup_payload_test', 'pack_payload', 'EchoAddonManagerSetup')
 Run 'installer core (fake Lossless Scaling folders)' "$root\installer\build\Release\setup_test.exe" @()
+Run 'installer file bundle (pack, unpack, hostile and damaged bundles)' "$root\installer\build\Release\setup_payload_test.exe" @()
+# The Setup exe itself, end to end on fake folders: silent install / reinstall / repair / uninstall / refusals, and the wizard window opening and closing by itself
+Write-Host '== Setup exe (fake Lossless Scaling folders, silent mode and the window)'
+$out = & powershell -NoProfile -File "$root\installer\tests\setup_exe_test.ps1" -Root $root 2>&1 | Out-String
+$out.TrimEnd() -split "`r?`n" | Where-Object { $_ -match '^\s*(PASS|FAIL)|PASSED|FAILED' } | ForEach-Object { Write-Host "  $_" }
+if ($LASTEXITCODE -ne 0) { $script:fail++ }
 # Neural Rendering's requirements check: only when that addon has been configured (it needs the NVIDIA SDK to configure, though not to run this test)
 if (Test-Path "$root\addons\DLSS5NR01\build\CMakeCache.txt") {
     Build "$root\addons\DLSS5NR01\build" @('nr_reqtest')

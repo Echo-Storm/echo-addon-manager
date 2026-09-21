@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Toward 1.0: `EchoAddonManagerSetup.exe`, a single-file installer with a window** (`installer/`; in the package from the next release). It finds the Lossless Scaling folder
+  (a running copy, Steam libraries, the usual places, the last folder used, or "Browse" for a copy that is not from Steam), says what state it is in and offers the one thing that fits:
+  **Install**, **Update**, **Repair** (after a Lossless Scaling update put its own `Lossless.dll` back) or **Reinstall**, plus **Uninstall** (keeping or taking out the addons).
+  It refuses while Lossless Scaling runs, backs up everything it replaces, verifies by hash, undoes itself if anything fails, and never touches the person's settings, other addons or
+  removed addons. When the folder needs administrator rights it offers to restart itself as administrator. Afterwards it can copy the person's own `nvngx_dlssnr.dll` into the folder
+  (only when there is none; nothing is downloaded), and every page says that file is not included. The files it installs are a resource of the exe, unpacked to a temporary
+  folder; a silent mode (`--silent install|uninstall|status --folder <dir>`) exists for scripts. Windows' own TaskDialog draws it. New offline tests in the runner: the file bundle
+  (28 checks, including damaged and hostile bundles that must write nothing) and the exe end to end on fake folders (25 checks: silent install, reinstall, repair after an update,
+  uninstall, refusals, Lossless Scaling running, and the window opening and closing by itself). The package script builds the exe with the files inside, and checks it installs them byte for byte.
+
 ## 0.5.0 (2026-09-21)
 
 Upgrading from 0.4.1: copy the new files over the old ones. Nothing to migrate. The addon API is unchanged (1.0.0). The manager now checks GitHub once a day for a newer release: it is **on by default**
