@@ -6,7 +6,9 @@
 #include "src/config/config_manager.h"
 #include "src/event/event_system.h"
 #include "src/host/host_impl.h"
+#include "src/host/metrics.h"
 #include "src/log/logger.h"
+#include "lsproxy/version.h"
 #include "imgui.h"
 #include <windows.h>
 #include <cstdio>
@@ -14,6 +16,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <utility>
 
 namespace fs = std::filesystem;
 using namespace lsproxy;
@@ -184,6 +187,74 @@ static void TestConfig(const fs::path& T) {
     }
 }
 
+static bool PreSkips(uint32_t, uint32_t, uint32_t, void* user) { ++*(int*)user; return true; }
+static bool PreLetsThrough(uint32_t, uint32_t, uint32_t, void* user) { ++*(int*)user; return false; }
+static void PostCounts(uint32_t, uint32_t, uint32_t, void* user) { ++*(int*)user; }
+static void EventGot(uint32_t id, const void* data, uint32_t size, void* user) {
+    auto* seen = (std::pair<uint32_t, std::string>*)user;
+    seen->first = id;
+    seen->second.assign((const char*)data, size);
+}
+
+// What an addon can ask of the host: settings, events, dispatch callbacks, status and metrics.
+static void TestHost(const fs::path& T) {
+    printf("== host interface\n");
+    const fs::path dir = T / "host";
+    fs::create_directories(dir);
+    ConfigManager::Instance().Load((dir / "config.json").wstring());
+    HostImpl h;
+
+    Check("the host reports the addon API version", h.GetHostVersion() == (uint32_t)LSPROXY_API_VERSION_INT);
+    h.SetConfig("a", "k", "v");
+    Check("a setting written by an addon reads back", std::string(h.GetConfig("a", "k", "")) == "v");
+    Check("a missing setting gives the default given", std::string(h.GetConfig("a", "nope", "dflt")) == "dflt");
+    const char* nothing = h.GetConfig(nullptr, nullptr, nullptr);
+    Check("null arguments are treated as empty text", nothing && *nothing == 0);
+
+    const char* first = h.GetConfig("a", "k", "");
+    for (int i = 0; i < 500; ++i) h.GetConfig("a", "k", "");
+    Check("a returned setting stays valid for hundreds of later calls", std::string(first) == "v");
+
+    int skip = 0, through = 0, post = 0;
+    h.SetPreDispatchCallback(PreSkips, &skip);
+    h.SetPreDispatchCallback(PreLetsThrough, &through);
+    h.SetPostDispatchCallback(PostCounts, &post);
+    Check("every pre-dispatch callback runs, and any of them can skip the dispatch", h.InvokePreDispatch(1, 2, 3) && skip == 1 && through == 1);
+    h.InvokePostDispatch(1, 2, 3);
+    Check("post-dispatch callbacks run", post == 1);
+    h.SetPreDispatchCallback(PreLetsThrough, &skip);   // the same owner again replaces its callback
+    Check("a callback set again by the same owner replaces the old one", !h.InvokePreDispatch(1, 2, 3) && skip == 2 && through == 2);
+    h.SetPreDispatchCallback(nullptr, &skip);          // no callback removes the owner's entry
+    h.InvokePreDispatch(1, 2, 3);
+    Check("setting no callback removes that owner's entry", skip == 2 && through == 3);
+    h.SetPostDispatchCallback(nullptr, &post);
+    h.InvokePostDispatch(1, 2, 3);
+    Check("...for post-dispatch as well", post == 1);
+
+    h.SetD3D11Device((void*)0x10, (void*)0x20);
+    Check("the device and context handed over by the hook are what addons get", h.GetD3D11Device() == (void*)0x10 && h.GetD3D11DeviceContext() == (void*)0x20);
+
+    std::pair<uint32_t, std::string> seen{ 0, "" };
+    const uint32_t evt = LSPROXY_EVENT_CUSTOM + 7;
+    h.SubscribeEvent(evt, EventGot, &seen);
+    h.PublishEvent(evt, "payload", 7);
+    Check("an event published by one addon reaches a subscriber with its data", seen.first == evt && seen.second == "payload");
+    seen = { 0, "" };
+    h.UnsubscribeEvent(evt, EventGot);
+    h.PublishEvent(evt, "again", 5);
+    Check("after unsubscribing nothing arrives", seen.first == 0);
+
+    h.SetStatus("hostTest", "Running", 1);
+    h.PublishMetric("hostTest", "fps", 59.5, "fps");
+    const Metrics::Status st = Metrics::Instance().GetStatus("hostTest");
+    const Metrics::Series se = Metrics::Instance().Get("hostTest", "fps", 10.0);
+    Check("a status set by an addon can be read back", st.text == "Running" && st.level == 1);
+    Check("a metric published by an addon can be read back", !se.samples.empty() && se.samples.back().v > 59.4f && se.unit == "fps");
+    h.SetStatus(nullptr, nullptr, 0);
+    h.PublishMetric(nullptr, nullptr, 1.0, nullptr);
+    Check("null arguments to status and metrics are tolerated", true);
+}
+
 static void OnEvent(uint32_t, const void*, uint32_t, void* user) { ++*(int*)user; }
 
 int main() {
@@ -215,7 +286,7 @@ int main() {
     WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false}},"global":{"security_level":0}})");
 
     setvbuf(stdout, nullptr, _IONBF, 0);
-    try { TestConfig(T); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
+    try { TestConfig(T); TestHost(T); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
 
     HostImpl host;
     int loadedEvents = 0, unloadedEvents = 0;
