@@ -184,6 +184,93 @@ Report Evaluate(const Inputs& in) {
     return rep;
 }
 
+namespace {
+
+std::wstring FullPathOf(const std::wstring& p) {
+    wchar_t b[2 * MAX_PATH];
+    const DWORD n = GetFullPathNameW(p.c_str(), 2 * MAX_PATH, b, nullptr);
+    return (n > 0 && n < 2 * MAX_PATH) ? std::wstring(b) : p;
+}
+
+bool IsFolder(const std::wstring& p) {
+    const DWORD a = GetFileAttributesW(p.c_str());
+    return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+bool EndsWithDll(const std::wstring& p) { return p.size() >= 4 && _wcsicmp(p.c_str() + p.size() - 4, L".dll") == 0; }
+
+std::wstring TimeStamp() {
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    wchar_t b[32];
+    swprintf(b, 32, L"%04u%02u%02u-%02u%02u%02u", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+    return b;
+}
+
+PlaceResult Refuse(const std::string& why) {
+    PlaceResult r;
+    r.message = why;
+    return r;
+}
+
+} // namespace
+
+PlaceResult PlaceModel(const std::wstring& source, const std::wstring& lsDir, const std::wstring& backupDir) {
+    const std::wstring dest = lsDir + L"\\nvngx_dlssnr.dll";
+
+    const DWORD attr = GetFileAttributesW(source.c_str());
+    if (attr == INVALID_FILE_ATTRIBUTES) return Refuse("That file was not found: " + Utf8(source));
+    if (attr & FILE_ATTRIBUTE_DIRECTORY) return Refuse("That is a folder, not a file. Pick nvngx_dlssnr.dll itself.");
+    if (!EndsWithDll(source)) return Refuse("That is not a .dll file. Pick your copy of nvngx_dlssnr.dll.");
+    uint64_t size = 0;
+    if (!FileSize(source, size)) return Refuse("That file could not be read: " + Utf8(source));
+    if (size < kSmallestPlausibleModel) return Refuse("That file is only " + SizeText(size) + ", too small to be the model (it is about 150 MB). Pick the complete file.");
+    if (!IsFolder(lsDir)) return Refuse("The Lossless Scaling folder was not found: " + Utf8(lsDir));
+
+    PlaceResult r;
+    r.placedPath = dest;
+    if (_wcsicmp(FullPathOf(source).c_str(), FullPathOf(dest).c_str()) == 0) {
+        r.ok = true;
+        r.message = "That file is already in place in the Lossless Scaling folder. Nothing changed.";
+        return r;
+    }
+
+    // Move a model that is already there aside (a rename works even while a program has it loaded, a delete or an overwrite would not)
+    std::wstring backup;
+    uint64_t existing = 0;
+    if (FileSize(dest, existing)) {
+        CreateDirectoryW(backupDir.c_str(), nullptr);
+        const std::wstring stem = backupDir + L"\\nvngx_dlssnr-" + TimeStamp();
+        backup = stem + L".dll";
+        for (int n = 2; GetFileAttributesW(backup.c_str()) != INVALID_FILE_ATTRIBUTES && n < 1000; ++n) backup = stem + L"-" + std::to_wstring(n) + L".dll";
+        if (!MoveFileExW(dest.c_str(), backup.c_str(), MOVEFILE_COPY_ALLOWED)) {
+            return Refuse("The model file that is there could not be moved aside (error " + std::to_string(GetLastError()) + "). Close Lossless Scaling and try again.");
+        }
+    }
+
+    // Write the new copy under a temporary name, then rename it into place; put the old one back if anything fails
+    const std::wstring part = dest + L".part";
+    auto restore = [&] { if (!backup.empty()) MoveFileExW(backup.c_str(), dest.c_str(), MOVEFILE_COPY_ALLOWED); };
+    if (!CopyFileW(source.c_str(), part.c_str(), FALSE)) {
+        const DWORD e = GetLastError();
+        DeleteFileW(part.c_str());
+        restore();
+        return Refuse("The file could not be copied (error " + std::to_string(e) + "). Is there room in the Lossless Scaling folder's drive?");
+    }
+    if (!MoveFileExW(part.c_str(), dest.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        const DWORD e = GetLastError();
+        DeleteFileW(part.c_str());
+        restore();
+        return Refuse("The copy could not be put in place (error " + std::to_string(e) + ").");
+    }
+
+    r.ok = true;
+    r.backupPath = backup;
+    r.message = "Placed nvngx_dlssnr.dll (" + SizeText(size) + ") in the Lossless Scaling folder. Restart Lossless Scaling, or press Restart engine under Advanced, to use it.";
+    if (!backup.empty()) r.message += " The file that was there is in the backups folder.";
+    return r;
+}
+
 Inputs Gather(const std::wstring& modelPath, const std::wstring& addonDir) {
     Inputs in;
 

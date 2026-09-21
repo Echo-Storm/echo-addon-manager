@@ -46,6 +46,10 @@ what stops Neural Rendering from running. Nothing is loaded or downloaded to do 
   error: it may well work. A file far smaller than the model (under 20 MB) is treated as missing, since it cannot be the model.
 - **Check again** looks again after you have put a file in place. Changing the model path under *Advanced* checks again when you leave the field.
 - **Open the Lossless Scaling folder** opens the folder the model file goes in.
+- **Browse for the model file...** lets you pick your own copy of `nvngx_dlssnr.dll` anywhere on your computer and copies it into the Lossless Scaling folder
+  for you. A model file already there is moved to the `backups` folder (never deleted or overwritten), a file that is not a `.dll` or is far too small to be
+  the model is refused, and picking the file that is already in place changes nothing. Restart Lossless Scaling, or press *Restart engine* under
+  *Advanced*, to use a newly placed file. Nothing is downloaded.
 
 This addon does not download the model file, and this project does not say where to get it.
 Settings live in Echo Addon Manager's `addons\config.json` under the key `DLSS5NR01`; delete

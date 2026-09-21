@@ -24,6 +24,7 @@
 #include "addon/compose11.h"
 #include "addon/requirements.h"
 #include <shellapi.h>
+#include <commdlg.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #include <windows.h>
@@ -325,6 +326,37 @@ static void ScanRequirements() {
     if (g_reqThread.joinable()) g_reqThread.join();   // the previous scan has finished (it clears the flag last)
     const std::wstring model = ModelPathNow(), addonDir = g_addonDir;
     g_reqThread = std::thread([model, addonDir] { ScanRequirementsGuarded(model, addonDir); g_reqBusy = false; });
+}
+// "Browse for the model file": the user picks their own copy of nvngx_dlssnr.dll and it is copied into the Lossless Scaling folder (req::PlaceModel).
+// The file dialog is modal and blocks its thread, so it runs on a worker thread, never on the manager's UI thread.
+static std::thread g_placeThread; static std::atomic<bool> g_placeBusy{ false };
+static std::string g_placeMsg; static bool g_placeOk = false;   // guarded by g_reqMu
+static std::wstring PickModelFile() {
+    wchar_t file[MAX_PATH * 2] = {};
+    OPENFILENAMEW o = {}; o.lStructSize = sizeof o;
+    o.hwndOwner = FindWindowW(L"EchoAddonManagerClass", nullptr);
+    o.lpstrFilter = L"DLL files (*.dll)\0*.dll\0All files\0*.*\0";
+    o.lpstrFile = file; o.nMaxFile = MAX_PATH * 2;
+    o.lpstrTitle = L"Pick your copy of nvngx_dlssnr.dll";
+    o.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+    return GetOpenFileNameW(&o) ? std::wstring(file) : std::wstring();
+}
+static void PlaceModelBody() {
+    const std::wstring picked = PickModelFile();
+    if (picked.empty()) { std::lock_guard<std::mutex> lk(g_reqMu); g_placeMsg = "No file picked."; g_placeOk = false; return; }
+    const req::PlaceResult r = req::PlaceModel(picked, g_lsDir, g_lsDir + L"\\backups");
+    Log("place model: %s (%s)", r.message.c_str(), r.ok ? "ok" : "refused");
+    { std::lock_guard<std::mutex> lk(g_reqMu); g_placeMsg = r.message; g_placeOk = r.ok; }
+    if (r.ok) ScanRequirements();
+}
+static void PlaceModelGuarded() {   // no objects here: __try cannot unwind them
+    __try { PlaceModelBody(); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { Log("place model crashed (0x%08lx)", GetExceptionCode()); }
+}
+static void BrowseAndPlace() {
+    if (g_placeBusy.exchange(true)) return;
+    if (g_placeThread.joinable()) g_placeThread.join();   // the previous one has finished (it clears the flag last)
+    g_placeThread = std::thread([] { PlaceModelGuarded(); g_placeBusy = false; });
 }
 static req::Report RequirementsNow(bool engineFailed, bool engineReady, bool engineRunning, const char* engineError) {
     req::Inputs in; { std::lock_guard<std::mutex> lk(g_reqMu); in = g_reqIn; }
@@ -718,6 +750,14 @@ LSPROXY_EXPORT void AddonRenderSettings() {
             ImGui::SameLine();
             if (ImGui::SmallButton("Open the Lossless Scaling folder")) ShellExecuteW(nullptr, L"open", g_lsDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             Tip("Where the model file, nvngx_dlssnr.dll, goes: next to LosslessScaling.exe.");
+            ImGui::SameLine();
+            const bool placing = g_placeBusy.load();
+            if (placing) ImGui::BeginDisabled();
+            if (ImGui::SmallButton(placing ? "Waiting for the file dialog..." : "Browse for the model file...")) BrowseAndPlace();
+            if (placing) ImGui::EndDisabled();
+            Tip("Pick your own copy of nvngx_dlssnr.dll: it is copied into the Lossless Scaling folder. A file already there is moved to the backups folder, never deleted. Nothing is downloaded.");
+            { std::string msg; bool ok; { std::lock_guard<std::mutex> lk(g_reqMu); msg = g_placeMsg; ok = g_placeOk; }
+              if (!msg.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? lsp::theme::V(lsp::theme::kAccent) : lsp::theme::V(lsp::theme::kWarn)); ImGui::TextWrapped("%s", msg.c_str()); ImGui::PopStyleColor(); } }
         }
     }
     // ---- Saved looks, at the top. Pick one to apply it; Save updates it (or asks for a name); Save as new keeps the current sliders under a
@@ -1094,6 +1134,7 @@ LSPROXY_EXPORT void AddonShutdown() {
     if (g_host) { g_host->UnsubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_READY, OnDeviceEvent); g_host->UnsubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent); }
     if (g_initThread.joinable()) g_initThread.join();
     if (g_reqThread.joinable()) g_reqThread.join();
+    if (g_placeThread.joinable()) { if (g_placeBusy) g_placeThread.detach(); else g_placeThread.join(); }   // an open file dialog cannot be joined; the process is ending
     { std::lock_guard<std::mutex> lk(g_tapMu); g_bridge.Shutdown(); g_compose.Shutdown(); g_engine.Shutdown(); }
     SaveConfig();
     if (g_logFile) { fclose(g_logFile); g_logFile = nullptr; }

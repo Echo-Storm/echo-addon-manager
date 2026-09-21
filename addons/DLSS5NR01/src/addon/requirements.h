@@ -61,4 +61,17 @@ std::string PlainEngineError(const std::string& raw);               // the engin
 // left at their defaults for the caller to fill in. Reads file headers only: it does not load the model, and takes well under a second.
 Inputs Gather(const std::wstring& modelPath, const std::wstring& addonDir);
 
+struct PlaceResult {
+    bool ok = false;
+    std::string message;          // what happened, in words, for the panel
+    std::wstring placedPath;      // where the model now is
+    std::wstring backupPath;      // where the file that was there before went, when there was one
+};
+
+// Puts a model file the user picked next to Lossless Scaling as nvngx_dlssnr.dll. The picked file is only read. A file already there is moved
+// to `backupDir` with a time stamp, never deleted or overwritten; the new copy is written under a temporary name and renamed into place, so a
+// failed copy leaves the old file where it was. Refuses a file that is not a .dll or is too small to be the model. Picking the file that is
+// already in place is a success that changes nothing. Nothing is downloaded and nothing is checked against a list of known files.
+PlaceResult PlaceModel(const std::wstring& source, const std::wstring& lsDir, const std::wstring& backupDir);
+
 } // namespace req

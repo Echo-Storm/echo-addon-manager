@@ -3,7 +3,11 @@
 //   nr_reqtest.exe [path to nvngx_dlssnr.dll]
 #include "addon/requirements.h"
 #include <windows.h>
+#include <algorithm>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 
 using namespace req;
@@ -18,6 +22,22 @@ static const Row* Find(const Report& r, const char* label) {
     return nullptr;
 }
 static bool Has(const std::string& s, const char* part) { return s.find(part) != std::string::npos; }
+
+// files for the placement tests
+static void RemoveAll(const std::wstring& p) { std::error_code ec; std::filesystem::remove_all(p, ec); }
+static bool Exists(const std::wstring& p) { std::error_code ec; return std::filesystem::exists(p, ec); }
+static void MakeFile(const std::wstring& p, int megabytes, char fill) {   // `megabytes` MB of the byte `fill`
+    std::ofstream f(std::filesystem::path(p), std::ios::binary);
+    const std::string mb(1 << 20, fill);
+    for (int i = 0; i < megabytes; ++i) f.write(mb.data(), static_cast<std::streamsize>(mb.size()));
+}
+static char FileFill(const std::wstring& p) { std::ifstream f(std::filesystem::path(p), std::ios::binary); char c = 0; f.get(c); return c; }
+static bool SameContent(const std::wstring& a, const std::wstring& b) {
+    std::error_code ec;
+    if (std::filesystem::file_size(a, ec) != std::filesystem::file_size(b, ec)) return false;
+    std::ifstream fa(std::filesystem::path(a), std::ios::binary), fb(std::filesystem::path(b), std::ios::binary);
+    return std::equal(std::istreambuf_iterator<char>(fa), std::istreambuf_iterator<char>(), std::istreambuf_iterator<char>(fb));
+}
 
 // Everything present and the tested model.
 static Inputs Good() {
@@ -97,6 +117,59 @@ int main(int argc, char** argv) {
     Check("plain: model init", Has(PlainEngineError("snippet Init_Ext: X"), "refused to start"));
     Check("plain: device", Has(PlainEngineError("D3D12CreateDevice 0x887a0004"), "Direct3D 12"));
     Check("plain: unknown messages are shown as they are", PlainEngineError("something new") == "something new");
+
+    // ---- placing a picked model file (throw-away folders in %TEMP%)
+    {
+        wchar_t tmp[MAX_PATH]; GetTempPathW(MAX_PATH, tmp);
+        const std::wstring root = std::wstring(tmp) + L"nr_reqtest_place";
+        const std::wstring ls = root + L"\\ls", picked = root + L"\\picked", backups = ls + L"\\backups";
+        RemoveAll(root);
+        CreateDirectoryW(root.c_str(), nullptr); CreateDirectoryW(ls.c_str(), nullptr); CreateDirectoryW(picked.c_str(), nullptr);
+        const std::wstring big = picked + L"\\some_copy.dll";                  // any name: it is placed as nvngx_dlssnr.dll
+        MakeFile(big, 21, 'A');
+        MakeFile(picked + L"\\small.dll", 1, 'B');
+        MakeFile(picked + L"\\model.bin", 21, 'C');
+
+        PlaceResult p = PlaceModel(picked + L"\\missing.dll", ls, backups);
+        Check("place: a file that does not exist is refused", !p.ok && Has(p.message, "not found"));
+        p = PlaceModel(picked + L"\\small.dll", ls, backups);
+        Check("place: a file far too small to be the model is refused", !p.ok && Has(p.message, "too small") && !Exists(ls + L"\\nvngx_dlssnr.dll"));
+        p = PlaceModel(picked + L"\\model.bin", ls, backups);
+        Check("place: a file that is not a .dll is refused", !p.ok && Has(p.message, ".dll") && !Exists(ls + L"\\nvngx_dlssnr.dll"));
+        p = PlaceModel(picked, ls, backups);
+        Check("place: a folder is refused", !p.ok);
+        p = PlaceModel(big, root + L"\\no_such_folder", backups);
+        Check("place: a Lossless Scaling folder that does not exist is refused", !p.ok && Has(p.message, "folder"));
+
+        p = PlaceModel(big, ls, backups);
+        Check("place: into a folder with no model yet: placed as nvngx_dlssnr.dll", p.ok && Exists(ls + L"\\nvngx_dlssnr.dll") && SameContent(big, ls + L"\\nvngx_dlssnr.dll") && p.backupPath.empty(), p.message);
+        Check("place: the picked file is left where it was", Exists(big) && FileFill(big) == 'A');
+        Check("place: no temporary file is left behind", !Exists(ls + L"\\nvngx_dlssnr.dll.part"));
+
+        MakeFile(picked + L"\\newer.dll", 22, 'D');
+        p = PlaceModel(picked + L"\\newer.dll", ls, backups);
+        Check("place: over an existing model: the new one is in place", p.ok && FileFill(ls + L"\\nvngx_dlssnr.dll") == 'D', p.message);
+        Check("place: ...and the old one was moved to the backups folder, not deleted", !p.backupPath.empty() && Exists(p.backupPath) && FileFill(p.backupPath) == 'A' && p.backupPath.find(L"backups") != std::wstring::npos);
+        Check("place: ...and the message says a restart is needed", Has(p.message, "restart") || Has(p.message, "Restart"));
+
+        p = PlaceModel(ls + L"\\nvngx_dlssnr.dll", ls, backups);
+        Check("place: picking the file that is already in place succeeds and changes nothing", p.ok && FileFill(ls + L"\\nvngx_dlssnr.dll") == 'D' && p.backupPath.empty() && Has(p.message, "already"), p.message);
+
+        // a backup with the same second in its name must not overwrite the earlier one
+        MakeFile(picked + L"\\third.dll", 23, 'E');
+        PlaceResult a = PlaceModel(picked + L"\\third.dll", ls, backups);
+        MakeFile(picked + L"\\fourth.dll", 24, 'F');
+        PlaceResult b = PlaceModel(picked + L"\\fourth.dll", ls, backups);
+        Check("place: two placements in the same second keep both backups", a.ok && b.ok && a.backupPath != b.backupPath && FileFill(a.backupPath) == 'D' && FileFill(b.backupPath) == 'E');
+
+        // a model that is loaded by a running program cannot be replaced but can be renamed: simulate the lock the copy would meet
+        HANDLE lock = CreateFileW((ls + L"\\nvngx_dlssnr.dll").c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
+        MakeFile(picked + L"\\fifth.dll", 25, 'G');
+        p = PlaceModel(picked + L"\\fifth.dll", ls, backups);
+        if (lock != INVALID_HANDLE_VALUE) CloseHandle(lock);
+        Check("place: over a model another program has open for reading (renamed aside, new one placed)", p.ok && FileFill(ls + L"\\nvngx_dlssnr.dll") == 'G', p.message);
+        RemoveAll(root);
+    }
 
     // ---- this machine
     std::wstring model = L"nvngx_dlssnr.dll";

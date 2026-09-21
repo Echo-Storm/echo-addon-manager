@@ -48,7 +48,7 @@ add_library(DLSS5NR01 SHARED
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(DLSS5NR01 PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
-target_link_libraries(DLSS5NR01 PRIVATE minhook_static ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32 shell32)
+target_link_libraries(DLSS5NR01 PRIVATE minhook_static ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32 shell32 comdlg32)
 set_target_properties(DLSS5NR01 PROPERTIES PREFIX "" OUTPUT_NAME "DLSS5NR01")
 # Keep a PDB and a linker map next to the Release DLL so the offsets in a crash backtrace can be resolved.
 if(MSVC)
