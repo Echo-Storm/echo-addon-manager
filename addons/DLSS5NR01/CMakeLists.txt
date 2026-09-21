@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(LSP_NeuralRender C CXX)
+project(DLSS5NR01 C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 add_definitions(-DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN -DNOMINMAX -D_CRT_SECURE_NO_WARNINGS)
@@ -41,21 +41,21 @@ target_link_libraries(lspnr_harness PRIVATE ${NGX_LIB} d3d12 dxgi user32 gdi32 a
 add_dependencies(lspnr_harness lspnr_forwarder)
 
 # ---- the addon ----
-add_library(LSP_NeuralRender SHARED
+add_library(DLSS5NR01 SHARED
     src/addon/addon.cpp src/addon/bridge.cpp src/addon/frame_tap.cpp src/addon/dispatch_hook.cpp
     src/addon/present_hook.cpp src/addon/compose11.cpp
     src/engine/nr_engine.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
-target_include_directories(LSP_NeuralRender PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
-target_link_libraries(LSP_NeuralRender PRIVATE minhook_static ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32)
-set_target_properties(LSP_NeuralRender PROPERTIES PREFIX "" OUTPUT_NAME "LSP_NeuralRender")
+target_include_directories(DLSS5NR01 PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
+target_link_libraries(DLSS5NR01 PRIVATE minhook_static ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32)
+set_target_properties(DLSS5NR01 PROPERTIES PREFIX "" OUTPUT_NAME "DLSS5NR01")
 # Keep a PDB and a linker map next to the Release DLL so the offsets in a crash backtrace can be resolved.
 if(MSVC)
-    target_compile_options(LSP_NeuralRender PRIVATE $<$<CONFIG:Release>:/Zi>)
-    target_link_options(LSP_NeuralRender PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF /MAP>)
+    target_compile_options(DLSS5NR01 PRIVATE $<$<CONFIG:Release>:/Zi>)
+    target_link_options(DLSS5NR01 PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF /MAP>)
 endif()
-add_dependencies(LSP_NeuralRender lspnr_forwarder)
+add_dependencies(DLSS5NR01 lspnr_forwarder)
 
 # ---- offline test host: loads the built addon with a fake IHost, headless ImGui and a synthetic LSFG pattern ----
 add_executable(lspnr_hosttest tools/addon_host_test.cpp
@@ -64,4 +64,4 @@ add_executable(lspnr_hosttest tools/addon_host_test.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp)
 target_include_directories(lspnr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(lspnr_hosttest PRIVATE d3d11 dxgi d3dcompiler)
-add_dependencies(lspnr_hosttest LSP_NeuralRender)
+add_dependencies(lspnr_hosttest DLSS5NR01)

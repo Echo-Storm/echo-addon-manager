@@ -26,6 +26,7 @@ struct AddonManifest {
     std::string dll;                         // a DLL name other than the folder's
     std::string icon;                        // an icon file name other than icon.png
     std::vector<std::string> dependencies;   // ids of addons that must load first
+    std::vector<std::string> renamedFrom;    // folder names this addon used to have: its settings are carried over, and those folders are hidden
     std::vector<std::string> tags;
     bool parsed = false;                     // addon.json was found and was valid
 };

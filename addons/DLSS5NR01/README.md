@@ -1,4 +1,4 @@
-# DLSS 5 Neural Rendering (LSP-NeuralRender)
+# DLSS 5 Neural Rendering (DLSS5NR01)
 
 An addon for Echo Addon Manager, the addon manager for Lossless Scaling, that runs NVIDIA DLSS 5
 Neural Rendering (DLSSNR) on the frames Lossless Scaling captures and applies the result to every
@@ -33,12 +33,12 @@ Documentation: [User guide](docs/user-guide.md) · [Architecture](docs/architect
 
 ## Install
 
-1. Download the latest release zip and extract it. Copy the `addons\LSP-NeuralRender` folder into
+1. Download the latest release zip and extract it. Copy the `addons\DLSS5NR01` folder into
    your Lossless Scaling folder so you have:
    ```
-   <Lossless Scaling>\addons\LSP-NeuralRender\LSP_NeuralRender.dll
-   <Lossless Scaling>\addons\LSP-NeuralRender\nvngx.dll_lspnr.dll
-   <Lossless Scaling>\addons\LSP-NeuralRender\addon.json
+   <Lossless Scaling>\addons\DLSS5NR01\DLSS5NR01.dll
+   <Lossless Scaling>\addons\DLSS5NR01\nvngx.dll_lspnr.dll
+   <Lossless Scaling>\addons\DLSS5NR01\addon.json
    ```
 2. Put `nvngx_dlssnr.dll` in the Lossless Scaling folder (next to `LosslessScaling.exe`).
 3. Start Lossless Scaling, open Echo Addon Manager, enable *DLSS 5 Neural Rendering*
@@ -46,7 +46,7 @@ Documentation: [User guide](docs/user-guide.md) · [Architecture](docs/architect
 4. Start scaling a game. The status line goes from *waiting for LSFG dispatches* to *engine:
    loading model...* to *running*. The first model load takes a few seconds.
 
-The addon logs to `<Lossless Scaling>\logs\LSP_NeuralRender.log`. The [user guide](docs/user-guide.md)
+The addon logs to `<Lossless Scaling>\logs\DLSS5NR01.log`. The [user guide](docs/user-guide.md)
 walks through every setting, how to pick the working scale, and what each status and log line means.
 
 ## Cost

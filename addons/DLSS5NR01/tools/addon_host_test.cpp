@@ -1,4 +1,4 @@
-// Offline host for LSP_NeuralRender.dll: fake IHost + headless ImGui frames + a synthetic "LSFG" dispatch
+// Offline host for DLSS5NR01.dll: fake IHost + headless ImGui frames + a synthetic "LSFG" dispatch
 // pattern and a real swap chain on the display GPU. Exercises init, panel rendering, the inline Dispatch hook,
 // FrameTap auto-assignment, the read-only tap, the D3D11<->D3D12 bridge, NR itself, the Present hook and the
 // present-time compose (generated frames first, the real frame last, like LSFG X3).
@@ -84,7 +84,7 @@ static uint64_t CountChanged(ID3D11Device* dev, ID3D11DeviceContext* dc, ID3D11T
 }
 
 int main(int argc, char** argv) {
-    const char* dllPath = argc > 1 ? argv[1] : "LSP_NeuralRender.dll";
+    const char* dllPath = argc > 1 ? argv[1] : "DLSS5NR01.dll";
     HMODULE h = LoadLibraryA(dllPath); if (!h) { printf("LoadLibrary failed %lu\n", GetLastError()); return 1; }
     auto Init = (PFN_Init)GetProcAddress(h, "AddonInitialize"); auto Shut = (PFN_Void)GetProcAddress(h, "AddonShutdown"); auto Render = (PFN_Void)GetProcAddress(h, "AddonRenderSettings"); auto Caps = (PFN_Caps)GetProcAddress(h, "GetAddonCapabilities");
     if (!Init || !Shut || !Render || !Caps) { printf("exports missing\n"); return 1; }

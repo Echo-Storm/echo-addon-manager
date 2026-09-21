@@ -48,7 +48,8 @@ LSPROXY_EXPORT const char* GetAddonDescription() { return "Does something useful
 }
 ```
 
-`min_host_version` is compared with the **addon API** version (below), not with the manager's release number. An addon that needs a newer
+`renamed_from` (optional) lists folder names the addon used to have: on the first start under its new name the manager moves the settings saved under an old name to
+the new one, and hides the old folders. `min_host_version` is compared with the **addon API** version (below), not with the manager's release number. An addon that needs a newer
 API than the running manager provides is not loaded, and its card says why. Optional keys: `"dll"` (a DLL name other than the folder's) and `"icon"`.
 
 ## Exports
@@ -106,4 +107,4 @@ Header-only helpers that give a panel the same look as the manager: the palette 
 
 The manager ships an offscreen renderer (`lsproxy_uipreview`) that draws its own tabs and any addon's panel into a picture without opening a window
 (`tools\ui_preview.ps1`). The manager's own tests (`manager\tools`, including a small test addon you can copy) are run by `tools\run_addon_tests.ps1`, and Neural Rendering has its own in
-`addons\LSP-NeuralRender\tools`, run by `tools\run_hosttest_matrix.py`. Copy that approach: load your DLL in a small host that implements `IHost`, render the panel, and check the result.
+`addons\DLSS5NR01\tools`, run by `tools\run_hosttest_matrix.py`. Copy that approach: load your DLL in a small host that implements `IHost`, render the panel, and check the result.

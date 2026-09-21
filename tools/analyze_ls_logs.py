@@ -1,14 +1,14 @@
-"""Summarises LSP_NeuralRender.log (in the Lossless Scaling folder's logs\\ directory): how the game's frame time was
+"""Summarises DLSS5NR01.log (in the Lossless Scaling folder's logs\\ directory): how the game's frame time was
 distributed and what the model cost, from the every-300-frames lines the addon writes.
 
-    python analyze_ls_logs.py [path\\to\\LSP_NeuralRender.log]
+    python analyze_ls_logs.py [path\\to\\DLSS5NR01.log]
 """
 import os
 import re
 import statistics
 import sys
 
-DEFAULT = os.path.join(os.environ.get('LS_DIR', r'C:\Program Files (x86)\Steam\steamapps\common\Lossless Scaling'), 'logs', 'LSP_NeuralRender.log')
+DEFAULT = os.path.join(os.environ.get('LS_DIR', r'C:\Program Files (x86)\Steam\steamapps\common\Lossless Scaling'), 'logs', 'DLSS5NR01.log')
 path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT
 
 pat = re.compile(

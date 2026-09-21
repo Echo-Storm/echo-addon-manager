@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Renamed to DLSS5NR01** (it was `LSP-NeuralRender`; the prefix meant LosslessProxy, and the addon has been changed a great deal from the original). The folder, the settings
+  id, the DLL (`DLSS5NR01.dll`) and the log (`logs\DLSS5NR01.log`) all carry the new name; the name on screen is still DLSS 5 Neural Rendering. `addon.json` says
+  `renamed_from`, so the manager carries the saved settings, looks and on/off state over to the new name on first start and hides the old folder.
+- **Delete** on the saved-looks row is always shown (greyed out until a look is picked); it used to appear only after a look was selected, which made it easy to miss.
 - **Ghost guard** (new slider, default 0.5, 0 = the old behaviour): fades the model's delta where LSFG's two motion fields disagree (object edges, newly
   uncovered areas) and a little more the older the delta is, which removes the faint copy of the previous frame that trailed moving things. Diagnostic view
   "Ghost guard" shows the weight. Saved looks made earlier still read as unchanged. Offline test: with a fake flow whose right half disagrees with itself, that half

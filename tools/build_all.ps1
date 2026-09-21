@@ -6,7 +6,7 @@ $Only = @($Only | ForEach-Object { $_ -split "," } | Where-Object { $_ })   # ac
 $root = Split-Path $PSScriptRoot -Parent   # the repository folder
 $targets = @(
     @{ Name = 'host';     Dir = "$root\manager\build";                 Args = @('--target', 'Lossless', '--target', 'lsproxy_uipreview') },
-    @{ Name = 'nr';       Dir = "$root\addons\LSP-NeuralRender\build";                            Args = @() }
+    @{ Name = 'nr';       Dir = "$root\addons\DLSS5NR01\build";                            Args = @() }
 )
 $failed = 0
 foreach ($t in $targets) {

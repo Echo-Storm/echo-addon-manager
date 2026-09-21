@@ -29,6 +29,10 @@ public:
     bool IsAddonEnabled(const std::string& addonId, bool defaultVal = true);
     void SetAddonEnabled(const std::string& addonId, bool enabled);
 
+    // An addon that changed its folder name keeps its settings: moves everything stored under `from` to `to`, unless `to` already has settings
+    // of its own. Returns true if something moved (the caller saves).
+    bool RenameAddonSection(const std::string& from, const std::string& to);
+
     // A copy of everything, and a wholesale replacement that is saved at once (settings backup and restore).
     nlohmann::json Snapshot() const;
     void Replace(const nlohmann::json& all);

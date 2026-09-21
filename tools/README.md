@@ -20,7 +20,7 @@ Where a script needs your Lossless Scaling folder it takes `-LsDir` (or reads th
 | `measure_original_share.py` | How much of `manager/src` and `manager/sdk` is still the code this project started from, against a checkout of the original (see NOTICE.md). |
 | `package.ps1` | Builds the release zip in `dist\` (`-Version`, `-SkipBuild`). Never packages NVIDIA's SDK or the DLSSNR snippet. |
 | `deploy.ps1` | Copies a build into a Lossless Scaling folder, with backups. `-What host\|nr\|reshade\|windowed\|all`. |
-| `analyze_ls_logs.py` | Summarises `LSP_NeuralRender.log`: frame-time distribution, model cost, presets applied. |
+| `analyze_ls_logs.py` | Summarises `DLSS5NR01.log`: frame-time distribution, model cost, presets applied. |
 | `gpu_logger.ps1` | `nvidia-smi` once a second to a CSV; stops itself after 45 minutes. |
 | `make_echo_icon.py` | Draws the Echo icon (`manager/LP-icon.ico` and `.png`), each size on its own. |
 | `bmp2png.py` | BMP to PNG for a folder (needs Pillow). |

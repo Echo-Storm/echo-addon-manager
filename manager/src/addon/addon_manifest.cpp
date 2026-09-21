@@ -40,6 +40,7 @@ bool ReadManifest(const std::filesystem::path& file, AddonManifest& out, std::st
     TakeText(doc, "dll", out.dll);
     TakeText(doc, "icon", out.icon);
     TakeList(doc, "dependencies", out.dependencies);
+    TakeList(doc, "renamed_from", out.renamedFrom);
     TakeList(doc, "tags", out.tags);
     out.parsed = true;
     return true;

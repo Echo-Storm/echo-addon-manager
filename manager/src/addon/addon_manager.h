@@ -61,6 +61,7 @@ private:
     std::mutex m_mutex;
     std::wstring m_addonsPath;
     std::wstring m_configPath;
+    bool m_settingsMoved = false;   // a rename carried settings over during this scan and they still need saving
 };
 
 } // namespace lsproxy

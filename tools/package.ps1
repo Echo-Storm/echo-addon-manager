@@ -27,7 +27,7 @@ Copy-Item "$root\manager\build\Release\Lossless.dll" $stage
 Copy-Item "$root\manager\LP-icon.ico", "$root\manager\LP-icon.png" $stage
 
 $addons = @(
-    @{ Id = 'LSP-NeuralRender'; Dir = "$root\addons\LSP-NeuralRender"; Bin = "$root\addons\LSP-NeuralRender\build\Release"; Files = @('LSP_NeuralRender.dll', 'nvngx.dll_lspnr.dll') }
+    @{ Id = 'DLSS5NR01'; Dir = "$root\addons\DLSS5NR01"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS5NR01.dll', 'nvngx.dll_lspnr.dll') }
 )
 $included = @(); $skipped = @()
 foreach ($a in $addons) {
@@ -41,7 +41,7 @@ foreach ($a in $addons) {
     if (Test-Path "$($a.Dir)\LICENSE") { Copy-Item "$($a.Dir)\LICENSE" "$dst\LICENSE.txt" }
     $included += $a.Id
 }
-if (-not ($included -contains 'LSP-NeuralRender')) { Write-Host 'Neural Rendering did not build: it is not in this package.' }
+if (-not ($included -contains 'DLSS5NR01')) { Write-Host 'Neural Rendering did not build: it is not in this package.' }
 
 Copy-Item "$root\LICENSE" "$stage\LICENSE.txt"
 Copy-Item "$root\NOTICE.md", "$root\DISCLAIMER.md", "$root\CHANGELOG.md" $stage

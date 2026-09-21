@@ -27,18 +27,18 @@ Outputs in `build\Release`:
 
 | File | What |
 |---|---|
-| `LSP_NeuralRender.dll` | the Echo Addon Manager addon |
+| `DLSS5NR01.dll` | the Echo Addon Manager addon |
 | `nvngx.dll_lspnr.dll` | the forwarder, the only module that calls the DLSSNR snippet |
 | `lspnr_hosttest.exe` | offline test host for the addon |
 | `lspnr_harness.exe` | standalone model harness |
 
 Install by copying the two DLLs and `addon.json` into
-`<Lossless Scaling>\addons\LSP-NeuralRender\` while Lossless Scaling is closed.
+`<Lossless Scaling>\addons\DLSS5NR01\` while Lossless Scaling is closed.
 
 ## Offline test host
 
 ```
-build\Release\lspnr_hosttest.exe build\Release\LSP_NeuralRender.dll - <path to nvngx_dlssnr.dll> [key=value ...]
+build\Release\lspnr_hosttest.exe build\Release\DLSS5NR01.dll - <path to nvngx_dlssnr.dll> [key=value ...]
 ```
 
 Loads the addon with a fake `IHost`, renders headless ImGui frames, issues a synthetic LSFG
@@ -69,7 +69,7 @@ queries the snippet's scaling-ratio callback for every performance mode.
 powershell -ExecutionPolicy Bypass -File ..\..\tools\package.ps1
 ```
 
-Builds Release, then assembles `dist\LSP-NeuralRender-v<version>.zip` with the addon folder, the
+Builds Release, then assembles `dist\DLSS5NR01-v<version>.zip` with the addon folder, the
 harness, the install guide and the licenses. The DLSSNR snippet and the NVIDIA SDK are never
 included.
 

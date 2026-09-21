@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     char* cleanEnv = nullptr; size_t cleanLen = 0; _dupenv_s(&cleanEnv, &cleanLen, "LSP_PREVIEW_CLEAN");
     const bool clean = cleanEnv != nullptr; free(cleanEnv);
     AddonInfo a, b, c;
-    a.id = "LSP-NeuralRender"; a.manifest.name = "DLSS 5 Neural Rendering"; a.manifest.version = "0.1.0"; a.manifest.author = "andreiday / Echo-Storm"; a.hModule = (HMODULE)1; a.enabled = true;
+    a.id = "DLSS5NR01"; a.manifest.name = "DLSS 5 Neural Rendering"; a.manifest.version = "0.1.0"; a.manifest.author = "andreiday / Echo-Storm"; a.hModule = (HMODULE)1; a.enabled = true;
     b.id = "sample-a"; b.manifest.name = "Sample addon A"; b.manifest.version = "1.0.0"; b.manifest.author = "Someone"; b.enabled = !clean; b.capabilities = clean ? 0 : LSPROXY_CAP_REQUIRES_RESTART;   // enabled, needs a restart
     c.id = "sample-b"; c.manifest.name = "Sample addon B"; c.manifest.version = "1.0.0"; c.manifest.author = "Someone else"; c.enabled = !clean; c.faulted = !clean;   // shows the ERROR chip
 
@@ -113,18 +113,18 @@ int main(int argc, char** argv) {
         for (double t = now - 20.0; t <= now; t += 1.0 / 60.0) {
             float ms = 16.7f + (rnd() - 0.5f) * 1.6f;
             if (rnd() > 0.985f) ms += 9.0f + rnd() * 14.0f;   // a hitch now and then
-            M.PublishAt("LSP-NeuralRender", "frame_ms", ms, "ms", t);
+            M.PublishAt("DLSS5NR01", "frame_ms", ms, "ms", t);
         }
         for (double t = now - 20.0; t <= now; t += 0.2) {
-            M.PublishAt("LSP-NeuralRender", "model_ms", 6.6f + (rnd() - 0.5f) * 0.7f, "ms", t);
-            M.PublishAt("LSP-NeuralRender", "keepup_pct", 98.0f + rnd() * 2.0f, "%", t);
+            M.PublishAt("DLSS5NR01", "model_ms", 6.6f + (rnd() - 0.5f) * 0.7f, "ms", t);
+            M.PublishAt("DLSS5NR01", "keepup_pct", 98.0f + rnd() * 2.0f, "%", t);
         }
         for (double t = now - 20.0; t <= now; t += 0.5) {
             const float u = 90.0f + (rnd() - 0.3f) * 9.0f;
             M.PublishAt("system", "gpu_util", u > 100 ? 100 : u, "%", t);
             M.PublishAt("system", "gpu_power_w", 281.0f + (rnd() - 0.5f) * 4.0f, "W", t);
         }
-        M.SetStatus("LSP-NeuralRender", "Running, model 6.6 ms, keeps up 99%", 1);
+        M.SetStatus("DLSS5NR01", "Running, model 6.6 ms, keeps up 99%", 1);
         GpuStats::Snapshot g; g.name = "NVIDIA GeForce RTX 4070 Ti SUPER"; g.driver = "616.92"; g.deviceCount = 1; g.utilGpu = 97; g.utilMem = 44;
         g.clockGraphics = 2610; g.clockMem = 10501; g.tempC = 68; g.powerW = 283.4; g.powerLimitW = 285.0; g.vramUsedMB = 13132; g.vramTotalMB = 16376; g.throttle = 0x4;
         GpuStats::Instance().InjectForPreview(g);
@@ -260,10 +260,10 @@ int main(int argc, char** argv) {
         LOG_INFO("Core", "%s v%s starting...", LSPROXY_PRODUCT_NAME, LSPROXY_VERSION_STRING);
         LOG_INFO("GUI", "Tray icon added");
         LOG_INFO("AddonManager", "Found 1 addons in addons");
-        LOG_INFO("AddonManager", "Loaded 'LSP-NeuralRender' 0.1.0");
+        LOG_INFO("AddonManager", "Loaded 'DLSS5NR01' 0.1.0");
         LOG_INFO("Features", "ReShade input passthrough is on");
         LOG_INFO("GUI", "Hotkey Ctrl+Shift+F12 registered");
-        LOG_INFO("LSP-NeuralRender", "Engine started on the LSFG device");
+        LOG_INFO("DLSS5NR01", "Engine started on the LSFG device");
         shot.Frame([&] { Shell("Logs", status, [&] { RenderTabLogs(); }); }, 12);
         shot.Save((out + "/preview_logs.bmp").c_str());
     }

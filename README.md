@@ -58,7 +58,7 @@ And one **addon**, which is separate because it needs an NVIDIA GPU and a file y
 
 | Addon | What it does | Default |
 |-------|--------------|---------|
-| **DLSS 5 Neural Rendering** | Runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures and applies the result to every frame it presents, real and generated, without ever making Lossless Scaling wait. Saved looks, per-game looks, HUD protection, shadows and highlights, colour, film grain and temporal smoothing. Needs an NVIDIA RTX GPU and a copy of `nvngx_dlssnr.dll` that you supply. [More](addons/LSP-NeuralRender/README.md) | on |
+| **DLSS 5 Neural Rendering** | Runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures and applies the result to every frame it presents, real and generated, without ever making Lossless Scaling wait. Saved looks, per-game looks, HUD protection, shadows and highlights, colour, film grain and temporal smoothing. Needs an NVIDIA RTX GPU and a copy of `nvngx_dlssnr.dll` that you supply. [More](addons/DLSS5NR01/README.md) | on |
 
 ## Install
 
@@ -126,7 +126,7 @@ powershell -File tools\build_all.ps1 -Only host,reshade,windowed   # everything 
 powershell -File tools\run_addon_tests.ps1               # offline tests, no game and no visible window
 ```
 
-Neural Rendering also needs NVIDIA's DLSS SDK in `addons/LSP-NeuralRender/external/ngx` (see the README there); it is not redistributable, so it is
+Neural Rendering also needs NVIDIA's DLSS SDK in `addons/DLSS5NR01/external/ngx` (see the README there); it is not redistributable, so it is
 not in this repository. `tools\deploy.ps1 -What all -LsDir <Lossless Scaling folder>` copies a build into a Lossless Scaling folder with backups and refuses to
 run while Lossless Scaling or your game is open. `tools\package.ps1` builds the release zip.
 

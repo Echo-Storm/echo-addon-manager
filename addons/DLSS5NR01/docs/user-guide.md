@@ -26,15 +26,15 @@ Scaling is about to show.
 
 ## Install
 
-1. Extract the release zip. Copy `addons\LSP-NeuralRender` into the Lossless Scaling folder, so the
-   folder holds `LSP_NeuralRender.dll`, `nvngx.dll_lspnr.dll` and `addon.json`.
+1. Extract the release zip. Copy `addons\DLSS5NR01` into the Lossless Scaling folder, so the
+   folder holds `DLSS5NR01.dll`, `nvngx.dll_lspnr.dll` and `addon.json`.
 2. Put `nvngx_dlssnr.dll` next to `LosslessScaling.exe`. If you keep it elsewhere, set its full
    path under *Advanced > Snippet path* later.
 3. Start Lossless Scaling, open Echo Addon Manager and enable *Neural Render
    (DLSS 5)*.
 
 To update, replace the two DLLs while Lossless Scaling is closed. To uninstall, delete the folder.
-Settings live in Echo Addon Manager's `addons\config.json` under the key `LSP-NeuralRender`; delete
+Settings live in Echo Addon Manager's `addons\config.json` under the key `DLSS5NR01`; delete
 that block to reset them.
 
 ## First run
@@ -55,7 +55,7 @@ Below the status line, *frame* shows the captured size and format, *NR* the mode
 last run and its average, *taps* how many real frames were seen, and the d3d11 hook line how many
 entry points are hooked (5 on current Windows builds).
 
-The log at `<Lossless Scaling>\logs\LSP_NeuralRender.log` is rewritten on every start. Every 300
+The log at `<Lossless Scaling>\logs\DLSS5NR01.log` is rewritten on every start. Every 300
 frames it writes one line with the model time, how far behind the submit the GPU started and
 finished, the frame interval, how many runs were made and skipped, the present pattern, and the
 newest delta's frame and offset. NGX's own logs land in the addon folder.
@@ -139,7 +139,7 @@ not saved: Lossless Scaling always starts on the enhanced view.
 
 There is no overlay in the game, so a hotkey shows a small coloured square in the screen's top-left corner for about a
 second: **green** enhanced, **red** original only, **amber** split, **blue** sharpen changed, **purple** preset applied. Actions are also written
-to `LSP_NeuralRender.log` (`hotkey: ...`). Hotkeys are read at present time, so they do nothing while Lossless Scaling
+to `DLSS5NR01.log` (`hotkey: ...`). Hotkeys are read at present time, so they do nothing while Lossless Scaling
 is not presenting a frame.
 
 ### Saved looks (presets), at the top of the panel

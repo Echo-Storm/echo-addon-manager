@@ -132,7 +132,7 @@ inline std::vector<SubPath> Parse(const char* d) {
             ImVec2 c2(p.x + 2.0f / 3.0f * (q.x - p.x), p.y + 2.0f / 3.0f * (q.y - p.y));
             detail::Cubic(out.back().pts, cur, c1, c2, p); lastC = q; cur = p;
         } else if (up == 'A') {
-            float rx, ry, rot; bool large, sweep, ok;
+            float rx = 0, ry = 0, rot = 0; bool large = false, sweep = false, ok;
             ok = r.Number(rx) && r.Number(ry) && r.Number(rot) && r.Flag(large) && r.Flag(sweep) && r.Number(a[0]) && r.Number(a[1]);
             if (!ok) break;
             ensure();

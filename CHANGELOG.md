@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Neural Rendering is now `DLSS5NR01`** (folder, settings id, `DLSS5NR01.dll`, `DLSS5NR01.log`), no longer `LSP-NeuralRender`. New manager support for this: an addon's `addon.json` can list
+  `renamed_from` folder names; the manager moves their saved settings (including on/off) to the new name, once, and hides the old folders so the same addon never runs twice. The
+  saved-looks row's **Delete** button is always visible now. A compiler pass (`/W4` plus code analysis) over the manager and the addon found only trivial issues, all fixed.
 - **ReShade input passthrough and Windowed mode are built into the manager** (a new **Features** tab) instead of being separate addons. Same behaviour, in
   the manager's own code and look, with the settings kept where they were (`LSP-ReShade` and `LSP-Windowed` in `config.json`). Gains: Windowed mode can be switched
   off and on again while Lossless Scaling runs (only switching it on for the first time needs a restart, because its hooks must be in before Lossless Scaling asks
@@ -45,7 +48,7 @@ The first release of Echo Addon Manager as its own project, with a fresh history
 - **DLSS 5 Neural Rendering** (andreiday, extended): read-only tap of Lossless Scaling's frames, a free-running model, present-time compose.
   Saved looks in a bar at the top of the panel, per-program looks, rectangles that keep the HUD untouched, shadows and highlights, sharpen,
   saturation and vibrance, film grain, temporal smoothing, compare and hotkeys, a live status line. Its own history is in
-  [its changelog](addons/LSP-NeuralRender/CHANGELOG.md).
+  [its changelog](addons/DLSS5NR01/CHANGELOG.md).
 - **ReShade Input Passthrough**: reworked as a plain switch with a tooltip; window handling restored cleanly and pinned when it cannot be undone. Offline lifecycle test.
 - **Windowed Mode**: reworked as a plain switch, panel fixed; adds the virtual display only while enabled. Offline test.
 

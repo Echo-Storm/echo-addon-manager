@@ -26,9 +26,9 @@ CMakeSettings.json
 captures/
 __pycache__/
 
-# NVIDIA's DLSS SDK is not redistributable: download it yourself (addons/LSP-NeuralRender/external/ngx/README.md)
-addons/LSP-NeuralRender/external/ngx/*
-!addons/LSP-NeuralRender/external/ngx/README.md
+# NVIDIA's DLSS SDK is not redistributable: download it yourself (addons/DLSS5NR01/external/ngx/README.md)
+addons/DLSS5NR01/external/ngx/*
+!addons/DLSS5NR01/external/ngx/README.md
 # anything else dropped into external/ (SDK drops, snippets) stays out of the repo
-addons/LSP-NeuralRender/external/*
-!addons/LSP-NeuralRender/external/ngx/
+addons/DLSS5NR01/external/*
+!addons/DLSS5NR01/external/ngx/

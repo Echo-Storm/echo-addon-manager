@@ -13,7 +13,9 @@
 #include "../log/logger.h"
 #include "../../sdk/include/lsproxy/version.h"
 #include "imgui.h"
+#include <algorithm>
 #include <system_error>
+#include <unordered_set>
 #include <windows.h>
 
 namespace fs = std::filesystem;
@@ -71,6 +73,11 @@ void AddonManager::ReleaseIcon(AddonInfo& addon) {
 
 bool AddonManager::Inspect(const fs::path& folder, AddonInfo& info) {
     if (!DiscoverAddon(folder, info)) return false;
+    for (const std::string& old : info.manifest.renamedFrom)   // it used to be called something else: keep its settings
+        if (ConfigManager::Instance().RenameAddonSection(old, info.id)) {
+            LOG_INFO("AddonManager", "Carried the settings of '%s' over to '%s'", old.c_str(), info.id.c_str());
+            m_settingsMoved = true;
+        }
     info.enabled = ConfigManager::Instance().IsAddonEnabled(info.id, true);
     info.security = AddonSecurity::VerifyDll(info.dllPath, info.id);
     return true;
@@ -93,6 +100,17 @@ void AddonManager::ScanAddons() {
         AddonInfo info;
         if (Inspect(folder, info)) m_addons.push_back(std::move(info));
     }
+
+    // An addon that was renamed hides the folder it used to have (running both would be the same addon twice).
+    std::unordered_set<std::string> superseded;
+    for (const AddonInfo& a : m_addons)
+        for (const std::string& old : a.manifest.renamedFrom) superseded.insert(old);
+    m_addons.erase(std::remove_if(m_addons.begin(), m_addons.end(), [&](const AddonInfo& a) {
+        if (!superseded.count(a.id)) return false;
+        LOG_INFO("AddonManager", "Ignoring the folder '%s': the addon was renamed and its new folder is installed", a.id.c_str());
+        return true;
+    }), m_addons.end());
+    if (m_settingsMoved) { ConfigManager::Instance().Save(); m_settingsMoved = false; }
 
     AddonDependency::Resolve(m_addons);
     LOG_INFO("AddonManager", "Scanned %zu addons", m_addons.size());

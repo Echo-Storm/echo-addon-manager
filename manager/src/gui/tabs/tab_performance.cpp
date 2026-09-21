@@ -16,7 +16,7 @@ namespace lsproxy {
 
 namespace {
 
-constexpr const char* kNr = "LSP-NeuralRender";
+constexpr const char* kNr = "DLSS5NR01";
 constexpr double kGraphSeconds = 20.0;   // the length of the graphs
 constexpr double kStatSeconds = 10.0;    // what the tiles average over
 

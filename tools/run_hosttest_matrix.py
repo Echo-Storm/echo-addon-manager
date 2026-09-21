@@ -19,7 +19,7 @@ import time
 import numpy as np
 
 W, H = 1920, 1080
-DEFAULT_NR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'addons', 'LSP-NeuralRender', 'build', 'Release')
+DEFAULT_NR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'addons', 'DLSS5NR01', 'build', 'Release')
 DEFAULT_SNIPPET = os.path.join(os.environ.get('LS_DIR', r'C:\Program Files (x86)\Steam\steamapps\common\Lossless Scaling'), 'nvngx_dlssnr.dll')
 
 
@@ -60,7 +60,7 @@ class Result:
 
 def run_host(nr_dir, snippet, keys, out_dir, tag):
     exe = os.path.join(nr_dir, 'lspnr_hosttest.exe')
-    args = [exe, 'LSP_NeuralRender.dll', '-', snippet] + keys
+    args = [exe, 'DLSS5NR01.dll', '-', snippet] + keys
     for stale in ('present_gen.bmp', 'present_real.bmp'):
         p = os.path.join(nr_dir, stale)
         if os.path.exists(p):

@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
 
     printf("== the list of features\n");
     Check("two features are built in", features::Count() == 2 && IndexOfFeature("LSP-ReShade") == 0 && IndexOfFeature("LSP-Windowed") == 1);
-    Check("the retired standalone addons are recognised by folder name", features::IsRetiredAddonId("LSP-ReShade") && features::IsRetiredAddonId("LSP-Windowed") && !features::IsRetiredAddonId("LSP-NeuralRender"));
+    Check("the retired standalone addons are recognised by folder name", features::IsRetiredAddonId("LSP-ReShade") && features::IsRetiredAddonId("LSP-Windowed") && !features::IsRetiredAddonId("DLSS5NR01"));
     Check("a feature is off until switched on", !features::IsOn(0) && !features::IsOn(1));
     features::SetOn(0, true);
     Check("switching one on is saved where the old addon kept it", ConfigManager::Instance().IsAddonEnabled("LSP-ReShade", false));

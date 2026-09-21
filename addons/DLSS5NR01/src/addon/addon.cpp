@@ -1,4 +1,4 @@
-// LSP-NeuralRender: an Echo Addon Manager addon (DLSS 5 Neural Rendering).
+// DLSS5NR01: an Echo Addon Manager addon (DLSS 5 Neural Rendering).
 //
 // Where it sits in Lossless Scaling's pipeline (all on LS's render thread, all on the display GPU):
 //
@@ -36,7 +36,7 @@
 #include <csignal>
 #include <exception>
 
-static const char* kAddonId = "LSP-NeuralRender";
+static const char* kAddonId = "DLSS5NR01";
 
 // ------------------------------------------------------------------ state
 struct Config {
@@ -184,7 +184,7 @@ static void Kill(const char* why) { g_killed = true; { std::lock_guard<std::mute
 // This DLL links the CRT statically, so the manager's abort / terminate / invalid-parameter handlers (which live
 // in the host's copy of the CRT) never see a failure that starts here: an exception escaping one of our threads
 // ends Lossless Scaling with only a fast-fail event in Windows and nothing in any log. Write down what happened
-// and where before the process goes. Offsets resolve against the LSP_NeuralRender.map built next to the DLL.
+// and where before the process goes. Offsets resolve against the DLSS5NR01.map built next to the DLL.
 static void CrashLog(const char* fmt, ...) {
     char b[512]; va_list a; va_start(a, fmt); vsnprintf(b, sizeof b, fmt, a); va_end(a);
     const bool locked = g_logMu.try_lock();   // never wait on a lock the crashing thread may hold
@@ -704,11 +704,11 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         ImGui::SameLine();
         if (lsp::Button("Save as new", lsp::icons::kPlus)) { s_name[0] = 0; s_askSave = true; }
         Tip("Keep the current sliders under a new name. Using a name that already exists replaces that look.");
-        if (s_active >= 0) {
-            ImGui::SameLine();
-            if (lsp::Button("Delete", lsp::icons::kTrash, lsp::ButtonKind::Danger)) s_askDelete = true;
-            Tip("Delete the selected look. Your current sliders are not changed.");
-        }
+        ImGui::SameLine();   // always shown, so it can be found: greyed out until a look is picked
+        if (s_active < 0) ImGui::BeginDisabled();
+        if (lsp::Button("Delete", lsp::icons::kTrash, lsp::ButtonKind::Danger)) s_askDelete = true;
+        if (s_active < 0) ImGui::EndDisabled();
+        Tip(s_active >= 0 ? "Delete the selected look. Your current sliders are not changed." : "Pick a look in the list first, then this deletes it.");
         if (s_askSave) { ImGui::OpenPopup("Save look"); s_askSave = false; }
         if (ImGui::BeginPopupModal("Save look", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextUnformatted("Name for this look");
@@ -982,7 +982,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         if (ImGui::SmallButton("Dump flow probe (3 frames)")) g_tap.ArmProbe(g_lsDir);
         Tip("Diagnostic: writes the next three frames and Lossless Scaling's motion data to files in its folder.");
         { std::string ps = g_tap.ProbeStatus(); if (ps != "idle") ImGui::TextWrapped("%s", ps.c_str()); }
-        Note("present hook: %s, %u presents seen in the process   log: <LS folder>\\logs\\LSP_NeuralRender.log", PresentHook::Installed() ? "installed" : "not yet", PresentHook::Hits());
+        Note("present hook: %s, %u presents seen in the process   log: <LS folder>\\logs\\DLSS5NR01.log", PresentHook::Installed() ? "installed" : "not yet", PresentHook::Hits());
     }
 
     if (changed || createChanged || tapChanged) {
@@ -1003,12 +1003,12 @@ static void AddonInitializeBody(IHost* host, ImGuiContext* ctx, void* allocFunc,
     HMODULE self = nullptr; GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&AddonInitializeBody, &self);
     wchar_t mod[MAX_PATH]; GetModuleFileNameW(self, mod, MAX_PATH); *wcsrchr(mod, L'\\') = 0; g_addonDir = mod;
     CreateDirectoryW((g_lsDir + L"\\logs").c_str(), nullptr);   // <Lossless Scaling>\\logs, shared with the proxy's log
-    g_logFile = _wfopen((g_lsDir + L"\\logs\\LSP_NeuralRender.log").c_str(), L"w");
+    g_logFile = _wfopen((g_lsDir + L"\\logs\\DLSS5NR01.log").c_str(), L"w");
     InstallCrashDiagnostics();
     LoadConfig(); ApplyTapRoles();
     host->SubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_READY, OnDeviceEvent, nullptr);
     host->SubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent, nullptr);
-    Log("LSP-NeuralRender initialised (host version 0x%x), addon dir %ls", host->GetHostVersion(), g_addonDir.c_str());
+    Log("DLSS5NR01 initialised (host version 0x%x), addon dir %ls", host->GetHostVersion(), g_addonDir.c_str());
     // Own inline hook on d3d11.dll instead of the host's vtable patch (see dispatch_hook.h for why). The Present hook
     // needs a device to find dxgi's entry points; it is installed at the first tap.
     g_hookCount = DispatchHook::Install(OnDispatch, nullptr, [](const char* m) { Log("%s", m); });

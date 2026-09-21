@@ -171,6 +171,19 @@ void ConfigManager::SetAddonEnabled(const std::string& addonId, bool enabled) {
 // Everything at once, and the host's own settings
 // ---------------------------------------------------------------------------------------------------------------------------------
 
+bool ConfigManager::RenameAddonSection(const std::string& from, const std::string& to) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const auto addons = m_data.find("addons");
+    if (from == to || addons == m_data.end() || !addons->is_object()) return false;
+    const auto old = addons->find(from);
+    if (old == addons->end() || !old->is_object()) return false;
+    const auto fresh = addons->find(to);
+    if (fresh != addons->end() && fresh->is_object() && !fresh->empty()) return false;   // the new name already has its own settings
+    (*addons)[to] = std::move(*old);
+    addons->erase(from);
+    return true;
+}
+
 json ConfigManager::Snapshot() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_data;

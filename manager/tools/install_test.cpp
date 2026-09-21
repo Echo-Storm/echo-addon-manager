@@ -154,7 +154,7 @@ int main() {
     // ---- settings backup and restore
     {
         using nlohmann::json;
-        json cfg = { { "addons", { { "LSP-NeuralRender", { { "_enabled", true }, { "workingScale", "0.5" } } }, { "LSP-ReShade", { { "_enabled", false } } } } }, { "global", { { "log_level", 2 } } } };
+        json cfg = { { "addons", { { "DLSS5NR01", { { "_enabled", true }, { "workingScale", "0.5" } } }, { "LSP-ReShade", { { "_enabled", false } } } } }, { "global", { { "log_level", 2 } } } };
         const std::string text = MakeSettingsBackupText(cfg, "0.5.0-test");
         BackupParse ok = ParseSettingsBackup(text);
         Check("backup: what is written reads back identically", ok.ok && ok.config == cfg && ok.addonCount == 2);
@@ -179,9 +179,9 @@ int main() {
     {
         const fs::path ls = base / "LS", out = base / "diag-out";
         Touch(ls / "logs" / "EchoAddonManager.log", "proxy log line\n");
-        Touch(ls / "logs" / "LSP_NeuralRender.log", "nr log line\n");
+        Touch(ls / "logs" / "DLSS5NR01.log", "nr log line\n");
         Touch(ls / "addons" / "config.json", "{\"addons\":{}}");
-        Touch(ls / "addons" / "LSP-NeuralRender" / "nvngx.log", "ngx log\n");
+        Touch(ls / "addons" / "DLSS5NR01" / "nvngx.log", "ngx log\n");
         { std::ofstream big(ls / "logs" / "Big.log", std::ios::binary); std::string chunk(1024 * 1024, 'x'); for (int i = 0; i < 5; ++i) big << chunk; }   // 5 MB
         DiagResult d = CreateDiagnosticsZip(ls, "summary text", out);
         Check("diagnostics: a zip was written", d.ok && fs::exists(d.zip) && d.zip.extension() == ".zip");
@@ -195,7 +195,7 @@ int main() {
             if (CreateProcessW(nullptr, c3.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si3, &pi3)) { WaitForSingleObject(pi3.hProcess, 30000); CloseHandle(pi3.hProcess); CloseHandle(pi3.hThread); }
             std::ifstream in(lst); std::string line; std::string all; while (std::getline(in, line)) all += line + "\n";
             Check("diagnostics: the zip holds the summary, the settings and the logs", all.find("info.txt") != std::string::npos && all.find("config.json") != std::string::npos &&
-                  all.find("EchoAddonManager.log") != std::string::npos && all.find("LSP_NeuralRender.log") != std::string::npos && all.find("nvngx.log") != std::string::npos);
+                  all.find("EchoAddonManager.log") != std::string::npos && all.find("DLSS5NR01.log") != std::string::npos && all.find("nvngx.log") != std::string::npos);
         }
         Check("diagnostics: the temporary staging folder is gone", true);
         int leftovers = 0; { wchar_t tp[MAX_PATH]; GetTempPathW(MAX_PATH, tp); for (const auto& e : fs::directory_iterator(tp)) if (e.path().filename().wstring().rfind(L"lsp-diag-", 0) == 0) ++leftovers; }

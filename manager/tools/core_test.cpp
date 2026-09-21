@@ -439,8 +439,10 @@ int main() {
     MakeAddon(A, "dep_a", "dep_a.dll");
     WriteFile(A / "nodll" / "readme.txt", "no DLL in here");
     MakeAddon(A, ".hidden", "hidden.dll");                                                     // dot folders are staging areas
+    MakeAddon(A, "renamed_new", "renamed_new.dll", R"({"renamed_from":["renamed_old"]})");                // an addon that changed its folder name
+    MakeAddon(A, "renamed_old", "renamed_old.dll");                                            // ...and the folder it used to have
     MakeAddon(A, "LSP-ReShade", "LSP_ReShade.dll");                                            // a retired standalone addon: built in now
-    WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false}},"global":{"security_level":0}})");
+    WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false},"renamed_old":{"_enabled":false,"keep":"me"}},"global":{"security_level":0}})");
 
     setvbuf(stdout, nullptr, _IONBF, 0);
     try { TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
@@ -458,10 +460,15 @@ int main() {
         // ---- scanning
         printf("== scanning\n");
         mgr.ScanAddons();
-        Check("finds the eleven usable addons", mgr.GetAddons().size() == 11, "found " + std::to_string(mgr.GetAddons().size()));
+        Check("finds the twelve usable addons (the renamed one counts once)", mgr.GetAddons().size() == 12, "found " + std::to_string(mgr.GetAddons().size()));
         Check("a folder with no DLL is not an addon", IndexOf(mgr, "nodll") < 0);
         Check("a dot folder is not an addon", IndexOf(mgr, ".hidden") < 0);
         Check("the folder of a retired standalone addon is ignored, since that feature is built in", IndexOf(mgr, "LSP-ReShade") < 0);
+        Check("an addon that was renamed hides its old folder", IndexOf(mgr, "renamed_new") >= 0 && IndexOf(mgr, "renamed_old") < 0);
+        Check("...and keeps the settings it had under the old name, including being switched off", ConfigManager::Instance().Get("renamed_new", "keep") == "me" && !Find(mgr, "renamed_new")->enabled);
+        bool oldPresent = true;
+        EnabledInFile(A / "config.json", "renamed_old", &oldPresent);
+        Check("...moved, not copied, and saved", !oldPresent && ConfigManager::Instance().Get("renamed_old", "keep", "gone") == "gone");
         AddonInfo* a = Find(mgr, "alpha");
         Check("manifest fields are read", a && a->manifest.parsed && a->manifest.name == "Alpha" && a->manifest.version == "1.2.3" && a->manifest.author == "A" &&
               a->manifest.description == "first" && a->manifest.tags.size() == 2);
