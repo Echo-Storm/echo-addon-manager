@@ -144,9 +144,9 @@ int main(int argc, char** argv) {
         Check("process: a program that prints and exits 0", p.started && !p.timedOut && p.exitCode == 0 && Has(p.output, "SELFTEST 0 PASS ok"));
         p = RunProcess(L"cmd.exe /c \"echo hello & exit 3\"", 15000);
         Check("process: its exit code is returned", p.started && p.exitCode == 3 && Has(p.output, "hello"));
-        const DWORD t0 = GetTickCount();
+        const ULONGLONG t0 = GetTickCount64();
         p = RunProcess(L"cmd.exe /c \"ping -n 30 127.0.0.1 >nul\"", 800);
-        Check("process: one still running after the time allowed is ended and reported", p.started && p.timedOut && GetTickCount() - t0 < 8000, std::to_string(GetTickCount() - t0) + " ms");
+        Check("process: one still running after the time allowed is ended and reported", p.started && p.timedOut && GetTickCount64() - t0 < 8000, std::to_string(GetTickCount64() - t0) + " ms");
         p = RunProcess(L"\"C:\\definitely\\not\\here\\nothing.exe\" --x", 2000);
         Check("process: a program that does not exist is reported as not started", !p.started && p.startError != 0);
         SelfTestResult none = RunSelfTest(L"C:\\definitely\\not\\here", L"C:\\x\\nvngx_dlssnr.dll", L"C:\\x", 2000);

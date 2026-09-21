@@ -252,7 +252,7 @@ static LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* ep) {
         LOG_ERROR("Crash", "code 0x%08lX at %s", ep->ExceptionRecord->ExceptionCode, where);
         Logger::Instance().Flush();
     }
-    return g_prevFilter ? g_prevFilter(ep) : EXCEPTION_CONTINUE_SEARCH;
+    return (g_prevFilter && ep) ? g_prevFilter(ep) : EXCEPTION_CONTINUE_SEARCH;
 }
 
 void InstallCrashLogging() {

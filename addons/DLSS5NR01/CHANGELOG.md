@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-09-21)
 
 - Panel reorganised into titled, separated blocks: Status, Requirements (always open, with numbered instructions, a one-line verdict, the rows, and the main actions first), Saved looks (load and
   save your settings, with an explanation), Neural Rendering (the on/off switch) and Settings. The look list is labelled *Saved look*, and the first slider section is now *Model (what it does to
   the picture)*. The provide-your-own-model-file notice is at the top of the README and in the addon's description.
+- `nr_selftest.exe`: a `--size` value that is not two numbers is ignored (the default stays) instead of being half-read. `req::RunProcess` checks its pointer and its `ReadFile` result.
 
 ## 0.2.3 (2026-09-21)
 

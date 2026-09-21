@@ -12,6 +12,7 @@
 #include "../widgets/toggle_switch.h"
 #include "imgui.h"
 #include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <cstring>
 #include <fstream>
@@ -118,22 +119,28 @@ static void SaveConfigFile() {
     widgets::ToastShow("Config saved", widgets::ToastType::Success);
 }
 
+// Lower case for the search box. Not ::tolower on plain chars: that is undefined for non-ASCII text (an addon named with an accented letter).
+static std::string LowerCase(std::string text) {
+    for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return text;
+}
+
 static bool MatchesFilter(const AddonInfo& addon, const char* filter) {
     if (!filter || filter[0] == '\0') return true;
     std::string f(filter);
-    std::transform(f.begin(), f.end(), f.begin(), ::tolower);
+    f = LowerCase(f);
 
     std::string name = addon.GetDisplayName();
-    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+    name = LowerCase(name);
     if (name.find(f) != std::string::npos) return true;
 
     std::string author = addon.GetDisplayAuthor();
-    std::transform(author.begin(), author.end(), author.begin(), ::tolower);
+    author = LowerCase(author);
     if (author.find(f) != std::string::npos) return true;
 
     for (const auto& tag : addon.manifest.tags) {
         std::string t = tag;
-        std::transform(t.begin(), t.end(), t.begin(), ::tolower);
+        t = LowerCase(t);
         if (t.find(f) != std::string::npos) return true;
     }
     return false;

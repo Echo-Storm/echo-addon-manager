@@ -210,7 +210,11 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (model.empty()) model = lsDir + L"\\nvngx_dlssnr.dll";
     UINT width = 1280, height = 720;
-    { const std::wstring size = ArgAfter(argc, argv, L"--size"); if (!size.empty()) swscanf(size.c_str(), L"%ux%u", &width, &height); }
+    {
+        const std::wstring size = ArgAfter(argc, argv, L"--size");
+        UINT w = 0, h = 0;
+        if (!size.empty() && swscanf(size.c_str(), L"%ux%u", &w, &h) == 2) { width = w; height = h; }
+    }
     if (width < 128 || height < 72 || width > 3840 || height > 2160) { width = 1280; height = 720; }
     const std::wstring luidArg = ArgAfter(argc, argv, L"--luid");
 

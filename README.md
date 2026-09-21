@@ -31,7 +31,7 @@ affiliated with the Lossless Scaling developers; read the [disclaimer](DISCLAIME
 <sub>These pictures are rendered offscreen by the project's own preview tool (`tools/ui_preview.ps1`), so the Performance numbers and log lines are sample data, not a
 measurement. The Neural Rendering panel comes from the offline test host.</sub>
 
-Status: **0.2.3.** Built and tested against Lossless Scaling **3.2.2.0** (the official build) on Windows 11 with an RTX 4070 Ti SUPER; other
+Status: **0.4.0.** Built and tested against Lossless Scaling **3.2.2.0** (the official build) on Windows 11 with an RTX 4070 Ti SUPER; other
 setups are untested.
 
 ## What you get
@@ -70,7 +70,7 @@ And one **addon**, which is separate because it needs an NVIDIA GPU and a file y
 
 You need Lossless Scaling 3.2.2.0 installed and Windows 10 or 11, x64. There is no installer yet; installing is a copy.
 
-1. Download `EchoAddonManager-<version>-x64.zip` from the [releases page](../../releases) and unzip it.
+1. Download `EchoAddonManager-<version>-x64.zip` from the [releases page](https://github.com/Echo-Storm/echo-addon-manager/releases) and unzip it.
 2. Close Lossless Scaling. Open its folder (for a Steam install, for example `C:\Program Files (x86)\Steam\steamapps\common\Lossless Scaling`).
 3. **First time only:** rename the original `Lossless.dll` to `Lossless_original.dll`. Keep it: the manager forwards to it.
 4. Copy everything from the zip into that folder: `Lossless.dll`, the two `LP-icon` files and the `addons` folder.

@@ -1,12 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-09-21)
+
+Upgrading from 0.2.3: copy the new files over the old ones. Nothing to migrate. The version number goes from 0.2.3 to 0.4.0 on purpose: 0.3 is skipped, because
+the step from 0.2.x (window rewrite, built-in features, the requirements check, the compatibility test, the reorganised panel) is bigger than a patch. The addon API is
+unchanged (1.0.0), so addons built for 0.2.x still load.
 
 - **The Neural Rendering panel is reorganised** into titled blocks with a line between them: **Status**, **Requirements**, **Saved looks (load and save your settings)**, **Neural Rendering**
   (the on/off switch) and **Settings** (the sections with the sliders). Requirements is always open now. It starts with what you have to do yourself, providing your own copy of
   `nvngx_dlssnr.dll`, in three numbered steps, then a one-line verdict, the rows, and the actions with the two main ones first (Browse, Test compatibility). Saved looks says what a look
   is and what Save, Save as new and Delete do; its list is now labelled *Saved look*. The first slider section is *Model (what it does to the picture)*, so it no longer sounds like a saved look.
 - **You provide the model file yourself, said up front:** an important notice at the top of the README and of the addon's README, in the release's `INSTALL.txt`, and in the addon's description on its card.
+- **Bugsweep.** A strict `/W4 /analyze` build of the manager and the addon found nothing serious; what it did find is fixed: the addon search box lower-cased text with `::tolower` on plain
+  `char`s, which is undefined for non-ASCII names (an addon with an accented letter in its name); the crash logger's filter could pass a null pointer on; a `ReadFile` and a `swscanf` result were
+  ignored; a process attribute list was used without a null check; and a test used the 49-day-wrapping `GetTickCount`. The analyzer's other notes are the deliberate `__except` guards
+  around calls into addons (a faulting addon must not take Lossless Scaling down). The window, feature and core tests were run repeatedly (24 runs) to look for timing flakiness: none.
+- **Cleanup.** The unused Dear ImGui demo source is no longer compiled into the manager; a README link that only worked through a GitHub quirk is now a plain address.
 - **Settings tab:** the backup section is now *Backup and restore (save and load your settings)* with a line saying what it keeps, so it is clear that all addon settings and saved looks travel in one file.
 
 ## 0.2.3 (2026-09-21)

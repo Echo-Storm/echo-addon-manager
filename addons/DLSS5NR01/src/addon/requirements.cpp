@@ -253,10 +253,10 @@ ProcessResult RunProcess(const std::wstring& commandLine, unsigned timeoutMs) {
     bool jobAtCreation = false, attributesReady = false;
     if (job) {
         SIZE_T bytes = 0;
-        InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);   // fails on purpose: it reports the size needed
         attributeStorage.resize(bytes);
         auto* attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributeStorage.data());
-        if (InitializeProcThreadAttributeList(attributes, 1, 0, &bytes)) {
+        if (attributes && InitializeProcThreadAttributeList(attributes, 1, 0, &bytes)) {
             attributesReady = true;
             HANDLE jobs[1] = { job };
             if (UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST, jobs, sizeof jobs, nullptr, nullptr)) {
@@ -303,7 +303,7 @@ ProcessResult RunProcess(const std::wstring& commandLine, unsigned timeoutMs) {
         if (size.QuadPart > keep) { LARGE_INTEGER at; at.QuadPart = size.QuadPart - keep; SetFilePointerEx(in, at, nullptr, FILE_BEGIN); }
         r.output.resize(static_cast<size_t>(size.QuadPart > keep ? keep : size.QuadPart));
         DWORD got = 0;
-        if (!r.output.empty()) ReadFile(in, r.output.data(), static_cast<DWORD>(r.output.size()), &got, nullptr);
+        if (!r.output.empty() && !ReadFile(in, r.output.data(), static_cast<DWORD>(r.output.size()), &got, nullptr)) got = 0;
         r.output.resize(got);
         CloseHandle(in);
     }
