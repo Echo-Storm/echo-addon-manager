@@ -58,7 +58,7 @@ void FrameTap::Describe(ID3D11Resource* r, ViewShape& s) {
 void FrameTap::Reset() {
     std::lock_guard<std::mutex> lk(m_mu); m_cache.clear(); m_lastFramePtr = nullptr; memset(m_recent, 0, sizeof m_recent); m_lastNrTick = ~0ull;
     if (m_flowRes) m_flowRes->Release(); if (m_flowCand) m_flowCand->Release(); m_flowRes = m_flowCand = nullptr; m_frameFlowArea = 0; m_flowW = m_flowH = 0;
-    m_presentsSinceTap = 0; m_genSinceLastPresent = false; m_perFrame = 0; m_realFirst = false; strcpy(m_pattern, "learning");
+    m_presentsSinceTap = 0; m_genSinceLastPresent = false; m_perFrame = 0; m_realFirst = false; snprintf(m_pattern, sizeof m_pattern, "learning");
 }
 void FrameTap::ClearTable() { std::lock_guard<std::mutex> lk(m_mu); m_table.clear(); m_cache.clear(); }
 
