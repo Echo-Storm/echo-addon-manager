@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 (2026-09-21)
 
+- **Fixed: a crash when Lossless Scaling exits without shutting the addon down.** The model start-up thread (and the requirements scan and file-dialog threads added below)
+  are detached and tracked by flags instead of `std::thread` objects kept in statics, which called `std::terminate` if still joinable at process exit. `AddonShutdown` waits for a
+  model load in progress, as the join used to. New test scenario `exit_abrupt` (`exitmode=abrupt` in the test host), which failed before the fix.
+- A requirements line at the top of the panel that is always visible: green "all in place", amber for a note, red for what stops it. A model that cannot run on the
+  graphics card (`FeatureNotSupported` at `CreateFeature`) is explained in words. **Browse for the model file...** copies a model file you pick into the Lossless Scaling folder
+  (`req::PlaceModel`; the file that was there goes to `backups`, never deleted).
 - New **Requirements** section at the top of the panel (and a red line above it when something stops the addon from running): graphics card, NVIDIA
   driver (NGX core), model file, helper DLL and engine state, each OK, NOTE or MISSING with a hint, and the engine's error messages in words. A model file
   that is not the tested build (310.8, 158.2 MB) is a note, a file under 20 MB counts as missing. The result is also written to the log at start-up. Nothing

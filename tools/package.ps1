@@ -1,6 +1,6 @@
 # Builds Release and assembles dist\EchoAddonManager-<version>-x64.zip: the manager, the addons that build, an install note, and the licences.
 # NVIDIA's DLSS SDK and the DLSSNR snippet are never packaged. Neural Rendering is left out (with a note) when it did not build.
-#   powershell -File tools\package.ps1 [-Version 0.2.1] [-SkipBuild]
+#   powershell -File tools\package.ps1 [-Version 0.2.2] [-SkipBuild]
 param(
     [string]$Version = '',
     [switch]$SkipBuild
@@ -76,7 +76,18 @@ Licence: MIT (LICENSE.txt). Credits and third-party licences: NOTICE.md.
 
 $zip = "$dist\$name.zip"
 if (Test-Path $zip) { Remove-Item $zip }
-Compress-Archive -Path "$stage\*" -DestinationPath $zip
+# Entry by entry, with "/" in the names: Compress-Archive and ZipFile.CreateFromDirectory in Windows PowerShell write backslashes as path
+# separators, which the zip format does not allow and unzip tools on other systems complain about.
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$fileStream = [IO.File]::Create($zip)
+$archive = New-Object IO.Compression.ZipArchive($fileStream, [IO.Compression.ZipArchiveMode]::Create)
+Get-ChildItem $stage -Recurse -File | ForEach-Object {
+    $entryName = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
+    [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $_.FullName, $entryName, [IO.Compression.CompressionLevel]::Optimal)
+}
+$archive.Dispose()
+$fileStream.Dispose()
 Write-Host "package: $zip"
 Write-Host "  addons included: $($included -join ', ')"
 if ($skipped.Count) { Write-Host "  addons NOT included (not built): $($skipped -join ', ')" }
