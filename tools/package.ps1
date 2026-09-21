@@ -1,6 +1,6 @@
 # Builds Release and assembles dist\EchoAddonManager-<version>-x64.zip: the manager, the addons that build, an install note, and the licences.
 # NVIDIA's DLSS SDK and the DLSSNR snippet are never packaged. Neural Rendering is left out (with a note) when it did not build.
-#   powershell -File tools\package.ps1 [-Version 0.4.1] [-SkipBuild]
+#   powershell -File tools\package.ps1 [-Version 0.5.0] [-SkipBuild]
 param(
     [string]$Version = '',
     [switch]$SkipBuild
@@ -56,7 +56,8 @@ download, this project does not download it, and it does not say where to get it
 LosslessScaling.exe (the addon's "Browse for the model file..." button copies it there for you), then press "Test compatibility" in the addon's
 panel. Everything else here works without it.
 
-Tested with World of Warcraft (the beta client), Lossless Scaling 3.2.2.0, Windows 11, RTX 4070 Ti SUPER. Other games and setups are untested.
+Tested with World of Warcraft: Forever (the beta; it runs as WowB.exe), Lossless Scaling 3.2.2.0, Windows 11,
+RTX 4070 Ti SUPER. Other games and setups are untested.
 
 The manager checks github.com once a day for a newer release of this project (on by default; turn it off in Settings > Updates). It only compares version
 numbers: nothing is downloaded or installed, and it is the only thing the manager sends over the internet.

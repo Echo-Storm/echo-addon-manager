@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0 (2026-09-21)
+
+- No functional change. The version follows the manager (0.5.0). The README, the user guide and `INSTALL.txt` now name the game this was tested with: World of Warcraft: Forever (the beta;
+  it runs as `WowB.exe`).
+
 ## 0.4.1 (2026-09-21)
 
 - All nine collapsible sections of the panel start closed (four used to open by themselves). The offline test host takes `sectionsOpen=0` to render the panel as it looks on first start, and the

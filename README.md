@@ -9,8 +9,8 @@
 > Everything else here, including the manager, ReShade input passthrough and Windowed mode, works without it.
 
 > [!NOTE]
-> **Tested with World of Warcraft.** This project was developed and tested against World of Warcraft (the beta client, `WowB.exe`), on Lossless Scaling 3.2.2.0,
-> Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested. DLSS 5 Neural Rendering in particular has only been tried in World of Warcraft.
+> **Tested with World of Warcraft: Forever.** This project was developed and tested against **World of Warcraft: Forever** (the beta; it runs as `WowB.exe`), on Lossless Scaling 3.2.2.0, Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested. DLSS 5 Neural Rendering in particular has only been
+> tried in World of Warcraft: Forever.
 
 Echo Addon Manager loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it a proper addon system: one window
 to install, switch on and tune addons, a live view of frame time and GPU load while a game runs, and one-click backup of every setting. It ships with the
@@ -35,7 +35,7 @@ affiliated with the Lossless Scaling developers; read the [disclaimer](DISCLAIME
 <sub>These pictures are rendered offscreen by the project's own preview tool (`tools/ui_preview.ps1`), so the Performance numbers and log lines are sample data, not a
 measurement. The Neural Rendering panel comes from the offline test host.</sub>
 
-Status: **0.4.1.** Built and tested with **World of Warcraft** against Lossless Scaling **3.2.2.0** (the official build) on Windows 11 with an RTX 4070 Ti SUPER; other
+Status: **0.5.0.** Built and tested with **World of Warcraft: Forever** against Lossless Scaling **3.2.2.0** (the official build) on Windows 11 with an RTX 4070 Ti SUPER; other
 games and setups are untested.
 
 ## What you get

@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-09-21)
+
+Upgrading from 0.4.1: copy the new files over the old ones. Nothing to migrate. The addon API is unchanged (1.0.0). The manager now checks GitHub once a day for a newer release: it is **on by default**
+and can be turned off in *Settings > Updates* (see below; it is the only thing the manager sends over the internet, and it never downloads or installs anything).
 
 - **An update check.** Once a day the manager asks github.com for the latest release of this project and compares its version number with yours. If there is a newer one, the status bar says
   "Update available: 0.5.0", the About tab and the Settings tab show it with an **Open the download page** button, and a notice appears once (a toast, or a balloon from the notification area
@@ -15,7 +18,7 @@
   own `Lossless.dll` back over ours) and uninstall, with backups of everything it replaces, verification by hash, a rollback if anything fails part-way, and no changes to the person's `config.json`,
   other addons or removed addons. It recognises earlier installs (0.4.1 and before have no version resource) by the log file name inside their `Lossless.dll`, and refuses while Lossless Scaling
   runs. A command line (`setup_cli`) drives it; the window comes next. 84 offline checks (`setup_test`, in the test runner) on fake folders, including a failure midway that must roll back.
-- **The README, the addon README, the user guide and `INSTALL.txt` say what this was tested with:** World of Warcraft (the beta client), Lossless Scaling 3.2.2.0, Windows 11, RTX 4070 Ti SUPER; other
+- **The README, the addon README, the user guide and `INSTALL.txt` say what this was tested with:** World of Warcraft: Forever (the beta; it runs as `WowB.exe`), Lossless Scaling 3.2.2.0, Windows 11, RTX 4070 Ti SUPER; other
   games and setups are untested.
 - Test hygiene: the features test starts each run with a fresh temporary folder (a leftover from the abrupt-exit run could make a later run with the same process id fail), and the window test
   switches the update check off so it never touches the internet.

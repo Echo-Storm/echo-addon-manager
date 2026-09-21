@@ -6,8 +6,8 @@
 > then press **Test compatibility** in the addon's panel.
 
 > [!NOTE]
-> **Tested with World of Warcraft.** This project was developed and tested against World of Warcraft (the beta client, `WowB.exe`), on Lossless Scaling 3.2.2.0,
-> Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested. DLSS 5 Neural Rendering in particular has only been tried in World of Warcraft.
+> **Tested with World of Warcraft: Forever.** This project was developed and tested against **World of Warcraft: Forever** (the beta; it runs as `WowB.exe`), on Lossless Scaling 3.2.2.0, Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested. DLSS 5 Neural Rendering in particular has only been
+> tried in World of Warcraft: Forever.
 
 An addon for Echo Addon Manager, the addon manager for Lossless Scaling, that runs NVIDIA DLSS 5
 Neural Rendering (DLSSNR) on the frames Lossless Scaling captures and applies the result to every

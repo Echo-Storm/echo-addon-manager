@@ -5,7 +5,7 @@ every setting does, how to pick the working scale, and what to do when something
 
 ## What was tested
 
-Everything here was developed and tested with **World of Warcraft** (the beta client), on Lossless Scaling 3.2.2.0, Windows 11 and an RTX 4070 Ti SUPER (RTX 30 was the
+Everything here was developed and tested with **World of Warcraft: Forever** (the beta; it runs as `WowB.exe`), on Lossless Scaling 3.2.2.0, Windows 11 and an RTX 4070 Ti SUPER (RTX 30 was the
 earlier development card). Other games and setups are untested; the addon does not depend on anything game-specific, so it may well work elsewhere, but that has not been
 seen.
 

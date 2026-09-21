@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(EchoAddonManager VERSION 0.4.1)
+project(EchoAddonManager VERSION 0.5.0)
 enable_language(RC)
 
 set(CMAKE_CXX_STANDARD 17)
