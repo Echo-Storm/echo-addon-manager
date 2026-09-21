@@ -2,7 +2,9 @@
 // off, removing and installing them, the security levels, and a faulting addon. It runs against a throw-away folder in %TEMP% with copies of
 // a small test addon (test_addon.cpp), and touches no game and no Lossless Scaling install.
 //   lsproxy_coretest.exe        (lsproxy_testaddon.dll must sit beside it; the build puts it there)
+#include "src/addon/addon_dependency.h"
 #include "src/addon/addon_manager.h"
+#include "src/addon/addon_security.h"
 #include "src/config/config_manager.h"
 #include "src/event/event_system.h"
 #include "src/host/host_impl.h"
@@ -17,6 +19,7 @@
 #include <iterator>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace fs = std::filesystem;
 using namespace lsproxy;
@@ -255,6 +258,151 @@ static void TestHost(const fs::path& T) {
     Check("null arguments to status and metrics are tolerated", true);
 }
 
+static AddonInfo MakeInfo(const std::string& id, std::vector<std::string> deps = {}) {
+    AddonInfo a;
+    a.id = id;
+    a.folderName = std::wstring(id.begin(), id.end());
+    a.manifest.dependencies = std::move(deps);
+    return a;
+}
+
+static std::string Ids(const std::vector<AddonInfo>& v) {
+    std::string s;
+    for (const AddonInfo& a : v) s += (s.empty() ? "" : ",") + a.id;
+    return s;
+}
+
+// Putting addons in an order where each comes after the ones it needs.
+static void TestDependencies() {
+    printf("== dependency order\n");
+    {
+        std::vector<AddonInfo> v{ MakeInfo("c", { "b" }), MakeInfo("b", { "a" }), MakeInfo("a") };
+        const bool ok = AddonDependency::Resolve(v);
+        Check("a chain comes out with what is needed first", ok && Ids(v) == "a,b,c", Ids(v));
+    }
+    {
+        std::vector<AddonInfo> v{ MakeInfo("d", { "b", "c" }), MakeInfo("b", { "a" }), MakeInfo("c", { "a" }), MakeInfo("a") };
+        const bool ok = AddonDependency::Resolve(v);
+        const std::string r = Ids(v);
+        Check("a diamond has its root first and its tip last", ok && r.front() == 'a' && r.back() == 'd', r);
+    }
+    {
+        std::vector<AddonInfo> v{ MakeInfo("p", { "ghost" }), MakeInfo("q") };
+        Check("a dependency that is not installed does not block", AddonDependency::Resolve(v) && v.size() == 2);
+    }
+    {
+        std::vector<AddonInfo> v{ MakeInfo("m", { "n" }), MakeInfo("n", { "m" }) };
+        Check("a circular dependency is reported and the list is left as it was", !AddonDependency::Resolve(v) && Ids(v) == "m,n", Ids(v));
+        std::vector<AddonInfo> self{ MakeInfo("s", { "s" }) };
+        Check("an addon that needs itself counts as circular", !AddonDependency::Resolve(self));
+    }
+    {
+        std::vector<AddonInfo> none;
+        Check("an empty list is fine", AddonDependency::Resolve(none) && none.empty());
+    }
+    {
+        std::vector<AddonInfo> v{ MakeInfo("a1"), MakeInfo("a2"), MakeInfo("a3") };
+        AddonDependency::Resolve(v);
+        Check("addons that need nothing keep their order when the list is sorted", Ids(v) == "a1,a2,a3", Ids(v));
+        AddonDependency::Resolve(v);
+        Check("...and when it is sorted again", Ids(v) == "a1,a2,a3", Ids(v));
+    }
+}
+
+// The SHA-256 of a DLL and what trusted_addons.json says about it.
+static void TestSecurity(const fs::path& T) {
+    printf("== addon safety checks\n");
+    const fs::path dir = T / "sec";
+    fs::create_directories(dir);
+    WriteFile(dir / "abc.bin", "abc");
+    WriteFile(dir / "empty.bin", "");
+    WriteFile(dir / "long.bin", std::string(20000, 'a'));   // more than one read buffer
+
+    Check("SHA-256 of 'abc' is the published value", AddonSecurity::ComputeSHA256((dir / "abc.bin").wstring()) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    Check("SHA-256 of an empty file is the published value", AddonSecurity::ComputeSHA256((dir / "empty.bin").wstring()) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    Check("SHA-256 of a file longer than one read is right", AddonSecurity::ComputeSHA256((dir / "long.bin").wstring()) == "cc17faaad36649c4603dda4d8ff97cb149722af0bcac0746305a2134ad2d0b97");
+    Check("a file that cannot be read gives no hash", AddonSecurity::ComputeSHA256((dir / "nope.bin").wstring()).empty());
+
+    const std::string abc = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    const std::wstring dll = (dir / "abc.bin").wstring();
+    WriteFile(dir / "trusted_addons.json", R"({"sec_ok":[")" + abc + R"("],"sec_bad":["00"],"sec_multi":["11",")" + abc + R"("],"sec_junk":"not a list"})");
+    AddonSecurity::LoadTrustedHashes(dir.wstring());
+    Check("a DLL whose hash is listed is trusted", AddonSecurity::VerifyDll(dll, "sec_ok") == SecurityVerdict::Trusted);
+    Check("a listed addon whose DLL differs is tampered", AddonSecurity::VerifyDll(dll, "sec_bad") == SecurityVerdict::Tampered);
+    Check("any one of several listed hashes will do", AddonSecurity::VerifyDll(dll, "sec_multi") == SecurityVerdict::Trusted);
+    Check("an addon that is not listed is unknown", AddonSecurity::VerifyDll(dll, "sec_absent") == SecurityVerdict::Unknown);
+    Check("an entry that is not a list is ignored", AddonSecurity::VerifyDll(dll, "sec_junk") == SecurityVerdict::Unknown);
+    Check("a listed addon whose DLL cannot be read is unknown", AddonSecurity::VerifyDll((dir / "nope.bin").wstring(), "sec_ok") == SecurityVerdict::Unknown);
+
+    const fs::path dir2 = T / "sec2";
+    fs::create_directories(dir2);
+    WriteFile(dir2 / "trusted_addons.json", R"({"sec_other":["00"]})");
+    AddonSecurity::LoadTrustedHashes(dir2.wstring());
+    Check("loading the list again replaces it", AddonSecurity::VerifyDll(dll, "sec_ok") == SecurityVerdict::Unknown);
+
+    const fs::path dir3 = T / "sec3";
+    fs::create_directories(dir3);
+    WriteFile(dir3 / "trusted_addons.json", "{ broken");
+    AddonSecurity::LoadTrustedHashes(dir3.wstring());
+    Check("a broken list is survived", true);
+}
+
+static void CountA(uint32_t, const void*, uint32_t, void* user) { ((std::string*)user)->push_back('A'); }
+static void CountB(uint32_t, const void*, uint32_t, void* user) { ((std::string*)user)->push_back('B'); }
+static void Boom(uint32_t, const void*, uint32_t, void*) { volatile int* p = nullptr; *p = 1; }
+static void RemovesItself(uint32_t id, const void*, uint32_t, void* user) {
+    ++*(int*)user;
+    EventBus::Instance().Unsubscribe(id, RemovesItself);
+}
+
+// The event bus addons publish to and subscribe from.
+static void TestEvents() {
+    printf("== event bus\n");
+    EventBus& bus = EventBus::Instance();
+    const uint32_t base = LSPROXY_EVENT_CUSTOM + 100;
+    {
+        std::string seen;
+        bus.Subscribe(base, CountA, &seen);
+        bus.Subscribe(base, CountB, &seen);
+        bus.Publish(base);
+        Check("subscribers are called in the order they subscribed", seen == "AB", seen);
+        bus.Publish(base + 1);
+        Check("an event nobody subscribed to reaches nobody", seen == "AB");
+        bus.Unsubscribe(base, CountA);
+        seen.clear();
+        bus.Publish(base);
+        Check("an unsubscribed callback is not called again", seen == "B", seen);
+        bus.Unsubscribe(base, CountB);
+    }
+    {
+        std::string one, two;
+        bus.Subscribe(base + 2, CountA, &one);
+        bus.Subscribe(base + 2, CountA, &two);
+        bus.Unsubscribe(base + 2, CountA);
+        bus.Publish(base + 2);
+        Check("unsubscribing a callback removes it for every owner", one.empty() && two.empty());
+        bus.Subscribe(base + 2, nullptr, nullptr);
+        bus.Publish(base + 2);
+        Check("a null callback is ignored", true);
+    }
+    {
+        std::string after;
+        bus.Subscribe(base + 3, Boom, nullptr);
+        bus.Subscribe(base + 3, CountA, &after);
+        bus.Publish(base + 3);
+        Check("a subscriber that faults does not stop the others", after == "A", after);
+        bus.Unsubscribe(base + 3, Boom);
+        bus.Unsubscribe(base + 3, CountA);
+    }
+    {
+        int calls = 0;
+        bus.Subscribe(base + 4, RemovesItself, &calls);
+        bus.Publish(base + 4);
+        bus.Publish(base + 4);
+        Check("a subscriber may unsubscribe itself while it is being called", calls == 1, std::to_string(calls));
+    }
+}
+
 static void OnEvent(uint32_t, const void*, uint32_t, void* user) { ++*(int*)user; }
 
 int main() {
@@ -286,7 +434,7 @@ int main() {
     WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false}},"global":{"security_level":0}})");
 
     setvbuf(stdout, nullptr, _IONBF, 0);
-    try { TestConfig(T); TestHost(T); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
+    try { TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
 
     HostImpl host;
     int loadedEvents = 0, unloadedEvents = 0;
