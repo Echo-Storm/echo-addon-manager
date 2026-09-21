@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build and test
         shell: pwsh
         run: powershell -NoProfile -File tools/ci.ps1
