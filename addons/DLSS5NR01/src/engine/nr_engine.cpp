@@ -131,8 +131,8 @@ bool NrEngine::InitForwarder() {
     m_fwd = LoadLibraryW(m_forwarderPath.c_str());
     if (!m_fwd) { Fail("forwarder LoadLibrary %lu (%ls)", GetLastError(), m_forwarderPath.c_str()); return false; }
 #define GP(n, v) v = (decltype(v))GetProcAddress(m_fwd, n); if (!v) { Fail("forwarder export %s missing", n); return false; }
-    GP("lspnr_probe", m_pProbe) GP("lspnr_init", m_pInit) GP("lspnr_set_float_slot", m_pSetFloatSlot) GP("lspnr_probe_float", m_pProbeFloat)
-    GP("lspnr_get_float", m_pGetFloat) GP("lspnr_create", m_pCreate) GP("lspnr_evaluate", m_pEvaluate) GP("lspnr_release", m_pRelease) GP("lspnr_last_result", m_pLast)
+    GP("nrfwd_probe", m_pProbe) GP("nrfwd_init", m_pInit) GP("nrfwd_set_float_slot", m_pSetFloatSlot) GP("nrfwd_probe_float", m_pProbeFloat)
+    GP("nrfwd_get_float", m_pGetFloat) GP("nrfwd_create", m_pCreate) GP("nrfwd_evaluate", m_pEvaluate) GP("nrfwd_release", m_pRelease) GP("nrfwd_last_result", m_pLast)
 #undef GP
     int bits = m_pProbe(m_snippetPath.c_str());
     if ((bits & 0xF) != 0xF) { Fail("snippet probe 0x%x (%ls)", bits, m_snippetPath.c_str()); return false; }
@@ -146,10 +146,10 @@ bool NrEngine::InitForwarder() {
 bool NrEngine::ProbeFloatSlot() {
     const int kGetter = 14;
     for (int s : { 6, 5, 1, 2, 4, 7 }) {
-        m_pProbeFloat(m_caps, "LSPNR.Probe", 1.5f, s);
-        alignas(8) uint8_t b[8] = {}; int g = m_pGetFloat(m_caps, "LSPNR.Probe", b, kGetter);
+        m_pProbeFloat(m_caps, "NR.Probe", 1.5f, s);
+        alignas(8) uint8_t b[8] = {}; int g = m_pGetFloat(m_caps, "NR.Probe", b, kGetter);
         float v; memcpy(&v, b, 4);
-        m_pProbeFloat(m_caps, "LSPNR.Probe", 0.0f, s);
+        m_pProbeFloat(m_caps, "NR.Probe", 0.0f, s);
         if (g == 1 && fabsf(v - 1.5f) < 1e-6f) { m_pSetFloatSlot(s); m_stats.floatSlot = s; return true; }
     }
     Fail("no float setter slot round-trips through getter 14"); return false;
@@ -297,7 +297,7 @@ bool NrEngine::Prepare(uint32_t w, uint32_t h, DXGI_FORMAT fmt, const NrParams& 
     std::vector<float> depth((size_t)ww * wh, 0.5f); std::vector<uint16_t> mv((size_t)ww * wh * 2, 0);
     UploadTexture(m_depth, 4, depth.data()); UploadTexture(m_mvec, 4, mv.data());
     // model feature (records GPU work into this list)
-    LspnrCreateParams cp{}; cp.width = ww; cp.height = wh; cp.preset = 0; cp.scalingRatio = 1.0f; cp.tuning = p.Tuning();
+    NrCreateParams cp{}; cp.width = ww; cp.height = wh; cp.preset = 0; cp.scalingRatio = 1.0f; cp.tuning = p.Tuning();
     m_feature = m_pCreate(m_list, m_caps, &cp);
     m_list->Close(); ID3D12CommandList* l[] = { m_list }; m_queue->ExecuteCommandLists(1, l);
     WaitIdle();
@@ -378,7 +378,7 @@ bool NrEngine::Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12
     //    ping-ponging between the two output buffers (both rest in UNORDERED_ACCESS; the colour input must be a
     //    shader resource, so the buffer that was just written is transitioned before it is read).
     m_list->EndQuery(m_qheap, D3D12_QUERY_TYPE_TIMESTAMP, q0 + 1);
-    LspnrEvalParams ep{}; ep.depth = m_depth; ep.mvec = m_mvec;
+    NrEvalParams ep{}; ep.depth = m_depth; ep.mvec = m_mvec;
     ep.width = m_ww; ep.height = m_wh; ep.guideWidth = m_ww; ep.guideHeight = m_wh; ep.depthInverted = 0;
     ep.mvScaleX = 1.0f; ep.mvScaleY = 1.0f; ep.scalingRatio = 1.0f; ep.controlMask = nullptr; ep.tuning = m_params.Tuning();
     int er = 1;

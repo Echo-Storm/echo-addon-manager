@@ -1,4 +1,4 @@
-"""Runs the offline test host (lspnr_hosttest.exe) through a set of scenarios and checks the presented frame it writes.
+"""Runs the offline test host (nr_hosttest.exe) through a set of scenarios and checks the presented frame it writes.
 
 No window is shown and nothing touches Lossless Scaling or a game: the host loads the built addon DLL, feeds it a synthetic
 LSFG pattern and a hidden swap chain, and dumps one presented (generated) frame to present_gen.bmp. Every scenario compares
@@ -59,7 +59,7 @@ class Result:
 
 
 def run_host(nr_dir, snippet, keys, out_dir, tag):
-    exe = os.path.join(nr_dir, 'lspnr_hosttest.exe')
+    exe = os.path.join(nr_dir, 'nr_hosttest.exe')
     args = [exe, 'DLSS5NR01.dll', '-', snippet] + keys
     for stale in ('present_gen.bmp', 'present_real.bmp'):
         p = os.path.join(nr_dir, stale)

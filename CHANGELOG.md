@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Neural Rendering's helper DLL, test tools and internal names no longer use the old `lspnr` prefix (details in the addon's changelog). Nothing changes on screen.
+
 ## 0.2.0 (2026-09-21)
 
 Upgrading from 0.1.0: copy the new files over the old ones, as in the install steps. Your settings carry over: Neural Rendering was renamed (its settings, looks and on/off are moved to the new

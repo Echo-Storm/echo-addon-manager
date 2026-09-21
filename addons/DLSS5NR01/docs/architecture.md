@@ -115,15 +115,15 @@ motion vectors, the model, then `delta = model - proxy` into the shared slot. Th
 records timestamps and maps them to QPC with `GetClockCalibration`, so the panel can show how
 long after the CPU submit the GPU actually started and finished the run.
 
-### Forwarder (`src/forwarder/lspnr_forwarder.cpp`)
+### Forwarder (`src/forwarder/nr_forwarder.cpp`)
 
-`nvngx.dll_lspnr.dll` is the only module that calls the snippet. The snippet checks the module
+`nvngx.dll_dlss5nr01.dll` is the only module that calls the snippet. The snippet checks the module
 name of its caller and rejects anything whose path does not contain `nvngx.dll`; this DLL's name
 satisfies that check. Every snippet result is stored through a volatile before returning, so the
 compiler cannot turn the call into a tail jump that would make the snippet see a different caller.
 
 It exposes a small C API: probe, init, create, evaluate, release, the float-slot probe, and the
-snippet's scaling-ratio callback. The contract is in `src/forwarder/lspnr_api.h`.
+snippet's scaling-ratio callback. The contract is in `src/forwarder/nr_api.h`.
 
 ### PresentHook (`src/addon/present_hook.cpp`)
 
@@ -200,11 +200,11 @@ through LSFG's interpolation:
 
 ## Testing
 
-`lspnr_hosttest` (`tools/addon_host_test.cpp`) loads the built addon with a fake host, headless
+`nr_hosttest` (`tools/addon_host_test.cpp`) loads the built addon with a fake host, headless
 ImGui and a synthetic LSFG dispatch pattern on a real flip swap chain, presenting generated,
 generated, real like LSFG X3. It checks that the tap leaves LS's frame untouched, that the compose
 lands on presented frames, and that a resolution switch is followed.
 
-`lspnr_harness` (`src/harness/lspnr_harness.cpp`) runs the model without Lossless Scaling on an
+`nr_harness` (`src/harness/nr_harness.cpp`) runs the model without Lossless Scaling on an
 image at 1080p, 1440p and 4K, GPU-timed, and drives every parameter the snippet reads. Its
 findings are in [dlssnr-knobs.md](dlssnr-knobs.md).

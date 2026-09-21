@@ -1,6 +1,6 @@
 # What the DLSSNR model actually listens to
 
-Measured 2026-09-03 with `lspnr_harness.exe` (build/Release) against the 310.8 snippet on an RTX 3090,
+Measured 2026-09-03 with `nr_harness.exe` (build/Release) against the 310.8 snippet on an RTX 3090,
 2560x1440 RGBA8, `--style 0 --intensity 1 --strength 1` as the baseline. "vs in" is the mean absolute
 pixel difference from the input frame (0..255), "vs base" the difference from the baseline output.
 Bit-identical means max difference 0 over the whole frame.
@@ -73,7 +73,7 @@ GPU time was 41-49 ms in every case: no knob changes the cost except multi-pass.
 ## Harness options used
 
 ```
-lspnr_harness.exe in_1440p.png --only 1440p --iters 2 --style S --intensity I --strength X
+nr_harness.exe in_1440p.png --only 1440p --iters 2 --style S --intensity I --strength X
     [--ls X] [--lt X] [--skin X] [--preset N] [--automask 0|1] [--uicorr 0|1]
     [--depth flat|ramp|zero|one] [--mv zero|small] [--scaling R] [--fmt rgba8|rgba16f]
     [--evalint X] [--evalstyle N]        # set after create, before the timed evaluates

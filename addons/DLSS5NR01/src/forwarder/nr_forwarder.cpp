@@ -1,4 +1,4 @@
-// nvngx.dll_lspnr.dll — the only module that calls nvngx_dlssnr.dll.
+// nvngx.dll_dlss5nr01.dll — the only module that calls nvngx_dlssnr.dll.
 //
 // The snippet resolves the module owning its return address and rejects any caller whose module
 // path does not contain "nvngx.dll" with FAIL_PlatformError before it reads a single argument
@@ -14,7 +14,7 @@
 #include <windows.h>
 #include <d3d12.h>
 #include <cstring>
-#include "forwarder/lspnr_api.h"
+#include "forwarder/nr_api.h"
 
 namespace {
 
@@ -71,27 +71,27 @@ constexpr int                kFeatureNR  = 18;
 
 extern "C" {
 
-__declspec(dllexport) int __cdecl lspnr_probe(const wchar_t* snippetPath) {
+__declspec(dllexport) int __cdecl nrfwd_probe(const wchar_t* snippetPath) {
     if (!Load(snippetPath)) return 0;
     return (g.init ? 1 : 0) | (g.create ? 2 : 0) | (g.evaluate ? 4 : 0) | (g.release ? 8 : 0);
 }
 
-__declspec(dllexport) void __cdecl lspnr_set_float_slot(int slot) {
+__declspec(dllexport) void __cdecl nrfwd_set_float_slot(int slot) {
     if (slot >= 0 && slot < 8) g_floatSlot = slot;
 }
 
-__declspec(dllexport) void __cdecl lspnr_probe_float(void* block, const char* key, float value, int setterSlot) {
+__declspec(dllexport) void __cdecl nrfwd_probe_float(void* block, const char* key, float value, int setterSlot) {
     if (!block || setterSlot < 0 || setterSlot >= 8) return;
     reinterpret_cast<PFN_SetF>(VT(block)[setterSlot])(block, key, value);
 }
 
-__declspec(dllexport) int __cdecl lspnr_get_float(void* block, const char* key, void* out8, int getterSlot) {
+__declspec(dllexport) int __cdecl nrfwd_get_float(void* block, const char* key, void* out8, int getterSlot) {
     if (!block || getterSlot < 8 || getterSlot >= 16) return -1;
     volatile int r = reinterpret_cast<PFN_GetAny>(VT(block)[getterSlot])(block, key, out8);
     return r;
 }
 
-__declspec(dllexport) int __cdecl lspnr_init(const wchar_t* snippetPath, const wchar_t* dataPath, ID3D12Device* device, void* block) {
+__declspec(dllexport) int __cdecl nrfwd_init(const wchar_t* snippetPath, const wchar_t* dataPath, ID3D12Device* device, void* block) {
     if (!Load(snippetPath) || !g.init) return -1;
     if (g.inited) return 1;
     volatile int r = g.init(kAppId, dataPath, device, kApiVersion, block);
@@ -101,7 +101,7 @@ __declspec(dllexport) int __cdecl lspnr_init(const wchar_t* snippetPath, const w
     return r;
 }
 
-static void setTuning(void* block, const LspnrTuning& t) {
+static void setTuning(void* block, const NrTuning& t) {
     setF (block, "DLSSNR.Intensity",               t.intensity);
     setUI(block, "DLSSNR.Style",                   t.style);
     setF (block, "DLSSNR.LocalStructureStrength",  t.localStructure);
@@ -111,7 +111,7 @@ static void setTuning(void* block, const LspnrTuning& t) {
     setUI(block, "DLSSNR.UICorrection", t.uiCorrection);
 }
 
-__declspec(dllexport) void* __cdecl lspnr_create(ID3D12GraphicsCommandList* cmd, void* block, const LspnrCreateParams* c) {
+__declspec(dllexport) void* __cdecl nrfwd_create(ID3D12GraphicsCommandList* cmd, void* block, const NrCreateParams* c) {
     if (!g.create || !g.inited || !cmd || !block || !c) return nullptr;
     setUI(block, "DLSSNR.Enabled", 1u);
     setUI(block, "DLSSNR.Width",  c->width);
@@ -129,7 +129,7 @@ __declspec(dllexport) void* __cdecl lspnr_create(ID3D12GraphicsCommandList* cmd,
     return (r == 1) ? handle : nullptr;
 }
 
-__declspec(dllexport) int __cdecl lspnr_evaluate(ID3D12GraphicsCommandList* cmd, void* feature, void* block, const LspnrEvalParams* e) {
+__declspec(dllexport) int __cdecl nrfwd_evaluate(ID3D12GraphicsCommandList* cmd, void* feature, void* block, const NrEvalParams* e) {
     if (!g.evaluate || !feature || !cmd || !block || !e) return -1;
     setPtr(block, "DLSSNR.Color",  e->color);
     setPtr(block, "DLSSNR.Depth",  e->depth);
@@ -162,11 +162,11 @@ __declspec(dllexport) int __cdecl lspnr_evaluate(ID3D12GraphicsCommandList* cmd,
     return r;
 }
 
-__declspec(dllexport) void __cdecl lspnr_release(void* feature) {
+__declspec(dllexport) void __cdecl nrfwd_release(void* feature) {
     if (g.release && feature) { volatile int r = g.release(feature); (void)r; }
 }
 
-__declspec(dllexport) int __cdecl lspnr_scaling_ratio(void* block, unsigned perfQuality, float* outRatio) {
+__declspec(dllexport) int __cdecl nrfwd_scaling_ratio(void* block, unsigned perfQuality, float* outRatio) {
     if (!block) return -1;
     setUI(block, "PerfQualityValue", perfQuality);
     void* cb = nullptr;
@@ -177,7 +177,7 @@ __declspec(dllexport) int __cdecl lspnr_scaling_ratio(void* block, unsigned perf
     return r;
 }
 
-__declspec(dllexport) int __cdecl lspnr_last_result(int which) {
+__declspec(dllexport) int __cdecl nrfwd_last_result(int which) {
     return (which >= 0 && which < 4) ? g_last[which] : 0;
 }
 

@@ -28,9 +28,9 @@ Outputs in `build\Release`:
 | File | What |
 |---|---|
 | `DLSS5NR01.dll` | the Echo Addon Manager addon |
-| `nvngx.dll_lspnr.dll` | the forwarder, the only module that calls the DLSSNR snippet |
-| `lspnr_hosttest.exe` | offline test host for the addon |
-| `lspnr_harness.exe` | standalone model harness |
+| `nvngx.dll_dlss5nr01.dll` | the forwarder, the only module that calls the DLSSNR snippet |
+| `nr_hosttest.exe` | offline test host for the addon |
+| `nr_harness.exe` | standalone model harness |
 
 Install by copying the two DLLs and `addon.json` into
 `<Lossless Scaling>\addons\DLSS5NR01\` while Lossless Scaling is closed.
@@ -38,7 +38,7 @@ Install by copying the two DLLs and `addon.json` into
 ## Offline test host
 
 ```
-build\Release\lspnr_hosttest.exe build\Release\DLSS5NR01.dll - <path to nvngx_dlssnr.dll> [key=value ...]
+build\Release\nr_hosttest.exe build\Release\DLSS5NR01.dll - <path to nvngx_dlssnr.dll> [key=value ...]
 ```
 
 Loads the addon with a fake `IHost`, renders headless ImGui frames, issues a synthetic LSFG
@@ -55,7 +55,7 @@ is ignored and only kept for old scripts. It writes `present_gen.bmp` beside the
 ## Harness
 
 ```
-build\Release\lspnr_harness.exe image.png [--only 1440p] [--iters N] [--style S] [--intensity I] ...
+build\Release\nr_harness.exe image.png [--only 1440p] [--iters N] [--style S] [--intensity I] ...
 ```
 
 Runs the model on an image without Lossless Scaling, GPU-timed, and writes `in_<size>.png` /
@@ -79,7 +79,7 @@ included.
 src/addon/       the addon: host glue and panel (addon.cpp), dispatch hook,
                  frame tap, bridge, present hook, compose
 src/engine/      the D3D12 sidecar: NGX core, feature 18, model-side passes and shaders
-src/forwarder/   nvngx.dll_lspnr.dll and its C API
+src/forwarder/   nvngx.dll_dlss5nr01.dll and its C API
 src/harness/     standalone measurement harness
 tools/           offline test host, release packaging
 external/        NVIDIA SDK drop point (ignored by git); the addon SDK headers are ../../manager/sdk

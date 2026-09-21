@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
     if (!Init || !Shut || !Render || !Caps) { printf("exports missing\n"); return 1; }
     printf("caps 0x%x\n", Caps());
 
-    // usage: lspnr_hosttest <addon dll> [-] [snippet path] [key=value ...]     (argv[2] is kept for old scripts and ignored)
+    // usage: nr_hosttest <addon dll> [-] [snippet path] [key=value ...]     (argv[2] is kept for old scripts and ignored)
     // Two keys are the host's own: shot=<file.bmp> renders the settings panel at the end through a themed offscreen
     // renderer (shotW= shotH= set the size; the panel is laid out at its natural height and every section is opened).
     std::string shotPath; int shotW = 760, shotH = 3400;
@@ -147,8 +147,8 @@ int main(int argc, char** argv) {
 
     // a real (small, visible) window + flip swap chain: the addon hooks Present and composes into its back buffer
     const UINT W = 1920, H = 1080, FW = 480, FH = 270;
-    WNDCLASSEXW wc{ sizeof wc }; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"LspnrHostTest"; RegisterClassExW(&wc);
-    HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, wc.lpszClassName, L"lspnr hosttest", WS_POPUP, 0, 0, 320, 180, nullptr, nullptr, wc.hInstance, nullptr);
+    WNDCLASSEXW wc{ sizeof wc }; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"NrHostTest"; RegisterClassExW(&wc);
+    HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, wc.lpszClassName, L"nr hosttest", WS_POPUP, 0, 0, 320, 180, nullptr, nullptr, wc.hInstance, nullptr);
     // never shown: the swap chain presents fine without being visible, and a test must not put windows on anyone's screen
     DXGI_SWAP_CHAIN_DESC1 scd{}; scd.Width = W; scd.Height = H; scd.Format = DXGI_FORMAT_B8G8R8A8_UNORM; scd.SampleDesc.Count = 1; scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; scd.BufferCount = 2; scd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL; scd.Scaling = DXGI_SCALING_STRETCH;
     IDXGISwapChain1* sc = nullptr;

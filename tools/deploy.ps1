@@ -13,7 +13,7 @@ param(
 $root = Split-Path $PSScriptRoot -Parent   # the repository folder
 $items = @{
     host     = @{ Src = "$root\manager\build\Release\Lossless.dll"; Dst = "$LsDir\Lossless.dll"; Extra = @("$root\manager\LP-icon.ico", "$root\manager\LP-icon.png") }
-    nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_lspnr.dll", "$root\addons\DLSS5NR01\addon.json") }
+    nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_dlss5nr01.dll", "$root\addons\DLSS5NR01\addon.json") }
 }
 if (-not (Test-Path "$LsDir\Lossless.dll")) { Write-Host "No Lossless Scaling folder at $LsDir (pass -LsDir or set LS_DIR)."; exit 4 }
 if (Get-Process $Game -ErrorAction SilentlyContinue) { Write-Host "$Game is running: not touching the Lossless Scaling folder. Close the game first."; exit 2 }
@@ -50,6 +50,16 @@ if ($names -contains 'host') {
             Move-Item $from "$aside\$old"
             Write-Host "[host] moved the retired addon folder $old to $aside"
         }
+    }
+}
+# Neural Rendering's helper DLL was called nvngx.dll_lspnr.dll before 0.2.1; the addon no longer loads it. Move a stale copy aside.
+if ($names -contains 'nr') {
+    $stale = "$LsDir\addons\DLSS5NR01\nvngx.dll_lspnr.dll"
+    if (Test-Path $stale) {
+        $aside = "$LsDir\backups\retired-addons-$stamp"
+        New-Item -ItemType Directory -Force $aside | Out-Null
+        Move-Item $stale "$aside\nvngx.dll_lspnr.dll"
+        Write-Host "[nr] moved the old helper DLL nvngx.dll_lspnr.dll to $aside"
     }
 }
 if ($ls) { Write-Host 'Lossless Scaling was stopped; start it again yourself.' }

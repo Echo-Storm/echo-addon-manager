@@ -309,7 +309,7 @@ static void StartEngine(LUID luid) {
         std::string sp; { std::lock_guard<std::mutex> lk(g_cfgMu); sp = g_cfg.snippetPath; }
         std::wstring snippet = sp.empty() ? g_lsDir + L"\\nvngx_dlssnr.dll" : Narrow2Wide(sp);
         SetStatus("engine: loading model...");
-        bool ok = g_engine.Init(luid, g_addonDir + L"\\" LSPNR_FORWARDER_FILENAME, snippet, g_addonDir, g_lsDir, [](const char* m) { Log("%s", m); });
+        bool ok = g_engine.Init(luid, g_addonDir + L"\\" NR_FORWARDER_FILENAME, snippet, g_addonDir, g_lsDir, [](const char* m) { Log("%s", m); });
         g_engineLuid = luid; g_engineLuidValid = true;
         if (!ok) { g_failedLuid = luid; g_failedLuidValid = true; Log("engine failed on LUID %08x:%08x; it will start again when LS runs LSFG on another NVIDIA adapter", luid.HighPart, luid.LowPart); }
         SetStatus(ok ? "engine ready" : g_engine.Stats().lastError);

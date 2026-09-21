@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The last `lspnr` names are gone: the helper DLL is now `nvngx.dll_dlss5nr01.dll` (it must still contain `nvngx.dll`, which the DLSSNR snippet checks in its caller's path), the test tools are `nr_hosttest` and `nr_harness`, and the helper's exported functions start with `nrfwd_`. Nothing changes on screen. `tools\deploy.ps1` moves a stale `nvngx.dll_lspnr.dll` aside.
+
 ## 0.2.0 (2026-09-21)
 
 - **Renamed to DLSS5NR01** (it was `LSP-NeuralRender`; the prefix meant LosslessProxy, and the addon has been changed a great deal from the original). The folder, the settings

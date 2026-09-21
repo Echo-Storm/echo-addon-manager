@@ -12,7 +12,7 @@
 #include <string>
 #include <functional>
 #include <vector>
-#include "forwarder/lspnr_api.h"
+#include "forwarder/nr_api.h"
 
 // What the model listens to was measured knob by knob (docs/dlssnr-knobs.md). Everything the model reads is a
 // runtime control; only the working scale forces a feature rebuild.
@@ -52,7 +52,7 @@ struct NrParams {
     uint32_t debugView = 0;       // 0 result, 1 original, 2 delta x4, 3 frame role (real/generated), 4 LSFG flow, 5 ghost guard weight
 
     bool CreateKeysEqual(const NrParams& o) const { return workingScale == o.workingScale; }
-    LspnrTuning Tuning() const { return LspnrTuning{ style, useAutoMask, 1u, intensity, localStructure, localTone, skinStructure }; }
+    NrTuning Tuning() const { return NrTuning{ style, useAutoMask, 1u, intensity, localStructure, localTone, skinStructure }; }
 };
 
 struct NrStats {
@@ -133,9 +133,9 @@ private:
     // NGX
     void* m_caps = nullptr;
     HMODULE m_fwd = nullptr;
-    PFN_lspnr_probe m_pProbe = nullptr; PFN_lspnr_init m_pInit = nullptr; PFN_lspnr_set_float_slot m_pSetFloatSlot = nullptr;
-    PFN_lspnr_probe_float m_pProbeFloat = nullptr; PFN_lspnr_get_float m_pGetFloat = nullptr; PFN_lspnr_create m_pCreate = nullptr;
-    PFN_lspnr_evaluate m_pEvaluate = nullptr; PFN_lspnr_release m_pRelease = nullptr; PFN_lspnr_last_result m_pLast = nullptr;
+    PFN_nrfwd_probe m_pProbe = nullptr; PFN_nrfwd_init m_pInit = nullptr; PFN_nrfwd_set_float_slot m_pSetFloatSlot = nullptr;
+    PFN_nrfwd_probe_float m_pProbeFloat = nullptr; PFN_nrfwd_get_float m_pGetFloat = nullptr; PFN_nrfwd_create m_pCreate = nullptr;
+    PFN_nrfwd_evaluate m_pEvaluate = nullptr; PFN_nrfwd_release m_pRelease = nullptr; PFN_nrfwd_last_result m_pLast = nullptr;
     void* m_feature = nullptr;
 
     // frame config

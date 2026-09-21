@@ -29,16 +29,16 @@ add_library(minhook_static STATIC
 target_include_directories(minhook_static PUBLIC ${minhook_SOURCE_DIR}/include)
 
 # ---- forwarder: the only module allowed to call the DLSSNR snippet directly ----
-add_library(lspnr_forwarder SHARED src/forwarder/lspnr_forwarder.cpp)
-target_include_directories(lspnr_forwarder PRIVATE src)
-target_link_libraries(lspnr_forwarder PRIVATE d3d12)
-set_target_properties(lspnr_forwarder PROPERTIES OUTPUT_NAME "nvngx.dll_lspnr" PREFIX "" SUFFIX ".dll")
+add_library(nr_forwarder SHARED src/forwarder/nr_forwarder.cpp)
+target_include_directories(nr_forwarder PRIVATE src)
+target_link_libraries(nr_forwarder PRIVATE d3d12)
+set_target_properties(nr_forwarder PROPERTIES OUTPUT_NAME "nvngx.dll_dlss5nr01" PREFIX "" SUFFIX ".dll")
 
 # ---- standalone harness (proof / measurement) ----
-add_executable(lspnr_harness src/harness/lspnr_harness.cpp)
-target_include_directories(lspnr_harness PRIVATE src ${NGX_DIR}/include)
-target_link_libraries(lspnr_harness PRIVATE ${NGX_LIB} d3d12 dxgi user32 gdi32 advapi32 shlwapi ole32 windowscodecs)
-add_dependencies(lspnr_harness lspnr_forwarder)
+add_executable(nr_harness src/harness/nr_harness.cpp)
+target_include_directories(nr_harness PRIVATE src ${NGX_DIR}/include)
+target_link_libraries(nr_harness PRIVATE ${NGX_LIB} d3d12 dxgi user32 gdi32 advapi32 shlwapi ole32 windowscodecs)
+add_dependencies(nr_harness nr_forwarder)
 
 # ---- the addon ----
 add_library(DLSS5NR01 SHARED
@@ -55,13 +55,13 @@ if(MSVC)
     target_compile_options(DLSS5NR01 PRIVATE $<$<CONFIG:Release>:/Zi>)
     target_link_options(DLSS5NR01 PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF /MAP>)
 endif()
-add_dependencies(DLSS5NR01 lspnr_forwarder)
+add_dependencies(DLSS5NR01 nr_forwarder)
 
 # ---- offline test host: loads the built addon with a fake IHost, headless ImGui and a synthetic LSFG pattern ----
-add_executable(lspnr_hosttest tools/addon_host_test.cpp
+add_executable(nr_hosttest tools/addon_host_test.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp)
-target_include_directories(lspnr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
-target_link_libraries(lspnr_hosttest PRIVATE d3d11 dxgi d3dcompiler)
-add_dependencies(lspnr_hosttest DLSS5NR01)
+target_include_directories(nr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+target_link_libraries(nr_hosttest PRIVATE d3d11 dxgi d3dcompiler)
+add_dependencies(nr_hosttest DLSS5NR01)

@@ -54,7 +54,7 @@ bool PresentHook::Install(ID3D11Device* dev, Callback cb, void* user, LogFn log)
     hr = ad->GetParent(IID_PPV_ARGS(&fac)); ad->Release();
     if (FAILED(hr) || !fac) { log("PresentHook: IDXGIFactory2 missing"); return false; }
     // A throwaway swap chain of the same class LS uses (a window swap chain): it hands us the shared vtable.
-    WNDCLASSEXW wc{ sizeof wc }; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"LspnrPresentProbe";
+    WNDCLASSEXW wc{ sizeof wc }; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"NrPresentProbe";
     RegisterClassExW(&wc);
     hwnd = CreateWindowExW(0, wc.lpszClassName, L"", WS_POPUP, 0, 0, 16, 16, nullptr, nullptr, wc.hInstance, nullptr);
     DXGI_SWAP_CHAIN_DESC1 d{}; d.Width = 16; d.Height = 16; d.Format = DXGI_FORMAT_B8G8R8A8_UNORM; d.SampleDesc.Count = 1;

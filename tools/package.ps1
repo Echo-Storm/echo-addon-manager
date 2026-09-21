@@ -27,7 +27,7 @@ Copy-Item "$root\manager\build\Release\Lossless.dll" $stage
 Copy-Item "$root\manager\LP-icon.ico", "$root\manager\LP-icon.png" $stage
 
 $addons = @(
-    @{ Id = 'DLSS5NR01'; Dir = "$root\addons\DLSS5NR01"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS5NR01.dll', 'nvngx.dll_lspnr.dll') }
+    @{ Id = 'DLSS5NR01'; Dir = "$root\addons\DLSS5NR01"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS5NR01.dll', 'nvngx.dll_dlss5nr01.dll') }
 )
 $included = @(); $skipped = @()
 foreach ($a in $addons) {

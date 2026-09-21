@@ -27,7 +27,7 @@ Scaling is about to show.
 ## Install
 
 1. Extract the release zip. Copy `addons\DLSS5NR01` into the Lossless Scaling folder, so the
-   folder holds `DLSS5NR01.dll`, `nvngx.dll_lspnr.dll` and `addon.json`.
+   folder holds `DLSS5NR01.dll`, `nvngx.dll_dlss5nr01.dll` and `addon.json`.
 2. Put `nvngx_dlssnr.dll` next to `LosslessScaling.exe`. If you keep it elsewhere, set its full
    path under *Advanced > Snippet path* later.
 3. Start Lossless Scaling, open Echo Addon Manager and enable *Neural Render

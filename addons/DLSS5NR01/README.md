@@ -37,7 +37,7 @@ Documentation: [User guide](docs/user-guide.md) · [Architecture](docs/architect
    your Lossless Scaling folder so you have:
    ```
    <Lossless Scaling>\addons\DLSS5NR01\DLSS5NR01.dll
-   <Lossless Scaling>\addons\DLSS5NR01\nvngx.dll_lspnr.dll
+   <Lossless Scaling>\addons\DLSS5NR01\nvngx.dll_dlss5nr01.dll
    <Lossless Scaling>\addons\DLSS5NR01\addon.json
    ```
 2. Put `nvngx_dlssnr.dll` in the Lossless Scaling folder (next to `LosslessScaling.exe`).

@@ -1,10 +1,10 @@
-// lspnr_harness — proves and measures the NR engine without Lossless Scaling.
+// nr_harness — proves and measures the NR engine without Lossless Scaling.
 //
-//   lspnr_harness.exe [image.png] [--adapter N] [--snippet path] [--debug] [--iters N]
+//   nr_harness.exe [image.png] [--adapter N] [--snippet path] [--debug] [--iters N]
 //
 // 1. D3D12 device on the display NVIDIA adapter.
 // 2. Driver core init (static lib) + capability block.
-// 3. Forwarder (nvngx.dll_lspnr.dll): probe, float-slot round-trip, init, create feature 18.
+// 3. Forwarder (nvngx.dll_dlss5nr01.dll): probe, float-slot round-trip, init, create feature 18.
 // 4. Evaluate on the image at 1080p / 1440p / 4K with flat depth + zero motion vectors,
 //    GPU-timed with timestamp queries; writes in_<size>.png / out_<size>.png beside the exe.
 
@@ -20,7 +20,7 @@
 #include <vector>
 #include <cmath>
 #include "nvsdk_ngx.h"
-#include "forwarder/lspnr_api.h"
+#include "forwarder/nr_api.h"
 
 // ------------------------------------------------------------------ logging
 static FILE* g_log = nullptr;
@@ -177,15 +177,15 @@ static std::vector<uint8_t> Readback(Ctx& c, ID3D12Resource* tex, UINT w, UINT h
 // ------------------------------------------------------------------ forwarder
 struct Fwd {
     HMODULE h = nullptr;
-    PFN_lspnr_probe probe = nullptr; PFN_lspnr_init init = nullptr; PFN_lspnr_set_float_slot setFloatSlot = nullptr;
-    PFN_lspnr_probe_float probeFloat = nullptr; PFN_lspnr_get_float getFloat = nullptr; PFN_lspnr_create create = nullptr;
-    PFN_lspnr_evaluate evaluate = nullptr; PFN_lspnr_release release = nullptr; PFN_lspnr_last_result last = nullptr;
-    PFN_lspnr_scaling_ratio scalingRatio = nullptr;
+    PFN_nrfwd_probe probe = nullptr; PFN_nrfwd_init init = nullptr; PFN_nrfwd_set_float_slot setFloatSlot = nullptr;
+    PFN_nrfwd_probe_float probeFloat = nullptr; PFN_nrfwd_get_float getFloat = nullptr; PFN_nrfwd_create create = nullptr;
+    PFN_nrfwd_evaluate evaluate = nullptr; PFN_nrfwd_release release = nullptr; PFN_nrfwd_last_result last = nullptr;
+    PFN_nrfwd_scaling_ratio scalingRatio = nullptr;
     bool Load(const std::wstring& path) {
         h = LoadLibraryW(path.c_str()); if (!h) { P("  forwarder LoadLibrary failed: %lu (%ls)", GetLastError(), path.c_str()); return false; }
 #define GP(n, v) v = (decltype(v))GetProcAddress(h, n); if (!v) { P("  forwarder export missing: %s", n); return false; }
-        GP("lspnr_probe", probe) GP("lspnr_init", init) GP("lspnr_set_float_slot", setFloatSlot) GP("lspnr_probe_float", probeFloat)
-        GP("lspnr_get_float", getFloat) GP("lspnr_create", create) GP("lspnr_evaluate", evaluate) GP("lspnr_release", release) GP("lspnr_last_result", last) GP("lspnr_scaling_ratio", scalingRatio)
+        GP("nrfwd_probe", probe) GP("nrfwd_init", init) GP("nrfwd_set_float_slot", setFloatSlot) GP("nrfwd_probe_float", probeFloat)
+        GP("nrfwd_get_float", getFloat) GP("nrfwd_create", create) GP("nrfwd_evaluate", evaluate) GP("nrfwd_release", release) GP("nrfwd_last_result", last) GP("nrfwd_scaling_ratio", scalingRatio)
 #undef GP
         return true;
     }
@@ -276,8 +276,8 @@ int wmain(int argc, wchar_t** argv) {
         else if (a == L"--debug")     debug = true;
         else image = a;
     }
-    g_log = _wfopen((std::wstring(exeDir) + L"\\lspnr_harness_log.txt").c_str(), L"w");
-    P("=== lspnr_harness ===");
+    g_log = _wfopen((std::wstring(exeDir) + L"\\nr_harness_log.txt").c_str(), L"w");
+    P("=== nr_harness ===");
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_wic));
 
@@ -316,7 +316,7 @@ int wmain(int argc, wchar_t** argv) {
     if (!caps) return 2;
 
     // ---- forwarder
-    Fwd f; if (!f.Load(std::wstring(exeDir) + L"\\" + LSPNR_FORWARDER_FILENAME)) return 3;
+    Fwd f; if (!f.Load(std::wstring(exeDir) + L"\\" + NR_FORWARDER_FILENAME)) return 3;
     int bits = f.probe(snippet.c_str());
     P("[fwd] probe(%ls) -> 0x%x (need 0xF)", snippet.c_str(), bits);
     if ((bits & 0xF) != 0xF) return 3;
@@ -327,13 +327,13 @@ int wmain(int argc, wchar_t** argv) {
     const int kSnippetFloatGetter = 14;
     int floatSlot = -1;
     for (int s : { 6, 5, 1, 2, 4, 7 }) {
-        f.probeFloat(caps, "LSPNR.Probe", 1.5f, s);
+        f.probeFloat(caps, "NR.Probe", 1.5f, s);
         alignas(8) uint8_t b14[8] = {}, bOwn[8] = {};
-        int g14 = f.getFloat(caps, "LSPNR.Probe", b14, kSnippetFloatGetter);
-        int gOwn = f.getFloat(caps, "LSPNR.Probe", bOwn, s + 8);
+        int g14 = f.getFloat(caps, "NR.Probe", b14, kSnippetFloatGetter);
+        int gOwn = f.getFloat(caps, "NR.Probe", bOwn, s + 8);
         float v14, vOwn; double d14; memcpy(&v14, b14, 4); memcpy(&vOwn, bOwn, 4); memcpy(&d14, b14, 8);
         P("[fwd] setter %d: getter14 -> %d as float %g (as double %g)   getter%d -> %d as float %g", s, g14, v14, d14, s + 8, gOwn, vOwn);
-        f.probeFloat(caps, "LSPNR.Probe", 0.0f, s);   // scrub so the next candidate cannot inherit the value
+        f.probeFloat(caps, "NR.Probe", 0.0f, s);   // scrub so the next candidate cannot inherit the value
         if (g14 == 1 && fabsf(v14 - 1.5f) < 1e-6f) { floatSlot = s; break; }
     }
     if (floatSlot < 0) { P("!!! no setter makes getter 14 return the float — cannot set tuning floats"); return 4; }
@@ -409,8 +409,8 @@ int wmain(int argc, wchar_t** argv) {
             BSetULL(caps, "MotionVectors", (unsigned long long)(uintptr_t)mvT); BSetULL(caps, "Output", (unsigned long long)(uintptr_t)out);
         };
 
-        LspnrCreateParams cp{}; cp.width = iw; cp.height = ih; cp.preset = preset; cp.scalingRatio = scaling;
-        cp.tuning = LspnrTuning{ style, autoMask, uiCorr, intensity, ls > -98.0f ? ls : strength, lt > -98.0f ? lt : strength, skin > -98.0f ? skin : strength };
+        NrCreateParams cp{}; cp.width = iw; cp.height = ih; cp.preset = preset; cp.scalingRatio = scaling;
+        cp.tuning = NrTuning{ style, autoMask, uiCorr, intensity, ls > -98.0f ? ls : strength, lt > -98.0f ? lt : strength, skin > -98.0f ? skin : strength };
         SetStdKeys(1);
         NVSDK_NGX_Handle* hSR = nullptr;
         if (primesr) {
@@ -425,7 +425,7 @@ int wmain(int argc, wchar_t** argv) {
         if (!feature) { c.ExecAndWait(); continue; }
         c.ExecAndWait();   // creation records GPU work
 
-        LspnrEvalParams ep{}; ep.color = color; ep.depth = depthT; ep.mvec = mvT; ep.output = out;
+        NrEvalParams ep{}; ep.color = color; ep.depth = depthT; ep.mvec = mvT; ep.output = out;
         ep.width = iw; ep.height = ih; ep.guideWidth = iw; ep.guideHeight = ih; ep.depthInverted = 0; ep.mvScaleX = 1.0f; ep.mvScaleY = 1.0f;
         ep.scalingRatio = scaling; ep.tuning = cp.tuning; ep.controlMask = cmT;
         // first (reset) + warmup
