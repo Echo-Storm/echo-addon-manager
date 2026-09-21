@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <string>
 #include <map>
+#include <filesystem>
 #include <vector>
 #include "imgui.h"
 #include "tools/ui_shot.h"
@@ -19,6 +20,8 @@
 #include "src/gui/widgets/status_bar.h"
 #include "src/gui/widgets/empty_state.h"
 #include "src/gui/tabs/tab_about.h"
+#include "src/gui/tabs/tab_features.h"
+#include "src/config/config_manager.h"
 #include "src/gui/tabs/tab_logs.h"
 #include "src/log/logger.h"
 #include "lsproxy/version.h"
@@ -45,7 +48,7 @@ static void Shell(const char* active, const std::string& status, const std::func
     ImGui::Begin("##Main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
     ImGui::BeginChild("##content", ImVec2(0, -widgets::StatusBarHeight() - 2.0f), false, ImGuiWindowFlags_NoBackground);
     if (ImGui::BeginTabBar("##MainTabs")) {
-        for (const char* t : { "Addons", "Performance", "Settings", "Logs", "About" }) {
+        for (const char* t : { "Addons", "Features", "Performance", "Settings", "Logs", "About" }) {
             ImGuiTabItemFlags f = (std::string(t) == active) ? ImGuiTabItemFlags_SetSelected : 0;
             if (ImGui::BeginTabItem(t, nullptr, f)) { if (std::string(t) == active) body(); ImGui::EndTabItem(); }
         }
@@ -93,13 +96,13 @@ int main(int argc, char** argv) {
     const bool clean = cleanEnv != nullptr; free(cleanEnv);
     AddonInfo a, b, c;
     a.id = "LSP-NeuralRender"; a.manifest.name = "DLSS 5 Neural Rendering"; a.manifest.version = "0.1.0"; a.manifest.author = "andreiday / Echo-Storm"; a.hModule = (HMODULE)1; a.enabled = true;
-    b.id = "LSP-ReShade"; b.manifest.name = "ReShade Input Passthrough"; b.manifest.version = "0.1.0"; b.manifest.author = "Echo-Storm"; b.enabled = !clean; b.capabilities = clean ? 0 : LSPROXY_CAP_REQUIRES_RESTART;   // enabled, needs a restart
-    c.id = "LSP-Windowed"; c.manifest.name = "Windowed Mode"; c.manifest.version = "0.1.0"; c.manifest.author = "Echo-Storm"; c.enabled = !clean; c.faulted = !clean;   // shows the ERROR chip
+    b.id = "sample-a"; b.manifest.name = "Sample addon A"; b.manifest.version = "1.0.0"; b.manifest.author = "Someone"; b.enabled = !clean; b.capabilities = clean ? 0 : LSPROXY_CAP_REQUIRES_RESTART;   // enabled, needs a restart
+    c.id = "sample-b"; c.manifest.name = "Sample addon B"; c.manifest.version = "1.0.0"; c.manifest.author = "Someone else"; c.enabled = !clean; c.faulted = !clean;   // shows the ERROR chip
 
     float model = 0.5f, sharpen = 0.0f, vib = 1.2f, blend = 0.72f, gamma = 1.0f; int passes = 1, grain = 2; bool sw = true, sw2 = false; int sel = 0;
     const float dModel = 0.35f, dSharpen = 0.0f, dVib = 0.0f, dBlend = 1.0f, dGamma = 1.0f; const int dPasses = 1, dGrain = 1;
     if (!clean) widgets::ToastShow("Installed 'Cool Addon' (switched off). Turn it on with its switch.", widgets::ToastType::Success, 1000.0f);
-    const std::string status = "Echo Addon Manager 0.1.0   |   3 addons, 1 on";
+    const std::string status = clean ? "Echo Addon Manager 0.1.0   |   1 addon, 1 on" : "Echo Addon Manager 0.1.0   |   3 addons, 1 on";   // the tidy scene has just Neural Rendering, as a real install does
 
     // live data for the cards and the Performance tab: 20 s of a game near 60 fps with a few hitches, a model at ~6.6 ms, a GPU at its cap
     {
@@ -135,8 +138,8 @@ int main(int argc, char** argv) {
             lsp::Button("Open addons folder", lsp::icons::kFolder);
             ImGui::Dummy(ImVec2(0, 6));
             if (widgets::AddonCard(a, 0, sel == 0)) sel = 0;
-            if (widgets::AddonCard(b, 1, sel == 1)) sel = 1;
-            if (widgets::AddonCard(c, 2, sel == 2)) sel = 2;
+            if (!clean && widgets::AddonCard(b, 1, sel == 1)) sel = 1;
+            if (!clean && widgets::AddonCard(c, 2, sel == 2)) sel = 2;
         });
     }, 12);
     shot.Save((out + "/preview_addons.bmp").c_str());
@@ -237,7 +240,18 @@ int main(int argc, char** argv) {
     shot.Frame([&] { Shell("Settings", status, [&] { RenderTabSettings(nullptr); }); }, 12);
     shot.Save((out + "/preview_settings_tab.bmp").c_str());
 
-    // 3. About tab (the real one)
+    // 3. Features tab (the real one): ReShade passthrough on, so its options show; the tidy scene leaves Windowed off, the other one turns it on
+    //    too, which shows the "restart to apply" label (the hooks are not in, in a preview)
+    {
+        ConfigManager& cfg = ConfigManager::Instance();
+        cfg.Load((std::filesystem::path(out) / "preview_config.json").wstring());
+        cfg.SetAddonEnabled("LSP-ReShade", true);
+        cfg.SetAddonEnabled("LSP-Windowed", !clean);
+        shot.Frame([&] { Shell("Features", status, [&] { RenderTabFeatures(); }); }, 12);
+        shot.Save((out + "/preview_features.bmp").c_str());
+    }
+
+    // 3b. About tab (the real one)
     shot.Frame([&] { Shell("About", status, [&] { RenderTabAbout(); }); }, 12);
     shot.Save((out + "/preview_about.bmp").c_str());
 
@@ -245,10 +259,9 @@ int main(int argc, char** argv) {
     {
         LOG_INFO("Core", "%s v%s starting...", LSPROXY_PRODUCT_NAME, LSPROXY_VERSION_STRING);
         LOG_INFO("GUI", "Tray icon added");
-        LOG_INFO("AddonManager", "Found 3 addons in addons");
+        LOG_INFO("AddonManager", "Found 1 addons in addons");
         LOG_INFO("AddonManager", "Loaded 'LSP-NeuralRender' 0.1.0");
-        LOG_INFO("AddonManager", "'LSP-ReShade' is switched off");
-        LOG_INFO("AddonManager", "'LSP-Windowed' is switched off");
+        LOG_INFO("Features", "ReShade input passthrough is on");
         LOG_INFO("GUI", "Hotkey Ctrl+Shift+F12 registered");
         LOG_INFO("LSP-NeuralRender", "Engine started on the LSFG device");
         shot.Frame([&] { Shell("Logs", status, [&] { RenderTabLogs(); }); }, 12);

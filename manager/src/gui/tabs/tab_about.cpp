@@ -71,7 +71,7 @@ void RenderTabAbout() {
     lsp::SectionLabel("Thanks");
     ImGui::TextWrapped("This began as LosslessProxy by FrankBarretta (MIT), and we are grateful for it. About a third of this program's code "
                        "is still theirs: mainly the part that loads into Lossless Scaling and hooks DirectX 11 and its shaders, plus the "
-                       "ReShade and Windowed addons, which we fixed and reworked. Everything else was written or rewritten since: how "
+                       "ReShade and Windowed features, which began as addons of theirs and are built in now. Everything else was written or rewritten since: how "
                        "addons are found, checked, loaded and switched, the settings file, the event system, the window, tabs, "
                        "Performance, backup, install and remove, the tray and the shared look.");
     ImGui::Dummy(ImVec2(0, S(4)));

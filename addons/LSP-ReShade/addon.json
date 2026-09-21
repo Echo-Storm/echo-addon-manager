@@ -1,9 +1,0 @@
-{
-    "name": "ReShade Input Passthrough",
-    "version": "0.1.0",
-    "author": "FrankBarretta / Echo-Storm",
-    "description": "Lets you use the mouse and keyboard on a ReShade overlay (its menu) while Lossless Scaling is scaling the game. Press a hotkey to turn it on and off.",
-    "min_host_version": "1.0.0",
-    "dependencies": [],
-    "tags": ["reshade", "input", "overlay", "post-processing"]
-}

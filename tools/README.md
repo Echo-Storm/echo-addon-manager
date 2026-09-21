@@ -11,7 +11,7 @@ Where a script needs your Lossless Scaling folder it takes `-LsDir` (or reads th
 
 | Tool | What it does |
 |---|---|
-| `build_all.ps1` | Configures (first time) and builds the manager, the three addons, the UI preview and the offline test host, Release x64. `-Only host,nr,reshade,windowed`. |
+| `build_all.ps1` | Configures (first time) and builds the manager, the Neural Rendering addon, the UI preview and the offline test host, Release x64. `-Only host,nr`. |
 | `run_addon_tests.ps1` | Offline tests, no game and no visible window: installing and removing addons, the live status and metrics registry, the GPU reader, settings backup and restore, the diagnostics zip, ReShade's window handling, Windowed's virtual display on and off. |
 | `run_hosttest_matrix.py` | Runs the Neural Rendering test host through ten scenarios (base compose, HUD protection, sharpen, shadows, highlights, grain, smoothing and more) and checks the presented frame against a synthetic pattern. Needs `nvngx_dlssnr.dll` (`--snippet` or `LS_DIR`). |
 | `ui_preview.ps1` | Renders every tab, the addon cards and the addon panels offscreen to PNG. Set `LSP_PREVIEW_CLEAN=1` for the tidy scene used in the README. |

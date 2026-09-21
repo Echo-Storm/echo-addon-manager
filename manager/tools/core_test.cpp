@@ -439,6 +439,7 @@ int main() {
     MakeAddon(A, "dep_a", "dep_a.dll");
     WriteFile(A / "nodll" / "readme.txt", "no DLL in here");
     MakeAddon(A, ".hidden", "hidden.dll");                                                     // dot folders are staging areas
+    MakeAddon(A, "LSP-ReShade", "LSP_ReShade.dll");                                            // a retired standalone addon: built in now
     WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false}},"global":{"security_level":0}})");
 
     setvbuf(stdout, nullptr, _IONBF, 0);
@@ -460,6 +461,7 @@ int main() {
         Check("finds the eleven usable addons", mgr.GetAddons().size() == 11, "found " + std::to_string(mgr.GetAddons().size()));
         Check("a folder with no DLL is not an addon", IndexOf(mgr, "nodll") < 0);
         Check("a dot folder is not an addon", IndexOf(mgr, ".hidden") < 0);
+        Check("the folder of a retired standalone addon is ignored, since that feature is built in", IndexOf(mgr, "LSP-ReShade") < 0);
         AddonInfo* a = Find(mgr, "alpha");
         Check("manifest fields are read", a && a->manifest.parsed && a->manifest.name == "Alpha" && a->manifest.version == "1.2.3" && a->manifest.author == "A" &&
               a->manifest.description == "first" && a->manifest.tags.size() == 2);

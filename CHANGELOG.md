@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **ReShade input passthrough and Windowed mode are built into the manager** (a new **Features** tab) instead of being separate addons. Same behaviour, in
+  the manager's own code and look, with the settings kept where they were (`LSP-ReShade` and `LSP-Windowed` in `config.json`). Gains: Windowed mode can be switched
+  off and on again while Lossless Scaling runs (only switching it on for the first time needs a restart, because its hooks must be in before Lossless Scaling asks
+  for displays), it starts earlier, its options are two combo boxes and two checkboxes instead of a panel, and the addon list no longer has two entries that are
+  really settings. An old `LSP-ReShade` or `LSP-Windowed` addon folder is ignored, so the two versions can never both run; the deploy script moves such folders
+  aside. MinHook (pinned, v1.3.4) is now a dependency of the manager. Offline test `lsproxy_featurestest` (run twice: Windowed on and off at start-up) replaces the
+  two old addon tests. The release now ships one addon (Neural Rendering) instead of three.
 - **Manager: addon handling, settings file, host interface, toggle switch, toast, addon card and logs tab rewritten** as smaller modules with the same behaviour
   (on the `rewrite` branch until it has run in Lossless Scaling). New offline test `lsproxy_coretest` covers scanning, manifests, loading, starting, switching,
   removing, installing, the security levels, a faulting addon, the settings file and the host interface (94 checks); the window pictures are pixel-identical
@@ -9,7 +16,8 @@
   manifest, and loading a second settings file no longer inherits what the first one last saved. The addon safety checks (SHA-256 against `trusted_addons.json`), the dependency ordering and the event bus were rewritten too, with fixes: the addon list
   no longer reverses its order every time it is sorted (installing or removing an addon used to flip it), a trusted-hash list that is loaded again replaces the old
   one instead of adding to it, a hash written in capitals matches, and a subscriber that faults is now logged. The share of the manager's code that is still the
-  original project's went from 42.8% to 31.3% (`tools/measure_original_share.py`); the offline test now has 122 checks.
+  original project's went from 42.8% to 31.3% (`tools/measure_original_share.py`); the offline test now has 122 checks. Counting the ReShade and Windowed features, which moved into the manager
+  and began as the original project's addons, it is 32.7%.
 - **DLSS 5 Neural Rendering: Ghost guard.** New slider that fades the model's change where Lossless Scaling's motion data is unreliable and as the change ages, to remove the faint
   copy of the previous frame that could trail moving things. Default 0.5; 0 restores the old behaviour. See the addon's changelog.
 

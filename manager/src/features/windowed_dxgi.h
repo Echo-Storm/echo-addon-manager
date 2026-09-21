@@ -1,10 +1,16 @@
+// The virtual display: thin COM wrappers around the DXGI factory, adapter and output that add one extra output, the size of the game
+// window, on the first adapter. Everything else is forwarded to the real object untouched.
 #pragma once
 #include <d3d11.h>
 #include <dxgi.h>
 #include <dxgi1_6.h>
 #include <vector>
 
-extern bool g_FactoryAlive;
+namespace lsproxy {
+namespace features {
+namespace windowed {
+
+extern bool g_FactoryAlive;   // a wrapped DXGI factory exists (its vtable lives in this module, so the module must stay loaded)
 
 class ProxyDXGIFactory;
 class ProxyDXGIAdapter;
@@ -145,3 +151,7 @@ public:
     HRESULT STDMETHODCALLTYPE GetDesc1(DXGI_OUTPUT_DESC1* pDesc) override;
     HRESULT STDMETHODCALLTYPE CheckHardwareCompositionSupport(UINT* pFlags) override;
 };
+
+} // namespace windowed
+} // namespace features
+} // namespace lsproxy

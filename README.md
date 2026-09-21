@@ -3,8 +3,8 @@
 <p align="center"><b>The addon manager for Lossless Scaling.</b><br>Install, switch on and tune addons from one window, and watch your frame rate and GPU while you play.</p>
 
 Echo Addon Manager loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it a proper addon system: one window
-to install, switch on and tune addons, a live view of frame time and GPU load while a game runs, and one-click backup of every setting. It ships with three
-addons, **DLSS 5 Neural Rendering**, **ReShade Input Passthrough** and **Windowed Mode**, and it is free and MIT-licensed. It is an unofficial project, not
+to install, switch on and tune addons, a live view of frame time and GPU load while a game runs, and one-click backup of every setting. It ships with the
+**DLSS 5 Neural Rendering** addon and two built-in features, **ReShade input passthrough** and **Windowed mode**, and it is free and MIT-licensed. It is an unofficial project, not
 affiliated with the Lossless Scaling developers; read the [disclaimer](DISCLAIMER.md) before you install it.
 
 <table>
@@ -17,7 +17,7 @@ affiliated with the Lossless Scaling developers; read the [disclaimer](DISCLAIME
 <td valign="top"><b>Settings</b><br><img src="docs/images/settings.png" alt="The Settings tab"></td>
 </tr>
 <tr>
-<td valign="top"><b>Logs</b><br><img src="docs/images/logs.png" alt="The Logs tab"></td>
+<td valign="top"><b>Features</b><br><img src="docs/images/features.png" alt="The Features tab"></td>
 <td valign="top"><b>About</b><br><img src="docs/images/about.png" alt="The About tab"></td>
 </tr>
 </table>
@@ -45,13 +45,20 @@ setups are untested.
 - **Safe by design.** A faulting addon cannot take Lossless Scaling down with it, settings are written atomically, and a corrupt settings file is
   kept rather than overwritten. Optional SHA-256 checks of addon DLLs against a trust list.
 
-## The addons that ship with it
+## What ships with it
+
+Two **built-in features**, on the Features tab, each a switch with a few options that appear once it is on. They started as addons of the original project and are part of the manager now.
+
+| Feature | What it does | Default |
+|---------|--------------|---------|
+| **ReShade input passthrough** | Lets the mouse and keyboard reach a ReShade overlay while Lossless Scaling is scaling the game. A hotkey (Home by default) turns it on and off; it can be switched on at any time. | off |
+| **Windowed mode and second monitor** | Adds a virtual display the size of your game window so Lossless Scaling can work with a windowed game or a second monitor, with split-screen and side-by-side options. It must be in place before Lossless Scaling starts, so switching it on needs a restart; switching it off is immediate. | off |
+
+And one **addon**, which is separate because it needs an NVIDIA GPU and a file you supply:
 
 | Addon | What it does | Default |
 |-------|--------------|---------|
 | **DLSS 5 Neural Rendering** | Runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures and applies the result to every frame it presents, real and generated, without ever making Lossless Scaling wait. Saved looks, per-game looks, HUD protection, shadows and highlights, colour, film grain and temporal smoothing. Needs an NVIDIA RTX GPU and a copy of `nvngx_dlssnr.dll` that you supply. [More](addons/LSP-NeuralRender/README.md) | on |
-| **ReShade Input Passthrough** | Lets the mouse and keyboard reach a ReShade overlay while Lossless Scaling is scaling the game. [More](addons/LSP-ReShade/README.md) | off |
-| **Windowed Mode** | Adds a virtual display so Lossless Scaling can work with a windowed game and with a second monitor, including split-screen positioning. [More](addons/LSP-Windowed/README.md) | off |
 
 ## Install
 
@@ -77,6 +84,7 @@ You need Lossless Scaling 3.2.2.0 installed and Windows 10 or 11, x64. There is 
 | Tab | What it does |
 |-----|--------------|
 | **Addons** | Every addon with its state, version and author, a live status line, and a switch. Click one to open its own settings, an overview (description, tags, dependencies, errors) and its config file. |
+| **Features** | The built-in features: ReShade input passthrough and Windowed mode. |
 | **Performance** | Frame rate and frame time, addon cost, GPU load, power, clocks, temperature, memory, and a short reading of what is limiting you. |
 | **Settings** | Backup and restore, interface size, open-at-start and the hotkey, security level, log detail, the diagnostics file, and shortcuts to the logs and addons folders. |
 | **Logs** | The last 10,000 entries with a level filter. |
@@ -129,8 +137,8 @@ See [docs/addon-authors.md](docs/addon-authors.md): the exports, the host interf
 ## Credits
 
 Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta**, and we are grateful for it. About a third
-of the manager's code (mainly the proxy DLL and the DirectX 11 and shader hooks) is still theirs, and the ReShade and Windowed addons started there
-too; the rest, including how addons are found, checked and loaded, the settings file, the event system, the window and the live status and metrics,
+of the manager's code (mainly the proxy DLL and the DirectX 11 and shader hooks) is still theirs, and the ReShade and Windowed features started there as
+addons; the rest, including how addons are found, checked and loaded, the settings file, the event system, the window and the live status and metrics,
 was written or rewritten since (`tools/measure_original_share.py` measures it). Neural Rendering is by **andreiday**, extended here. The full list, with licences, is in [NOTICE.md](NOTICE.md). Lossless Scaling belongs to its author; this project is unofficial.
 
 If it is useful to you, you can [support it on Ko-fi](https://ko-fi.com/xechostormx).

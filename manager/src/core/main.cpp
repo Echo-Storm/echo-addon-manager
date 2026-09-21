@@ -4,6 +4,7 @@
 #include "../addon/addon_manager.h"
 #include "../config/config_manager.h"
 #include "../event/event_system.h"
+#include "../features/features.h"
 #include "../host/host_impl.h"
 #include "../log/logger.h"
 #include "../gui/gui_manager.h"
@@ -107,6 +108,9 @@ struct Core {
         D3D11Hook::Initialize(host.get());
         LOG_INFO("Core", "D3D11 hooks installed");
 
+        // Built-in features that are switched on (on their own threads where they hook things: this runs in DllMain)
+        lsproxy::features::Start();
+
         // Start GUI thread (loads + initializes addons)
         lsproxy::GuiManager::StartGuiThread(addonManager.get());
 
@@ -119,6 +123,7 @@ struct Core {
         // Publish shutdown event
         lsproxy::EventBus::Instance().Publish(LSPROXY_EVENT_HOST_SHUTDOWN);
 
+        lsproxy::features::Stop();
         D3D11Hook::Shutdown();
         ShaderHook::UninstallHooks();
         ShaderHook::Shutdown();

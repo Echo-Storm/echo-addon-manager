@@ -1,11 +1,14 @@
-#include "dxgi_proxy.hpp"
-#include "windowed_state.hpp"
+#include "windowed_dxgi.h"
+#include "windowed_state.h"
 #include <map>
 #include <string>
 
+namespace lsproxy {
+namespace features {
+namespace windowed {
+
 bool g_FactoryAlive = false;
 
-void UpdateTargetRect(); // Forward from main.cpp
 
 struct LUIDComparator {
     bool operator()(const LUID& a, const LUID& b) const {
@@ -139,7 +142,7 @@ HRESULT ProxyDXGIAdapter::EnumOutputs(UINT Output, IDXGIOutput** ppOutput) {
     IDXGIOutput* pRealOutput = nullptr;
     HRESULT hr = m_pAdapter->EnumOutputs(Output, &pRealOutput);
 
-    if (hr == DXGI_ERROR_NOT_FOUND && m_adapterIndex == 0 && GetState().settings.enabled) {
+    if (hr == DXGI_ERROR_NOT_FOUND && m_adapterIndex == 0 && GetState().settings.active) {
         bool isNextSlot = false;
         if (Output == 0) {
             isNextSlot = true;
@@ -322,3 +325,7 @@ HRESULT ProxyDXGIOutput::GetDesc1(DXGI_OUTPUT_DESC1* pDesc) {
 }
 
 HRESULT ProxyDXGIOutput::CheckHardwareCompositionSupport(UINT* p) { if (m_isFake) return E_NOTIMPL; return m_pOutput->CheckHardwareCompositionSupport(p); }
+
+} // namespace windowed
+} // namespace features
+} // namespace lsproxy

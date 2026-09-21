@@ -36,8 +36,8 @@ def tidy(name, dest, pad=22, bottom=None):
 
 
 for name, dest in [('preview_addons.png', 'addons.png'), ('preview_performance.png', 'performance.png'),
-                   ('preview_settings_tab.png', 'settings.png'), ('preview_logs.png', 'logs.png'), ('preview_about.png', 'about.png')]:
-    tidy(name, dest, bottom={'performance.png': 905, 'logs.png': 350}.get(dest))   # these tabs end in a long empty panel
+                   ('preview_settings_tab.png', 'settings.png'), ('preview_features.png', 'features.png'), ('preview_about.png', 'about.png')]:
+    tidy(name, dest, bottom={'performance.png': 905}.get(dest))   # these tabs end in a long empty panel
 
 if nr_bmp and os.path.exists(nr_bmp):
     im = Image.open(nr_bmp).convert('RGB')

@@ -11,7 +11,7 @@ if (-not $Version) {   # default: the release number in version.h
     $Version = (Select-String -Path "$root\manager\sdk\include\lsproxy\version.h" -Pattern 'LSPROXY_VERSION_STRING "([^"]+)"').Matches[0].Groups[1].Value
 }
 if (-not $SkipBuild) {
-    & powershell -NoProfile -File "$PSScriptRoot\build_all.ps1" -Only host,reshade,windowed,nr
+    & powershell -NoProfile -File "$PSScriptRoot\build_all.ps1" -Only host,nr
     if ($LASTEXITCODE -ne 0) { Write-Host 'Some target did not build (Neural Rendering needs the NVIDIA SDK in external\ngx); packaging what is there.' }
 }
 
@@ -27,9 +27,7 @@ Copy-Item "$root\manager\build\Release\Lossless.dll" $stage
 Copy-Item "$root\manager\LP-icon.ico", "$root\manager\LP-icon.png" $stage
 
 $addons = @(
-    @{ Id = 'LSP-NeuralRender'; Dir = "$root\addons\LSP-NeuralRender"; Bin = "$root\addons\LSP-NeuralRender\build\Release"; Files = @('LSP_NeuralRender.dll', 'nvngx.dll_lspnr.dll') },
-    @{ Id = 'LSP-ReShade';      Dir = "$root\addons\LSP-ReShade";      Bin = "$root\addons\LSP-ReShade\build\Release";      Files = @('LSP_ReShade.dll') },
-    @{ Id = 'LSP-Windowed';     Dir = "$root\addons\LSP-Windowed";     Bin = "$root\addons\LSP-Windowed\build\LSP_Windowed\Release"; Files = @('LSP_Windowed.dll') }
+    @{ Id = 'LSP-NeuralRender'; Dir = "$root\addons\LSP-NeuralRender"; Bin = "$root\addons\LSP-NeuralRender\build\Release"; Files = @('LSP_NeuralRender.dll', 'nvngx.dll_lspnr.dll') }
 )
 $included = @(); $skipped = @()
 foreach ($a in $addons) {
@@ -61,7 +59,8 @@ Install (Lossless Scaling 3.2.2.0 was the tested version)
 3. Copy Lossless.dll, LP-icon.ico, LP-icon.png and the addons folder from this zip into that folder.
 4. Start Lossless Scaling. The manager window opens by itself.
 5. DLSS 5 Neural Rendering also needs nvngx_dlssnr.dll next to LosslessScaling.exe. It is not included and this project does not say where to
-   find it. ReShade Input Passthrough and Windowed Mode arrive switched off; turn them on in the manager if you want them.
+   find it. ReShade input passthrough and Windowed mode are built into the manager (its Features tab); they arrive switched off.
+   If you used the old separate ReShade or Windowed addon folders, the manager ignores them; you can remove them.
 
 Updating: close Lossless Scaling and copy the new files over the old ones. Your settings (addons\config.json) carry over.
 After a Lossless Scaling update: it may put its own Lossless.dll back. Delete the stale Lossless_original.dll, rename the new

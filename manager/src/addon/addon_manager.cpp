@@ -7,6 +7,7 @@
 #include "addon_security.h"
 #include "../config/config_manager.h"
 #include "../event/event_system.h"
+#include "../features/features.h"
 #include "../gui/icon_loader.h"
 #include "../host/host_impl.h"
 #include "../log/logger.h"
@@ -85,6 +86,10 @@ void AddonManager::ScanAddons() {
         const fs::path& folder = it->path();
         if (!it->is_directory(ec)) continue;
         if (folder.filename().wstring().front() == L'.') continue;   // .removed and the .install-* staging folders
+        if (features::IsRetiredAddonId(WideToUtf8(folder.filename().wstring()))) {   // now part of the manager; running both would hook twice
+            LOG_INFO("AddonManager", "Ignoring the folder '%s': that addon is built in now", WideToUtf8(folder.filename().wstring()).c_str());
+            continue;
+        }
         AddonInfo info;
         if (Inspect(folder, info)) m_addons.push_back(std::move(info));
     }

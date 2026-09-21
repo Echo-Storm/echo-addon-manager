@@ -105,5 +105,5 @@ Header-only helpers that give a panel the same look as the manager: the palette 
 ## Testing without Lossless Scaling
 
 The manager ships an offscreen renderer (`lsproxy_uipreview`) that draws its own tabs and any addon's panel into a picture without opening a window
-(`tools\ui_preview.ps1`). The three bundled addons each have offline tests in their `tools\` folder, run by `tools\run_addon_tests.ps1` and, for
-Neural Rendering, `tools\run_hosttest_matrix.py`. Copy that approach: load your DLL in a small host that implements `IHost`, render the panel, and check the result.
+(`tools\ui_preview.ps1`). The manager's own tests (`manager\tools`, including a small test addon you can copy) are run by `tools\run_addon_tests.ps1`, and Neural Rendering has its own in
+`addons\LSP-NeuralRender\tools`, run by `tools\run_hosttest_matrix.py`. Copy that approach: load your DLL in a small host that implements `IHost`, render the panel, and check the result.

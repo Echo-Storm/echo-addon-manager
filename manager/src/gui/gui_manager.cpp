@@ -4,6 +4,7 @@
 #include "icon_loader.h"
 #include "../../third_party/stb_image.h"
 #include "tabs/tab_addons.h"
+#include "tabs/tab_features.h"
 #include "tabs/tab_settings.h"
 #include "tabs/tab_logs.h"
 #include "tabs/tab_about.h"
@@ -612,6 +613,10 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID lpParam) {
                 g_selectAddonsTab = false;
                 ImGui::Dummy(ImVec2(0, 5));
                 RenderTabAddons(g_manager);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Features")) {
+                RenderTabFeatures();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Performance")) {

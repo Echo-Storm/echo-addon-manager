@@ -1,13 +1,11 @@
-# Builds everything in the project: the manager (Lossless.dll), the three addons, the offscreen UI preview and the offline
-# test host. Release x64. Nothing is deployed; see deploy.ps1.
-#   powershell -File build_all.ps1 [-Only host,nr,reshade,windowed]
+# Builds everything in the project: the manager (Lossless.dll, with the built-in features), the Neural Rendering addon, the offscreen UI
+# preview and the offline test host. Release x64. Nothing is deployed; see deploy.ps1.
+#   powershell -File build_all.ps1 [-Only host,nr]
 param([string[]]$Only = @())
 $Only = @($Only | ForEach-Object { $_ -split "," } | Where-Object { $_ })   # accepts -Only a,b when started with -File
 $root = Split-Path $PSScriptRoot -Parent   # the repository folder
 $targets = @(
     @{ Name = 'host';     Dir = "$root\manager\build";                 Args = @('--target', 'Lossless', '--target', 'lsproxy_uipreview') },
-    @{ Name = 'reshade';  Dir = "$root\addons\LSP-ReShade\build";            Args = @() },
-    @{ Name = 'windowed'; Dir = "$root\addons\LSP-Windowed\build";           Args = @() },
     @{ Name = 'nr';       Dir = "$root\addons\LSP-NeuralRender\build";                            Args = @() }
 )
 $failed = 0

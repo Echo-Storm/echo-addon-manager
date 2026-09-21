@@ -18,6 +18,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
+# MinHook (BSD-2-Clause): the Windowed feature hooks Windows' display enumeration and DXGI with it. Pinned, like Dear ImGui.
+FetchContent_Declare(
+    minhook
+    GIT_REPOSITORY https://github.com/TsudaKageyu/minhook.git
+    GIT_TAG        v1.3.4
+)
+FetchContent_MakeAvailable(minhook)
+
 # Source files
 set(CORE_SOURCES
     src/core/main.cpp
@@ -33,6 +41,15 @@ set(ADDON_SOURCES
     src/addon/addon_security.cpp
     src/addon/addon_dependency.cpp
     src/addon/addon_install.cpp
+)
+
+set(FEATURE_SOURCES
+    src/features/features.cpp
+    src/features/reshade_passthrough.cpp
+    src/features/reshade_windows.cpp
+    src/features/reshade_input.cpp
+    src/features/windowed_mode.cpp
+    src/features/windowed_dxgi.cpp
 )
 
 set(EVENT_SOURCES
@@ -60,6 +77,7 @@ set(GUI_SOURCES
     src/gui/gui_style.cpp
     src/gui/icon_loader.cpp
     src/gui/tabs/tab_addons.cpp
+    src/gui/tabs/tab_features.cpp
     src/gui/tabs/tab_settings.cpp
     src/gui/tabs/tab_logs.cpp
     src/gui/tabs/tab_logs.cpp
@@ -88,6 +106,7 @@ set(IMGUI_SOURCES
 add_library(Lossless SHARED
     ${CORE_SOURCES}
     ${ADDON_SOURCES}
+    ${FEATURE_SOURCES}
     ${EVENT_SOURCES}
     ${HOST_SOURCES}
     ${CONFIG_SOURCES}
@@ -101,6 +120,7 @@ target_include_directories(Lossless PRIVATE
     ${imgui_SOURCE_DIR}/backends
     ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+    ${minhook_SOURCE_DIR}/include
 )
 
 target_link_libraries(Lossless
@@ -108,6 +128,7 @@ target_link_libraries(Lossless
     dxgi
     d3dcompiler
     bcrypt
+    minhook
 )
 
 # Keep a PDB and a linker map next to the Release DLL so crash backtraces can be resolved.
@@ -127,6 +148,13 @@ add_executable(lsproxy_uipreview EXCLUDE_FROM_ALL
     src/gui/widgets/status_bar.cpp
     src/gui/widgets/empty_state.cpp
     src/gui/tabs/tab_about.cpp
+    src/gui/tabs/tab_features.cpp
+    src/features/features.cpp
+    src/features/reshade_passthrough.cpp
+    src/features/reshade_windows.cpp
+    src/features/reshade_input.cpp
+    src/features/windowed_mode.cpp
+    src/features/windowed_dxgi.cpp
     src/gui/tabs/tab_performance.cpp
     src/gui/tabs/tab_settings.cpp
     src/gui/tabs/tab_logs.cpp
@@ -148,8 +176,9 @@ target_include_directories(lsproxy_uipreview PRIVATE
     ${imgui_SOURCE_DIR}/backends
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include
+    ${minhook_SOURCE_DIR}/include
 )
-target_link_libraries(lsproxy_uipreview d3d11 dxgi d3dcompiler)
+target_link_libraries(lsproxy_uipreview d3d11 dxgi d3dcompiler minhook)
 
 # Offline test of installing addons from a folder / zip / dll: cmake --build . --config Release --target lsproxy_installtest
 add_executable(lsproxy_installtest EXCLUDE_FROM_ALL tools/install_test.cpp src/addon/addon_install.cpp src/host/metrics.cpp src/host/gpu_stats.cpp src/config/settings_backup.cpp src/diag/diagnostics.cpp)
@@ -161,12 +190,20 @@ target_include_directories(lsproxy_installtest PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 add_library(lsproxy_testaddon SHARED EXCLUDE_FROM_ALL tools/test_addon.cpp)
 target_include_directories(lsproxy_testaddon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${imgui_SOURCE_DIR})
 add_executable(lsproxy_coretest EXCLUDE_FROM_ALL tools/core_test.cpp
-    ${ADDON_SOURCES} ${EVENT_SOURCES} ${HOST_SOURCES} ${CONFIG_SOURCES} ${LOG_SOURCES}
+    ${ADDON_SOURCES} ${FEATURE_SOURCES} ${EVENT_SOURCES} ${HOST_SOURCES} ${CONFIG_SOURCES} ${LOG_SOURCES}
     src/gui/icon_loader.cpp src/core/d3d11_hook.cpp src/core/shader_hook.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
-target_include_directories(lsproxy_coretest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
-target_link_libraries(lsproxy_coretest d3d11 dxgi d3dcompiler bcrypt)
+target_include_directories(lsproxy_coretest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
+target_link_libraries(lsproxy_coretest d3d11 dxgi d3dcompiler bcrypt minhook)
 add_dependencies(lsproxy_coretest lsproxy_testaddon)
 add_custom_command(TARGET lsproxy_coretest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:lsproxy_testaddon> $<TARGET_FILE_DIR:lsproxy_coretest>)
+
+# Offline test of the built-in features (ReShade passthrough on a hidden window, the Windowed virtual display through DXGI). Run it twice:
+# once plain, once with the argument "off" (Windowed switched off): cmake --build . --config Release --target lsproxy_featurestest
+add_executable(lsproxy_featurestest EXCLUDE_FROM_ALL tools/features_test.cpp
+    ${FEATURE_SOURCES} src/config/config_manager.cpp src/log/logger.cpp
+    ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
+target_include_directories(lsproxy_featurestest PRIVATE ${imgui_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
+target_link_libraries(lsproxy_featurestest d3d11 dxgi user32 minhook)
 
 install(DIRECTORY sdk/include/lsproxy DESTINATION include)
