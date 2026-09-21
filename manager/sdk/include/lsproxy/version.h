@@ -7,7 +7,7 @@
 #define LSPROXY_PRODUCT_LOGFILE_W L"EchoAddonManager.log"
 
 // The release the user installs. Free-form text: "0.1.0", "0.2.0-beta.1".
-#define LSPROXY_VERSION_STRING "0.4.0"
+#define LSPROXY_VERSION_STRING "0.4.1"
 
 // The addon API: what an addon can rely on. This is what IHost::GetHostVersion() reports and what an addon's
 // "min_host_version" is compared with (0x00MMmmpp). Bump the minor number when calls are added to IHost (always

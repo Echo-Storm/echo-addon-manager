@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 (2026-09-21)
 
 - All nine collapsible sections of the panel start closed (four used to open by themselves). The offline test host takes `sectionsOpen=0` to render the panel as it looks on first start, and the
   scenario runner checks that no section is set to open by default.
