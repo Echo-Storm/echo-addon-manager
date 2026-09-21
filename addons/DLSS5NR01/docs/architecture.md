@@ -115,6 +115,16 @@ motion vectors, the model, then `delta = model - proxy` into the shared slot. Th
 records timestamps and maps them to QPC with `GetClockCalibration`, so the panel can show how
 long after the CPU submit the GPU actually started and finished the run.
 
+### Compatibility self-test (`src/selftest/nr_selftest.cpp`, `src/addon/requirements.cpp`)
+
+`nr_selftest.exe` answers one question in its own process: does this model file work on this graphics card? It follows the engine's path (a D3D12 device on the
+NVIDIA card, the driver's NGX core, the forwarder, the model's init, `CreateFeature(18)` at 1280x720, four evaluates of a synthetic picture, and a check that the
+picture changed) and prints `SELFTEST <code> <KEY> <words>` with the same code as its exit code (0 pass; 10 to 20 for what went wrong, listed in the file's header).
+The addon starts it with `req::RunSelfTest`: the output goes to a temporary file, the program runs with no window in a job that ends it if Lossless Scaling ends
+first, it is stopped after 90 seconds, and `req::ParseSelfTest` reads the last `SELFTEST` line (the NGX core may still print after it) and insists that the exit
+code agrees. A missing verdict with an exit code of `0xC0000000` or above is reported as a crash. Running it out of process is the point: a model that misbehaves on
+some graphics card cannot take Lossless Scaling down with it.
+
 ### Forwarder (`src/forwarder/nr_forwarder.cpp`)
 
 `nvngx.dll_dlss5nr01.dll` is the only module that calls the snippet. The snippet checks the module

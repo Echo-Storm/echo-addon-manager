@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
 
     // ---- all in place
     Report r = Evaluate(Good());
-    Check("all in place: overall Ok, five rows in order", r.overall == Level::Ok && r.rows.size() == 5 && r.rows[0].label == "Graphics card" && r.rows[4].label == "Engine");
+    Check("all in place: overall Ok, six rows in order", r.overall == Level::Ok && r.rows.size() == 6 && r.rows[0].label == "Graphics card" && r.rows[5].label == "Engine");
     Check("all in place: the tested model is named as such", Has(Find(r, "Model file")->value, "310.8") && Has(Find(r, "Model file")->value, "tested") && Find(r, "Model file")->level == Level::Ok);
     Check("all in place: the driver is shown as a driver number", Has(Find(r, "NVIDIA driver")->value, "616.92"));
     Check("all in place: the card shows its memory", Has(Find(r, "Graphics card")->value, "12 GB") && Has(Find(r, "Graphics card")->value, "RTX 4070"));
@@ -119,6 +119,61 @@ int main(int argc, char** argv) {
     Check("plain: model init",Has(PlainEngineError("snippet Init_Ext: X"), "refused to start"));
     Check("plain: device", Has(PlainEngineError("D3D12CreateDevice 0x887a0004"), "Direct3D 12"));
     Check("plain: unknown messages are shown as they are", PlainEngineError("something new") == "something new");
+
+    // ---- the compatibility self-test: reading its verdict
+    {
+        SelfTestResult s = ParseSelfTest("graphics card: X\nmodel probe: 0xf\nSELFTEST 0 PASS the model works on X\n[ngx] a log line printed after the verdict\n", 0, false);
+        Check("self-test: a pass is read from the last SELFTEST line even when the NGX core logs after it", s.passed && s.code == 0 && s.key == "PASS" && Has(s.text, "works on X"));
+        s = ParseSelfTest("SELFTEST 17 NOT_SUPPORTED this model file cannot create its feature on your graphics card\nnoise\n", 17, false);
+        Check("self-test: a failure keeps its code, key and words", !s.passed && s.code == 17 && s.key == "NOT_SUPPORTED" && Has(s.text, "cannot create its feature"));
+        s = ParseSelfTest("SELFTEST 0 PASS fine\n", 5, false);
+        Check("self-test: a verdict the exit code contradicts is not believed", !s.passed && s.key == "UNEXPECTED");
+        s = ParseSelfTest("loading...\n", 0xC0000005ul, false);
+        Check("self-test: no verdict and a crash code: reported as a crash, with the code", !s.passed && s.key == "CRASH" && Has(s.text, "C0000005"));
+        s = ParseSelfTest("loading...\n", 0, false);
+        Check("self-test: no verdict at all is not a pass", !s.passed && s.key == "UNEXPECTED");
+        s = ParseSelfTest("loading...\n", 1, true);
+        Check("self-test: ended for taking too long", !s.passed && s.key == "TIMEOUT" && Has(s.text, "too long"));
+        s = ParseSelfTest("", 0, false);
+        Check("self-test: no output at all is not a pass", !s.passed);
+    }
+
+    // ---- running a program (cmd.exe stands in for nr_selftest)
+    {
+        ProcessResult p = RunProcess(L"cmd.exe /c \"echo SELFTEST 0 PASS ok & exit 0\"", 15000);
+        Check("process: a program that prints and exits 0", p.started && !p.timedOut && p.exitCode == 0 && Has(p.output, "SELFTEST 0 PASS ok"));
+        p = RunProcess(L"cmd.exe /c \"echo hello & exit 3\"", 15000);
+        Check("process: its exit code is returned", p.started && p.exitCode == 3 && Has(p.output, "hello"));
+        const DWORD t0 = GetTickCount();
+        p = RunProcess(L"cmd.exe /c \"ping -n 30 127.0.0.1 >nul\"", 800);
+        Check("process: one still running after the time allowed is ended and reported", p.started && p.timedOut && GetTickCount() - t0 < 8000, std::to_string(GetTickCount() - t0) + " ms");
+        p = RunProcess(L"\"C:\\definitely\\not\\here\\nothing.exe\" --x", 2000);
+        Check("process: a program that does not exist is reported as not started", !p.started && p.startError != 0);
+        SelfTestResult none = RunSelfTest(L"C:\\definitely\\not\\here", L"C:\\x\\nvngx_dlssnr.dll", L"C:\\x", 2000);
+        Check("self-test: no nr_selftest.exe in the addon folder: NOT_FOUND, in words", !none.passed && none.key == "NOT_FOUND" && Has(none.text, "nr_selftest.exe"));
+    }
+
+    // ---- the self-test's row in the report
+    {
+        Inputs g = Good();
+        Report rr = Evaluate(g);
+        Check("self-test row: six rows now, the compatibility test before the engine", rr.rows.size() == 6 && rr.rows[4].label == "Compatibility test" && rr.rows[5].label == "Engine");
+        Check("self-test row: not run yet is not a problem and says how to run it", Find(rr, "Compatibility test")->level == Level::Ok && Has(Find(rr, "Compatibility test")->value, "not run yet") && Has(Find(rr, "Compatibility test")->value, "Test compatibility"));
+        g.selfTest = SelfTestState::Running; rr = Evaluate(g);
+        Check("self-test row: while it runs it is a note, not an error", Find(rr, "Compatibility test")->level == Level::Note && rr.overall == Level::Note && !Find(rr, "Compatibility test")->hint.empty());
+        g.selfTest = SelfTestState::Passed; g.selfTestKey = "PASS"; g.selfTestText = "the model works on X"; rr = Evaluate(g);
+        Check("self-test row: passed is OK with its words", Find(rr, "Compatibility test")->level == Level::Ok && Has(Find(rr, "Compatibility test")->value, "works on X") && rr.overall == Level::Ok);
+        g.selfTest = SelfTestState::Failed; g.selfTestKey = "NOT_SUPPORTED"; g.selfTestText = "this model file cannot create its feature on your graphics card"; rr = Evaluate(g);
+        Check("self-test row: a failure is Missing, makes the whole thing Missing, and says what to try",
+              Find(rr, "Compatibility test")->level == Level::Missing && rr.overall == Level::Missing && Has(Find(rr, "Compatibility test")->hint, "another build") && Has(rr.headline, "Compatibility test"));
+        for (const char* key : { "MODEL_LOAD", "HELPER", "NGX_CORE", "D3D12", "NO_GPU", "FLOAT_SLOT", "MODEL_INIT", "FEATURE", "EVALUATE", "UNCHANGED", "CRASH", "TIMEOUT", "NOT_FOUND", "UNEXPECTED", "SOMETHING_NEW" }) {
+            g.selfTestKey = key; rr = Evaluate(g);
+            if (Find(rr, "Compatibility test")->hint.empty()) { Check("self-test row: every failure key has a hint", false, key); break; }
+        }
+        Check("self-test row: every failure key has a hint", true);
+        Inputs noModel = Good(); noModel.modelFound = false; rr = Evaluate(noModel);
+        Check("self-test row: with no model file it says it needs one first", Has(Find(rr, "Compatibility test")->value, "model file"));
+    }
 
     // ---- placing a picked model file (throw-away folders in %TEMP%)
     {
@@ -183,7 +238,7 @@ int main(int argc, char** argv) {
     printf("---- this machine\n");
     for (const auto& row : rr.rows) printf("  [%s] %s: %s%s%s\n", row.level == Level::Ok ? "ok" : (row.level == Level::Note ? "note" : "MISSING"), row.label.c_str(), row.value.c_str(), row.hint.empty() ? "" : "\n        -> ", row.hint.c_str());
     printf("  headline: %s\n", rr.headline.c_str());
-    Check("this machine: five rows, each with a label and a value", rr.rows.size() == 5 && !rr.rows[0].value.empty() && !rr.rows[4].value.empty());
+    Check("this machine: six rows, each with a label and a value", rr.rows.size() == 6 && !rr.rows[0].value.empty() && !rr.rows[5].value.empty());
     Check("this machine: a row that is not Ok always has a hint (the engine row may just say it has not started)", [&] { for (const auto& row : rr.rows) if (row.level != Level::Ok && row.hint.empty()) return false; return true; }());
     {   // the helper is looked for by name in the addon folder: found where it is, not found in an empty folder
         wchar_t tmp[MAX_PATH]; GetTempPathW(MAX_PATH, tmp);
@@ -193,6 +248,19 @@ int main(int argc, char** argv) {
         RemoveDirectoryW(empty.c_str());
         const bool onDisk = GetFileAttributesW((dir + L"\\nvngx.dll_dlss5nr01.dll").c_str()) != INVALID_FILE_ATTRIBUTES;
         Check("this machine: the helper DLL is found where it is and not in an empty folder", !inEmpty && real.helperFound == onDisk);
+    }
+
+    // the real thing, when this machine has a model file and the test program is beside this one
+    if (real.modelFound && Exists(dir + L"\\nr_selftest.exe")) {
+        std::wstring lsFolder = model;
+        lsFolder.resize(lsFolder.find_last_of(L"\\/"));
+        const SelfTestResult st = RunSelfTest(dir, model, lsFolder, 120000);
+        printf("  the real self-test: code %d %s: %s\n", st.code, st.key.c_str(), st.text.c_str());
+        Check("this machine: the real self-test returns a verdict", !st.key.empty() && !st.text.empty());
+        const bool testedBuild = VersionShort(real.modelVersion) == kTestedModelVersion && real.modelSize == kTestedModelSize;
+        Check("this machine: ...and passes with the build this addon was tested with", !testedBuild || st.passed);
+    } else {
+        printf("  (the real self-test is skipped: no model file here, or no nr_selftest.exe beside this program)\n");
     }
 
     printf("\n%s (%d failed)\n", g_failed ? "REQUIREMENTS TEST FAILED" : "REQUIREMENTS TEST PASSED", g_failed);

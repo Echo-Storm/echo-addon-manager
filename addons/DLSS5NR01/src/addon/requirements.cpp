@@ -159,6 +159,35 @@ Report Evaluate(const Inputs& in) {
     else rep.rows.push_back(MakeRow("Helper DLL", Level::Missing, "nvngx.dll_dlss5nr01.dll is missing from the addon folder",
                                     "The addon folder is incomplete: copy nvngx.dll_dlss5nr01.dll from the release zip next to DLSS5NR01.dll."));
 
+    // Compatibility test
+    switch (in.selfTest) {
+    case SelfTestState::NotRun:
+        rep.rows.push_back(MakeRow("Compatibility test", Level::Ok, in.modelFound ? "not run yet: press Test compatibility to try the model on this graphics card" : "needs the model file first"));
+        break;
+    case SelfTestState::Running:
+        rep.rows.push_back(MakeRow("Compatibility test", Level::Note, "running: it loads the model and tries it on the graphics card (a few seconds)", "Wait for it to finish; the result appears here."));
+        break;
+    case SelfTestState::Passed:
+        rep.rows.push_back(MakeRow("Compatibility test", Level::Ok, in.selfTestText.empty() ? std::string("passed") : in.selfTestText));
+        break;
+    case SelfTestState::Failed: {
+        const std::string& k = in.selfTestKey;
+        std::string hint;
+        if (k == "NOT_SUPPORTED") hint = "This model file cannot run on your graphics card. Try another build of it: on RTX 20, 30 and 40 cards only a build made for them works.";
+        else if (k == "MODEL_LOAD") hint = "Check the Model file row above, then test again.";
+        else if (k == "HELPER" || k == "NOT_FOUND") hint = "The addon folder is incomplete: copy nvngx.dll_dlss5nr01.dll and nr_selftest.exe from the release zip next to DLSS5NR01.dll.";
+        else if (k == "NGX_CORE") hint = "Install or repair the NVIDIA graphics driver (a clean install).";
+        else if (k == "D3D12" || k == "NO_GPU") hint = "DLSS 5 Neural Rendering needs an NVIDIA RTX graphics card with Direct3D 12.";
+        else if (k == "FLOAT_SLOT" || k == "MODEL_INIT" || k == "FEATURE" || k == "EVALUATE" || k == "UNCHANGED")
+            hint = "This model file did not work on this graphics card. If you have another build of it, try that one; the log has the details.";
+        else if (k == "CRASH" || k == "UNEXPECTED" || k == "TIMEOUT")
+            hint = "The test did not finish normally. Try again; if it repeats, the model file or the graphics driver is the likely cause. The log has the details.";
+        else hint = "The log (logs\\DLSS5NR01.log in the Lossless Scaling folder) has the details.";
+        rep.rows.push_back(MakeRow("Compatibility test", Level::Missing, in.selfTestText.empty() ? std::string("failed") : in.selfTestText, hint));
+        break;
+    }
+    }
+
     // Engine
     bool problemAbove = false;
     for (const auto& r : rep.rows) if (r.level == Level::Missing) problemAbove = true;
@@ -184,6 +213,141 @@ Report Evaluate(const Inputs& in) {
     }
     if (rep.overall == Level::Ok) rep.headline = "Everything Neural Rendering needs is in place.";
     return rep;
+}
+
+// ---- the compatibility self-test
+
+ProcessResult RunProcess(const std::wstring& commandLine, unsigned timeoutMs) {
+    ProcessResult r;
+    wchar_t tempDir[MAX_PATH] = {}, tempFile[MAX_PATH] = {};
+    GetTempPathW(MAX_PATH, tempDir);
+    GetTempFileNameW(tempDir, L"nrs", 0, tempFile);
+
+    // What the program prints goes to a temporary file (a pipe would have to be drained while waiting, and a full pipe would block it)
+    SECURITY_ATTRIBUTES inherit = { sizeof inherit, nullptr, TRUE };
+    HANDLE out = CreateFileW(tempFile, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, &inherit, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+    HANDLE nul = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &inherit, OPEN_EXISTING, 0, nullptr);
+    if (out == INVALID_HANDLE_VALUE || nul == INVALID_HANDLE_VALUE) {
+        r.startError = GetLastError();
+        if (out != INVALID_HANDLE_VALUE) CloseHandle(out);
+        if (nul != INVALID_HANDLE_VALUE) CloseHandle(nul);
+        DeleteFileW(tempFile);
+        return r;
+    }
+
+    // A job that ends the program if this process ends first, so a test never outlives Lossless Scaling
+    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {};
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof limits);
+    }
+
+    STARTUPINFOW si = {};
+    si.cb = sizeof si;
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = nul; si.hStdOutput = out; si.hStdError = out;
+    PROCESS_INFORMATION pi = {};
+    std::wstring cmd = commandLine;   // CreateProcess may write into it
+    if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {
+        if (job) AssignProcessToJobObject(job, pi.hProcess);   // without it (already in a job that forbids nesting) the program just is not ended with us
+        ResumeThread(pi.hThread);
+        r.started = true;
+        if (WaitForSingleObject(pi.hProcess, timeoutMs) == WAIT_TIMEOUT) {
+            r.timedOut = true;
+            if (job) TerminateJobObject(job, 1); else TerminateProcess(pi.hProcess, 1);
+            WaitForSingleObject(pi.hProcess, 5000);
+        }
+        DWORD code = 0;
+        GetExitCodeProcess(pi.hProcess, &code);
+        r.exitCode = code;
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    } else {
+        r.startError = GetLastError();
+    }
+    if (job) CloseHandle(job);   // ends anything the program left running
+    CloseHandle(out);
+    CloseHandle(nul);
+
+    // what it printed, the last 256 KB of it
+    HANDLE in = CreateFileW(tempFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (in != INVALID_HANDLE_VALUE) {
+        LARGE_INTEGER size = {};
+        GetFileSizeEx(in, &size);
+        const LONGLONG keep = 256 * 1024;
+        if (size.QuadPart > keep) { LARGE_INTEGER at; at.QuadPart = size.QuadPart - keep; SetFilePointerEx(in, at, nullptr, FILE_BEGIN); }
+        r.output.resize(static_cast<size_t>(size.QuadPart > keep ? keep : size.QuadPart));
+        DWORD got = 0;
+        if (!r.output.empty()) ReadFile(in, r.output.data(), static_cast<DWORD>(r.output.size()), &got, nullptr);
+        r.output.resize(got);
+        CloseHandle(in);
+    }
+    DeleteFileW(tempFile);
+    return r;
+}
+
+SelfTestResult ParseSelfTest(const std::string& output, unsigned long exitCode, bool timedOut) {
+    SelfTestResult r;
+    if (timedOut) {
+        r.key = "TIMEOUT";
+        r.text = "the test took too long and was stopped";
+        return r;
+    }
+    // the verdict is the last line that starts with SELFTEST: the NGX core may still print after it
+    std::string verdict;
+    for (size_t pos = 0; pos < output.size();) {
+        size_t end = output.find('\n', pos);
+        if (end == std::string::npos) end = output.size();
+        std::string line = output.substr(pos, end - pos);
+        while (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.rfind("SELFTEST ", 0) == 0) verdict = line;
+        pos = end + 1;
+    }
+    char buf[64];
+    if (verdict.empty()) {
+        snprintf(buf, sizeof buf, "0x%08lX", exitCode);
+        if (exitCode >= 0xC0000000ul) { r.key = "CRASH"; r.text = std::string("the test program crashed (exit code ") + buf + "), so the model or the graphics driver failed when it was tried"; }
+        else { r.key = "UNEXPECTED"; r.text = std::string("the test program ended without a result (exit code ") + buf + ")"; }
+        return r;
+    }
+    int code = -1;
+    char key[64] = {};
+    int consumed = 0;
+    if (sscanf(verdict.c_str() + 9, "%d %63s%n", &code, key, &consumed) < 2) {
+        r.key = "UNEXPECTED";
+        r.text = "the test program's result could not be read";
+        return r;
+    }
+    if (static_cast<unsigned long>(code) != exitCode) {
+        r.key = "UNEXPECTED";
+        r.text = "the test program's result and its exit code do not agree";
+        return r;
+    }
+    r.code = code;
+    r.key = key;
+    const size_t textAt = 9 + static_cast<size_t>(consumed);
+    r.text = textAt < verdict.size() ? verdict.substr(textAt) : std::string();
+    while (!r.text.empty() && r.text.front() == ' ') r.text.erase(0, 1);
+    r.passed = code == 0 && r.key == "PASS";
+    return r;
+}
+
+SelfTestResult RunSelfTest(const std::wstring& addonDir, const std::wstring& modelPath, const std::wstring& lsDir, unsigned timeoutMs) {
+    SelfTestResult r;
+    const std::wstring exe = addonDir + L"\\nr_selftest.exe";
+    if (GetFileAttributesW(exe.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        r.key = "NOT_FOUND";
+        r.text = "the compatibility test program (nr_selftest.exe) is missing from the addon folder";
+        return r;
+    }
+    const ProcessResult p = RunProcess(L"\"" + exe + L"\" --model \"" + modelPath + L"\" --lsdir \"" + lsDir + L"\"", timeoutMs);
+    if (!p.started) {
+        r.key = "UNEXPECTED";
+        r.text = "the test program could not be started (error " + std::to_string(p.startError) + ")";
+        return r;
+    }
+    return ParseSelfTest(p.output, p.exitCode, p.timedOut);
 }
 
 namespace {

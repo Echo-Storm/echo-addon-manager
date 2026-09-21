@@ -327,6 +327,31 @@ static void ScanRequirements() {
     const std::wstring model = ModelPathNow(), addonDir = g_addonDir;
     std::thread([model, addonDir] { ScanRequirementsGuarded(model, addonDir); g_reqBusy = false; }).detach();
 }
+// The compatibility self-test: nr_selftest.exe loads the model in its own process and tries it once on the graphics card; what it says appears as a row.
+// A detached thread tracked by a flag (see above); the test program itself is in a job that ends it if Lossless Scaling ends first.
+static std::atomic<bool> g_selfTestBusy{ false };
+static req::SelfTestState g_selfTestState = req::SelfTestState::NotRun;   // these three are guarded by g_reqMu
+static std::string g_selfTestKey, g_selfTestText;
+static void SelfTestBody() {
+    { std::lock_guard<std::mutex> lk(g_reqMu); g_selfTestState = req::SelfTestState::Running; g_selfTestKey.clear(); g_selfTestText.clear(); }
+    const req::SelfTestResult r = req::RunSelfTest(g_addonDir, ModelPathNow(), g_lsDir);
+    Log("compatibility test: %s (%s): %s", r.passed ? "passed" : "FAILED", r.key.c_str(), r.text.c_str());
+    std::lock_guard<std::mutex> lk(g_reqMu);
+    g_selfTestState = r.passed ? req::SelfTestState::Passed : req::SelfTestState::Failed;
+    g_selfTestKey = r.key; g_selfTestText = r.text;
+}
+static void SelfTestGuarded() {   // no objects here: __try cannot unwind them
+    __try { SelfTestBody(); }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        Log("compatibility test crashed inside the addon (0x%08lx)", GetExceptionCode());
+        g_selfTestState = req::SelfTestState::Failed;
+    }
+}
+static void RunSelfTestAsync() {
+    if (g_selfTestBusy.exchange(true)) return;
+    std::thread([] { SelfTestGuarded(); g_selfTestBusy = false; }).detach();
+}
+
 // "Browse for the model file": the user picks their own copy of nvngx_dlssnr.dll and it is copied into the Lossless Scaling folder (req::PlaceModel).
 // The file dialog is modal and blocks its thread, so it runs on a worker thread, never on the manager's UI thread.
 static std::atomic<bool> g_placeBusy{ false };
@@ -347,7 +372,7 @@ static void PlaceModelBody() {
     const req::PlaceResult r = req::PlaceModel(picked, g_lsDir, g_lsDir + L"\\backups");
     Log("place model: %s (%s)", r.message.c_str(), r.ok ? "ok" : "refused");
     { std::lock_guard<std::mutex> lk(g_reqMu); g_placeMsg = r.message; g_placeOk = r.ok; }
-    if (r.ok) ScanRequirements();
+    if (r.ok) { ScanRequirements(); RunSelfTestAsync(); }   // a new file: see at once whether it works on this graphics card
 }
 static void PlaceModelGuarded() {   // no objects here: __try cannot unwind them
     __try { PlaceModelBody(); }
@@ -358,7 +383,7 @@ static void BrowseAndPlace() {
     std::thread([] { PlaceModelGuarded(); g_placeBusy = false; }).detach();
 }
 static req::Report RequirementsNow(bool engineFailed, bool engineReady, bool engineRunning, const char* engineError) {
-    req::Inputs in; { std::lock_guard<std::mutex> lk(g_reqMu); in = g_reqIn; }
+    req::Inputs in; { std::lock_guard<std::mutex> lk(g_reqMu); in = g_reqIn; in.selfTest = g_selfTestState; in.selfTestKey = g_selfTestKey; in.selfTestText = g_selfTestText; }
     in.engine = engineFailed ? req::EngineState::Failed : (engineRunning ? req::EngineState::Running : (engineReady ? req::EngineState::Ready : req::EngineState::NotStarted));
     if (engineFailed && engineError) in.engineError = engineError;
     return req::Evaluate(in);
@@ -760,6 +785,12 @@ LSPROXY_EXPORT void AddonRenderSettings() {
             if (ImGui::SmallButton(placing ? "Waiting for the file dialog..." : "Browse for the model file...")) BrowseAndPlace();
             if (placing) ImGui::EndDisabled();
             Tip("Pick your own copy of nvngx_dlssnr.dll: it is copied into the Lossless Scaling folder. A file already there is moved to the backups folder, never deleted. Nothing is downloaded.");
+            ImGui::SameLine();
+            const bool testing = g_selfTestBusy.load();
+            if (testing) ImGui::BeginDisabled();
+            if (ImGui::SmallButton(testing ? "Testing..." : "Test compatibility")) RunSelfTestAsync();
+            if (testing) ImGui::EndDisabled();
+            Tip("Runs the model file once, in a separate program, on your graphics card, and says whether it works there. It uses the graphics card for a few seconds, so do it before you start a game. It cannot take Lossless Scaling down if the model misbehaves.");
             { std::string msg; bool ok; { std::lock_guard<std::mutex> lk(g_reqMu); msg = g_placeMsg; ok = g_placeOk; }
               if (!msg.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? lsp::theme::V(lsp::theme::kAccent) : lsp::theme::V(lsp::theme::kWarn)); ImGui::TextWrapped("%s", msg.c_str()); ImGui::PopStyleColor(); } }
         }
@@ -1105,6 +1136,7 @@ static void AddonInitializeBody(IHost* host, ImGuiContext* ctx, void* allocFunc,
     InstallCrashDiagnostics();
     LoadConfig(); ApplyTapRoles();
     ScanRequirements();
+    if (CfgGet("selfTestOnStart", "0") == "1") RunSelfTestAsync();   // a diagnostic switch (config.json): the offline test host uses it to run the self-test without a click
     host->SubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_READY, OnDeviceEvent, nullptr);
     host->SubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent, nullptr);
     Log("DLSS5NR01 initialised (host version 0x%x), addon dir %ls", host->GetHostVersion(), g_addonDir.c_str());

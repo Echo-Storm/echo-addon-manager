@@ -24,6 +24,16 @@ constexpr uint64_t kSmallestPlausibleModel = 20ull * 1024 * 1024;   // the real 
 
 enum class EngineState { NotStarted, Ready, Running, Failed };
 
+// The compatibility self-test (nr_selftest.exe): does the model file create its feature on this graphics card, and change a test picture?
+enum class SelfTestState { NotRun, Running, Passed, Failed };
+
+struct SelfTestResult {
+    bool passed = false;
+    int code = -1;               // nr_selftest's exit code: 0 passed, 10..20 what went wrong (see nr_selftest.cpp)
+    std::string key;             // its short name (MODEL_LOAD, NOT_SUPPORTED, ...), or NOT_FOUND, CRASH, TIMEOUT, UNEXPECTED from here
+    std::string text;            // what it says, in words
+};
+
 struct Inputs {
     bool nvidiaFound = false;                // an NVIDIA hardware adapter exists
     std::string gpuName;
@@ -39,6 +49,9 @@ struct Inputs {
     std::string modelVersion;                // its file version, "310.8.0.0" (or "310,8,0,0")
 
     bool helperFound = false;                // nvngx.dll_dlss5nr01.dll beside the addon
+
+    SelfTestState selfTest = SelfTestState::NotRun;
+    std::string selfTestKey, selfTestText;   // what the last run said (see SelfTestResult)
 
     EngineState engine = EngineState::NotStarted;
     std::string engineError;                 // the engine's own message when it failed
@@ -60,6 +73,25 @@ std::string PlainEngineError(const std::string& raw);               // the engin
 // Looks at this machine. `modelPath` is where the model is expected, `addonDir` the folder holding the helper DLL. The engine fields are
 // left at their defaults for the caller to fill in. Reads file headers only: it does not load the model, and takes well under a second.
 Inputs Gather(const std::wstring& modelPath, const std::wstring& addonDir);
+
+// ---- the compatibility self-test: running it and reading what it says
+struct ProcessResult {
+    bool started = false;        // the program could be started
+    bool timedOut = false;       // it was still running after the time allowed, and was ended
+    unsigned long exitCode = 0;
+    unsigned long startError = 0;
+    std::string output;          // everything it printed
+};
+// Runs a command line with no window, waits up to `timeoutMs`, ends it if it is still running, and returns what it printed and how it ended.
+// The program is put in a job that ends it if this process ends first, so a test program never outlives Lossless Scaling.
+ProcessResult RunProcess(const std::wstring& commandLine, unsigned timeoutMs);
+
+// Reads nr_selftest's output: the last line starting with "SELFTEST" is its verdict (the NGX core may print after it), and its exit code has to
+// agree. A program that ended without a verdict crashed, or was ended for taking too long.
+SelfTestResult ParseSelfTest(const std::string& output, unsigned long exitCode, bool timedOut);
+
+// Runs <addonDir>\nr_selftest.exe on `modelPath` and returns the verdict. Takes seconds: the model is loaded and run once. Call from a worker thread.
+SelfTestResult RunSelfTest(const std::wstring& addonDir, const std::wstring& modelPath, const std::wstring& lsDir, unsigned timeoutMs = 90000);
 
 struct PlaceResult {
     bool ok = false;

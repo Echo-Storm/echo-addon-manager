@@ -40,6 +40,12 @@ target_include_directories(nr_harness PRIVATE src ${NGX_DIR}/include)
 target_link_libraries(nr_harness PRIVATE ${NGX_LIB} d3d12 dxgi user32 gdi32 advapi32 shlwapi ole32 windowscodecs)
 add_dependencies(nr_harness nr_forwarder)
 
+# ---- the compatibility self-test: does this model file work on this graphics card? Started by the addon in its own process ----
+add_executable(nr_selftest src/selftest/nr_selftest.cpp)
+target_include_directories(nr_selftest PRIVATE src ${NGX_DIR}/include)
+target_link_libraries(nr_selftest PRIVATE ${NGX_LIB} d3d12 dxgi user32 advapi32 shlwapi ole32)
+add_dependencies(nr_selftest nr_forwarder)
+
 # ---- the addon ----
 add_library(DLSS5NR01 SHARED
     src/addon/addon.cpp src/addon/bridge.cpp src/addon/frame_tap.cpp src/addon/dispatch_hook.cpp

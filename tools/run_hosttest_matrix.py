@@ -173,6 +173,11 @@ def scenario_none(ctx, res, text, frame):
     pass
 
 
+def scenario_selftest(ctx, res, text, frame):
+    # the addon's own 'Test compatibility' path (started at start-up by the selfTestOnStart switch): nr_selftest.exe runs the model in its own process
+    res.check('the addon ran the compatibility test and it passed with this model', 'compatibility test: passed (PASS)' in text)
+
+
 # name, config overrides, checker
 SCENARIOS = [
     ('base', [], scenario_base),
@@ -186,9 +191,35 @@ SCENARIOS = [
     ('smooth_passes3', ['deltaSmooth=0.5', 'passes=3'], scenario_smooth_passes),
     ('ghost_off', ['flowsplit=1', 'ghostGuard=0'], scenario_ghost_off),
     ('ghost_on', ['flowsplit=1', 'ghostGuard=1'], scenario_ghost_on),
+    ('selftest', ['selfTestOnStart=1'], scenario_selftest),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),
 ]
+
+
+def selftest_exe_checks(nr_dir, snippet):
+    """Runs nr_selftest.exe directly: the real model must pass (exit 0), and each way of being unusable must end with its own code, never a crash."""
+    exe = os.path.join(nr_dir, 'nr_selftest.exe')
+    print('== nr_selftest.exe')
+    if not os.path.exists(exe):
+        print('  FAIL  nr_selftest.exe is not built'); return 1
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix='nr_selftest_')
+    garbage = os.path.join(tmp, 'garbage.dll'); open(garbage, 'wb').write(b'MZ' + os.urandom(25 * 1024 * 1024))
+    ls = os.path.dirname(snippet)
+    cases = [
+        ('the real model passes', [exe, '--model', snippet, '--lsdir', ls], 0),
+        ('a missing model file is MODEL_LOAD (14)', [exe, '--model', os.path.join(tmp, 'absent.dll')], 14),
+        ('25 MB of random bytes is MODEL_LOAD (14)', [exe, '--model', garbage], 14),
+        ('no NVIDIA card with that LUID is NO_GPU (10)', [exe, '--luid', '7f:1234', '--model', snippet], 10),
+    ]
+    bad = 0
+    for what, cmd, want in cases:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        lines = [l for l in p.stdout.splitlines() if l.startswith('SELFTEST ')]
+        ok = p.returncode == want and bool(lines) and lines[-1].split()[1] == str(want)
+        print('  %s  %s  (exit %s)' % ('PASS' if ok else 'FAIL', what, p.returncode)); bad += 0 if ok else 1
+    return 1 if bad else 0
 
 
 def main():
@@ -222,6 +253,8 @@ def main():
         for ln in res.lines:
             print('  ' + ln)
         failed += 0 if res.ok else 1
+    if not only:
+        failed += selftest_exe_checks(a.nr, a.snippet)
     print('\n%s' % ('ALL SCENARIOS PASSED' if not failed else '%d SCENARIO(S) FAILED' % failed))
     print('logs and frames in', a.out)
     return 1 if failed else 0

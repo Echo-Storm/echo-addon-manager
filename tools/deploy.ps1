@@ -13,7 +13,7 @@ param(
 $root = Split-Path $PSScriptRoot -Parent   # the repository folder
 $items = @{
     host     = @{ Src = "$root\manager\build\Release\Lossless.dll"; Dst = "$LsDir\Lossless.dll"; Extra = @("$root\manager\LP-icon.ico", "$root\manager\LP-icon.png") }
-    nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_dlss5nr01.dll", "$root\addons\DLSS5NR01\addon.json") }
+    nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_dlss5nr01.dll", "$root\addons\DLSS5NR01\build\Release\nr_selftest.exe", "$root\addons\DLSS5NR01\addon.json") }
 }
 if (-not (Test-Path "$LsDir\Lossless.dll")) { Write-Host "No Lossless Scaling folder at $LsDir (pass -LsDir or set LS_DIR)."; exit 4 }
 if (Get-Process $Game -ErrorAction SilentlyContinue) { Write-Host "$Game is running: not touching the Lossless Scaling folder. Close the game first."; exit 2 }

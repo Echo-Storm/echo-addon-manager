@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- New **compatibility self-test**: `nr_selftest.exe` (in the addon folder) loads the model in its own process, creates feature 18 on the NVIDIA card at 1280x720, evaluates a
+  synthetic picture and checks it changed; it prints `SELFTEST <code> <KEY> <words>` and exits with the same code (0 pass, 10 to 20 for what went wrong). The addon's
+  **Test compatibility** button runs it (and it runs by itself after **Browse for the model file...**) and shows a *Compatibility test* row. `req::RunProcess`,
+  `req::ParseSelfTest` and `req::RunSelfTest` do the launching and reading, with tests (`nr_reqtest`, the `selftest` scenario and direct `nr_selftest.exe` checks in
+  the scenario runner). `selfTestOnStart=1` in the addon's settings runs it at start-up (a diagnostic switch used by the offline test host).
+
 ## 0.2.2 (2026-09-21)
 
 - **Fixed: a crash when Lossless Scaling exits without shutting the addon down.** The model start-up thread (and the requirements scan and file-dialog threads added below)

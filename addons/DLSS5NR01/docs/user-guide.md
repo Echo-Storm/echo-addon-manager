@@ -27,7 +27,7 @@ Scaling is about to show.
 ## Install
 
 1. Extract the release zip. Copy `addons\DLSS5NR01` into the Lossless Scaling folder, so the
-   folder holds `DLSS5NR01.dll`, `nvngx.dll_dlss5nr01.dll` and `addon.json`.
+   folder holds `DLSS5NR01.dll`, `nvngx.dll_dlss5nr01.dll`, `nr_selftest.exe` and `addon.json`.
 2. Put `nvngx_dlssnr.dll` next to `LosslessScaling.exe`. If you keep it elsewhere, set its full
    path under *Advanced > Snippet path* later.
 3. Start Lossless Scaling, open Echo Addon Manager and enable *Neural Render
@@ -50,6 +50,13 @@ what stops Neural Rendering from running. Nothing is loaded or downloaded to do 
   for you. A model file already there is moved to the `backups` folder (never deleted or overwritten), a file that is not a `.dll` or is far too small to be
   the model is refused, and picking the file that is already in place changes nothing. Restart Lossless Scaling, or press *Restart engine* under
   *Advanced*, to use a newly placed file. Nothing is downloaded.
+
+- **Test compatibility** runs the model file once, in a separate program (`nr_selftest.exe`, in the addon folder), on your graphics card, and adds a
+  *Compatibility test* row that says whether it works there: the model must load, create its Neural Rendering feature and change a synthetic test
+  picture. This is how you find out, before playing, that a model file cannot run on your card (some builds only support newer RTX cards). Because it is
+  a separate program, a model that crashes cannot take Lossless Scaling down; the row then says the test crashed. The test uses the graphics card
+  for a few seconds, so do it before you start a game. It runs by itself after **Browse for the model file...** has placed a file. It proves that the
+  model runs, not that it looks right in every game, and it tests the model file the addon is set to use.
 
 This addon does not download the model file, and this project does not say where to get it.
 Settings live in Echo Addon Manager's `addons\config.json` under the key `DLSS5NR01`; delete
