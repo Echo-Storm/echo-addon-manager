@@ -35,6 +35,11 @@ Run 'update check (against a local server, no internet needed)' "$root\manager\b
 Run 'window (defaults)' "$root\manager\build\Release\lsproxy_guitest.exe" @()
 Run 'window (saved placement)' "$root\manager\build\Release\lsproxy_guitest.exe" @('place')
 Run 'window (saved placement, interface size 150 %)' "$root\manager\build\Release\lsproxy_guitest.exe" @('scaled')
+# The installer's core (find the folder, tell whose Lossless.dll is whose, install / update / repair / uninstall with rollback), on fake folders in %TEMP%.
+# It needs the manager's Lossless.dll, built above by build_all.ps1.
+if (-not (Test-Path "$root\installer\build\CMakeCache.txt")) { & cmake -S "$root\installer" -B "$root\installer\build" -G 'Visual Studio 17 2022' -A x64 2>&1 | Select-String -Pattern 'error' | ForEach-Object { Write-Host $_.Line } }
+Build "$root\installer\build" @('setup_core', 'setup_cli', 'setup_test')
+Run 'installer core (fake Lossless Scaling folders)' "$root\installer\build\Release\setup_test.exe" @()
 # Neural Rendering's requirements check: only when that addon has been configured (it needs the NVIDIA SDK to configure, though not to run this test)
 if (Test-Path "$root\addons\DLSS5NR01\build\CMakeCache.txt") {
     Build "$root\addons\DLSS5NR01\build" @('nr_reqtest')

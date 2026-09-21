@@ -1,0 +1,32 @@
+// Generated into the build folder by CMake from the project version. The version resource is how the installer (and Windows Explorer) can tell this
+// Lossless.dll from Lossless Scaling's own without loading it: ProductName "Echo Addon Manager" here, "Lossless Scaling" in the original.
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION @EchoAddonManager_VERSION_MAJOR@,@EchoAddonManager_VERSION_MINOR@,@EchoAddonManager_VERSION_PATCH@,0
+ PRODUCTVERSION @EchoAddonManager_VERSION_MAJOR@,@EchoAddonManager_VERSION_MINOR@,@EchoAddonManager_VERSION_PATCH@,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "Echo Addon Manager project"
+            VALUE "FileDescription", "Echo Addon Manager: stands in for Lossless Scaling's Lossless.dll, forwards to Lossless_original.dll and loads addons"
+            VALUE "FileVersion", "@EchoAddonManager_VERSION@"
+            VALUE "InternalName", "Lossless"
+            VALUE "LegalCopyright", "MIT licence"
+            VALUE "OriginalFilename", "Lossless.dll"
+            VALUE "ProductName", "Echo Addon Manager"
+            VALUE "ProductVersion", "@EchoAddonManager_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

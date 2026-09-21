@@ -8,6 +8,13 @@
   It is the manager's only network access: an HTTPS request to api.github.com that GitHub sees as your IP address plus the program's name and version. The page it opens is built from the
   release's tag on this project's own address, never taken from the answer, and an oversized, slow or unreadable answer is refused. New offline test `lsproxy_updatetest` (46 checks, against a small
   server of its own on the loopback address, so it needs no internet; add `live` to also ask the real GitHub).
+- **`Lossless.dll` now carries a version resource** (product "Echo Addon Manager", the release version), so Windows Explorer shows its version and the coming installer can tell it from Lossless
+  Scaling's own `Lossless.dll` without loading it.
+- **Toward 1.0: the installer's core, not shipped yet** (`installer/`, with `ROADMAP.md` saying what 1.0 needs). It finds the Lossless Scaling folder (a running copy, Steam libraries, the
+  usual places, the last folder used), decides from the two DLLs' version resources what state the folder is in, and can install, update, repair after a Lossless Scaling update (which puts its
+  own `Lossless.dll` back over ours) and uninstall, with backups of everything it replaces, verification by hash, a rollback if anything fails part-way, and no changes to the person's `config.json`,
+  other addons or removed addons. It recognises earlier installs (0.4.1 and before have no version resource) by the log file name inside their `Lossless.dll`, and refuses while Lossless Scaling
+  runs. A command line (`setup_cli`) drives it; the window comes next. 84 offline checks (`setup_test`, in the test runner) on fake folders, including a failure midway that must roll back.
 - **The README, the addon README, the user guide and `INSTALL.txt` say what this was tested with:** World of Warcraft (the beta client), Lossless Scaling 3.2.2.0, Windows 11, RTX 4070 Ti SUPER; other
   games and setups are untested.
 - Test hygiene: the features test starts each run with a fresh temporary folder (a leftover from the abrupt-exit run could make a later run with the same process id fail), and the window test

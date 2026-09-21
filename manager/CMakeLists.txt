@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 project(EchoAddonManager VERSION 0.4.1)
+enable_language(RC)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -112,8 +113,12 @@ set(IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp
 )
 
+# The version resource of Lossless.dll (ProductName "Echo Addon Manager"): how the installer tells it from Lossless Scaling's own without loading it
+configure_file(manager.rc.in ${CMAKE_CURRENT_BINARY_DIR}/manager.rc @ONLY)
+
 # Main DLL target
 add_library(Lossless SHARED
+    ${CMAKE_CURRENT_BINARY_DIR}/manager.rc
     ${CORE_SOURCES}
     ${ADDON_SOURCES}
     ${FEATURE_SOURCES}
