@@ -1,165 +1,75 @@
 #include "addon_manager.h"
 #include "addon_dependency.h"
+#include "addon_discovery.h"
 #include "addon_install.h"
+#include "addon_manifest.h"
+#include "addon_runtime.h"
 #include "addon_security.h"
-#include "../gui/icon_loader.h"
 #include "../config/config_manager.h"
 #include "../event/event_system.h"
+#include "../gui/icon_loader.h"
 #include "../host/host_impl.h"
 #include "../log/logger.h"
-#include "../../third_party/nlohmann/json.hpp"
 #include "../../sdk/include/lsproxy/version.h"
 #include "imgui.h"
-#include <filesystem>
-#include <cwctype>
-#include <fstream>
-#include <vector>
+#include <system_error>
 #include <windows.h>
 
 namespace fs = std::filesystem;
 
 namespace lsproxy {
 
-// SEH wrapper helpers - these must not have C++ objects with destructors
-static uint32_t SehGetCaps(GetAddonCaps_t func) {
-    __try { return func(); }
-    __except(EXCEPTION_EXECUTE_HANDLER) { return 0; }
+namespace {
+
+// Settings > Security: 0 allow everything, 1 warn about anything not on trusted_addons.json, 2 refuse it.
+int SecurityLevel() { return ConfigManager::Instance().GlobalGetOr<int>(nullptr, "security_level", 0); }
+
+void Announce(uint32_t event, const AddonInfo& addon) {
+    LsProxyAddonEventData data;
+    data.addonName = addon.GetDisplayName().c_str();
+    data.addonVersion = addon.GetDisplayVersion().c_str();
+    EventBus::Instance().Publish(event, &data, sizeof data);
 }
 
-static bool SehInitAddon(AddonInit_t func, IHost* host, ImGuiContext* ctx,
-                         void* alloc, void* free, void* ud) {
-    __try { func(host, ctx, alloc, free, ud); return true; }
-    __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+std::wstring DefaultAddonsPath() {
+    wchar_t exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    return (fs::path(exe).parent_path() / "addons").wstring();
 }
 
-static void SehShutdownAddon(AddonShutdown_t func) {
-    __try { func(); }
-    __except(EXCEPTION_EXECUTE_HANDLER) {}
-}
+bool InRange(const std::vector<AddonInfo>& list, int index) { return index >= 0 && index < (int)list.size(); }
 
-static void SehRenderSettings(AddonRenderSettings_t func) {
-    __try { func(); }
-    __except(EXCEPTION_EXECUTE_HANDLER) {}
-}
+} // namespace
 
-static bool SehInterceptResource(AddonInterceptResource_t func,
-                                 const wchar_t* name, const wchar_t* type,
-                                 const void** outData, uint32_t* outSize) {
-    __try { return func(name, type, outData, outSize); }
-    __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
-}
-
-static const char* SehGetString(const char*(*func)()) {
-    __try { return func(); }
-    __except(EXCEPTION_EXECUTE_HANDLER) { return nullptr; }
-}
-
-// Helper: wstring to UTF-8
-static std::string WToUtf8(const std::wstring& wstr) {
-    if (wstr.empty()) return "";
-    int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), nullptr, 0, nullptr, nullptr);
-    std::string result(size, 0);
-    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &result[0], size, nullptr, nullptr);
-    return result;
-}
-
-// "1.2.3" (a suffix such as "-beta.1" is ignored) -> 0x00010203, the LSPROXY_API_VERSION_INT layout.
-// Returns 0 for anything unparsable so a malformed manifest never blocks an addon.
-static uint32_t ParseVersionInt(const std::string& text) {
-    unsigned major = 0, minor = 0, patch = 0;
-    if (sscanf_s(text.c_str(), "%u.%u.%u", &major, &minor, &patch) < 2) return 0;
-    return (major << 16) | ((minor & 0xFF) << 8) | (patch & 0xFF);
-}
-
-static std::wstring DefaultAddonsPath() {
-    wchar_t buffer[MAX_PATH];
-    GetModuleFileNameW(NULL, buffer, MAX_PATH);
-    return (fs::path(buffer).parent_path() / "addons").wstring();
-}
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Construction
+// ---------------------------------------------------------------------------------------------------------------------------------
 
 AddonManager::AddonManager(HostImpl* host) : AddonManager(host, DefaultAddonsPath()) {}
 
-AddonManager::AddonManager(HostImpl* host, const std::wstring& addonsPath) : m_host(host) {
-    m_addonsPath = addonsPath;
-    m_configPath = (fs::path(addonsPath) / "config.json").wstring();
-
-    if (!fs::exists(m_addonsPath)) {
-        fs::create_directory(m_addonsPath);
-    }
-
+AddonManager::AddonManager(HostImpl* host, const std::wstring& addonsPath)
+    : m_host(host), m_addonsPath(addonsPath), m_configPath((fs::path(addonsPath) / "config.json").wstring()) {
+    std::error_code ec;
+    fs::create_directories(m_addonsPath, ec);
     AddonSecurity::LoadTrustedHashes(m_addonsPath);
     ConfigManager::Instance().Load(m_configPath);
 }
 
 AddonManager::~AddonManager() {
     UnloadAddons();
-    // Release icon textures
-    for (auto& addon : m_addons) {
-        if (addon.iconTexture) {
-            addon.iconTexture->Release();
-            addon.iconTexture = nullptr;
-        }
-    }
+    for (AddonInfo& addon : m_addons) ReleaseIcon(addon);
 }
 
-bool AddonManager::ScanFolder(const fs::path& folder, AddonInfo& info) {
-    info.folderName = folder.filename().wstring();
-    info.id = WToUtf8(info.folderName);
+void AddonManager::ReleaseIcon(AddonInfo& addon) {
+    if (addon.iconTexture) { addon.iconTexture->Release(); addon.iconTexture = nullptr; }
+}
 
-    fs::path manifestPath = folder / "addon.json";
-    if (fs::exists(manifestPath)) {
-        ParseManifest(info, manifestPath.wstring());
-    }
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Finding addons
+// ---------------------------------------------------------------------------------------------------------------------------------
 
-    bool foundDll = false;
-
-    if (!info.manifest.dll.empty()) {
-        fs::path dllPath = folder / info.manifest.dll;
-        if (fs::exists(dllPath)) {
-            info.dllPath = dllPath.wstring();
-            foundDll = true;
-        }
-    }
-
-    if (!foundDll) {
-        fs::path expectedDll = folder / (folder.filename().string() + ".dll");
-        if (fs::exists(expectedDll)) {
-            info.dllPath = expectedDll.wstring();
-            foundDll = true;
-        }
-    }
-
-    if (!foundDll) {
-        for (const auto& subEntry : fs::directory_iterator(folder)) {
-            if (subEntry.path().extension() == ".dll") {
-                info.dllPath = subEntry.path().wstring();
-                foundDll = true;
-                break;
-            }
-        }
-    }
-
-    for (const auto& subEntry : fs::directory_iterator(folder)) {
-        if (subEntry.path().extension() == ".ini") {
-            info.configPath = subEntry.path().wstring();
-            break;
-        }
-    }
-
-    if (!foundDll) return false;
-
-    // Discover icon: manifest "icon" field, or auto-detect icon.png/jpg
-    if (!info.manifest.icon.empty()) {
-        fs::path iconPath = folder / info.manifest.icon;
-        if (fs::exists(iconPath)) info.iconPath = iconPath.wstring();
-    }
-    if (info.iconPath.empty()) {
-        for (const auto& ext : {".png", ".jpg", ".jpeg", ".bmp"}) {
-            fs::path iconPath = folder / ("icon" + std::string(ext));
-            if (fs::exists(iconPath)) { info.iconPath = iconPath.wstring(); break; }
-        }
-    }
-
+bool AddonManager::Inspect(const fs::path& folder, AddonInfo& info) {
+    if (!DiscoverAddon(folder, info)) return false;
     info.enabled = ConfigManager::Instance().IsAddonEnabled(info.id, true);
     info.security = AddonSecurity::VerifyDll(info.dllPath, info.id);
     return true;
@@ -167,263 +77,196 @@ bool AddonManager::ScanFolder(const fs::path& folder, AddonInfo& info) {
 
 void AddonManager::ScanAddons() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    for (auto& addon : m_addons) {
-        if (addon.iconTexture) { addon.iconTexture->Release(); addon.iconTexture = nullptr; }
-    }
+    for (AddonInfo& addon : m_addons) ReleaseIcon(addon);
     m_addons.clear();
 
-    if (!fs::exists(m_addonsPath)) return;
-
-    for (const auto& entry : fs::directory_iterator(m_addonsPath)) {
-        if (!fs::is_directory(entry.path())) continue;
-        if (entry.path().filename().wstring().rfind(L".", 0) == 0) continue;   // .install-* staging folders
+    std::error_code ec;
+    for (fs::directory_iterator it(m_addonsPath, ec), end; !ec && it != end; it.increment(ec)) {
+        const fs::path& folder = it->path();
+        if (!it->is_directory(ec)) continue;
+        if (folder.filename().wstring().front() == L'.') continue;   // .removed and the .install-* staging folders
         AddonInfo info;
-        if (ScanFolder(entry.path(), info)) m_addons.push_back(std::move(info));
+        if (Inspect(folder, info)) m_addons.push_back(std::move(info));
     }
 
     AddonDependency::Resolve(m_addons);
     LOG_INFO("AddonManager", "Scanned %zu addons", m_addons.size());
 }
 
-// ---------------------------------------------------------------------------------------
-// Installing an addon from a folder, a .zip or a single .dll (the file work is in addon_install.cpp)
-// ---------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Installing and removing (the file work is in addon_install.cpp)
+// ---------------------------------------------------------------------------------------------------------------------------------
 
 AddonManager::InstallResult AddonManager::InstallAddon(const std::wstring& source) {
-    InstallResult r;
+    InstallResult result;
     const PlaceResult placed = PlaceAddon(fs::path(source), fs::path(m_addonsPath));
-    if (!placed.ok) { r.message = placed.message; return r; }
+    if (!placed.ok) { result.message = placed.message; return result; }
 
     AddonInfo info;
-    if (!ScanFolder(placed.dest, info)) {
-        std::error_code ec; fs::remove_all(placed.dest, ec);   // the folder we just created, holding no usable addon
-        r.message = "That addon has no DLL, so there is nothing to load.";
-        return r;
+    if (!Inspect(placed.dest, info)) {
+        std::error_code ec;
+        fs::remove_all(placed.dest, ec);   // the folder PlaceAddon just made, which holds nothing usable
+        result.message = "That addon has no DLL, so there is nothing to load.";
+        return result;
     }
-    info.enabled = false;   // installed switched off: an addon is code that runs inside Lossless Scaling, so the user turns it on on purpose
+
+    // An addon is code that runs inside Lossless Scaling, so it arrives switched off and the user turns it on on purpose.
+    info.enabled = false;
     ConfigManager::Instance().SetAddonEnabled(info.id, false);
     ConfigManager::Instance().Save();
-    r.id = info.id;
-    r.ok = true;
-    r.message = "Installed '" + info.GetDisplayName() + "' (switched off). Turn it on with its switch.";
+
+    result.ok = true;
+    result.id = info.id;
+    result.message = "Installed '" + info.GetDisplayName() + "' (switched off). Turn it on with its switch.";
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_addons.push_back(std::move(info));
         AddonDependency::Resolve(m_addons);
     }
     LoadAddonIcons();
-    LOG_INFO("AddonManager", "Installed addon '%s' from %s", r.id.c_str(), WToUtf8(source).c_str());
-    return r;
+    LOG_INFO("AddonManager", "Installed addon '%s' from %s", result.id.c_str(), WideToUtf8(source).c_str());
+    return result;
 }
 
 AddonManager::InstallResult AddonManager::RemoveAddon(int index) {
-    InstallResult r;
+    InstallResult result;
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (index < 0 || index >= (int)m_addons.size()) { r.message = "That addon is no longer in the list."; return r; }
-    AddonInfo& a = m_addons[index];
-    const std::string name = a.GetDisplayName(), id = a.id;
-    if (a.hModule) {
-        if (a.RequiresRestart()) {
-            r.message = "'" + name + "' is loaded and needs Lossless Scaling restarted before it can be removed. Switch it off, restart Lossless Scaling, then remove it.";
-            return r;
+    if (!InRange(m_addons, index)) { result.message = "That addon is no longer in the list."; return result; }
+
+    AddonInfo& addon = m_addons[index];
+    const std::string name = addon.GetDisplayName();
+    const std::string id = addon.id;
+
+    if (addon.IsLoaded()) {
+        if (addon.RequiresRestart()) {
+            result.message = "'" + name + "' is loaded and needs Lossless Scaling restarted before it can be removed. "
+                             "Switch it off, restart Lossless Scaling, then remove it.";
+            return result;
         }
-        UnloadAddon(a);
-        if (a.hModule) { r.message = "Could not unload '" + name + "'; restart Lossless Scaling and try again."; return r; }
+        UnloadModule(addon);
+        if (addon.IsLoaded()) { result.message = "Could not unload '" + name + "'; restart Lossless Scaling and try again."; return result; }
     }
-    const RemoveResult mv = MoveAddonToRemoved(fs::path(m_addonsPath) / a.folderName, fs::path(m_addonsPath));
-    if (!mv.ok) { r.message = mv.message; return r; }
-    if (a.iconTexture) { a.iconTexture->Release(); a.iconTexture = nullptr; }
+
+    const RemoveResult moved = MoveAddonToRemoved(fs::path(m_addonsPath) / addon.folderName, fs::path(m_addonsPath));
+    if (!moved.ok) { result.message = moved.message; return result; }
+
+    ReleaseIcon(addon);
     m_addons.erase(m_addons.begin() + index);
     AddonDependency::Resolve(m_addons);
-    ConfigManager::Instance().SetAddonEnabled(id, false);   // installing it again starts it switched off; its other settings are kept
+    // If it is installed again it starts switched off; its other settings are kept.
+    ConfigManager::Instance().SetAddonEnabled(id, false);
     ConfigManager::Instance().Save();
-    r.ok = true; r.id = id;
-    r.message = "Removed '" + name + "'. Its folder is in addons/.removed (move it back to restore it); its settings are kept.";
-    LOG_INFO("AddonManager", "Removed addon '%s' -> %s", id.c_str(), WToUtf8(mv.movedTo.wstring()).c_str());
-    return r;
+
+    result.ok = true;
+    result.id = id;
+    result.message = "Removed '" + name + "'. Its folder is in addons/.removed (move it back to restore it); its settings are kept.";
+    LOG_INFO("AddonManager", "Removed addon '%s' -> %s", id.c_str(), WideToUtf8(moved.movedTo.wstring()).c_str());
+    return result;
 }
 
-void AddonManager::ParseManifest(AddonInfo& addon, const std::wstring& jsonPath) {
-    try {
-        std::ifstream file(jsonPath);
-        auto data = nlohmann::json::parse(file);
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Loading and starting
+// ---------------------------------------------------------------------------------------------------------------------------------
 
-        if (data.contains("name")) addon.manifest.name = data["name"].get<std::string>();
-        if (data.contains("version")) addon.manifest.version = data["version"].get<std::string>();
-        if (data.contains("author")) addon.manifest.author = data["author"].get<std::string>();
-        if (data.contains("description")) addon.manifest.description = data["description"].get<std::string>();
-        if (data.contains("min_host_version")) addon.manifest.minHostVersion = data["min_host_version"].get<std::string>();
-        if (data.contains("dll")) addon.manifest.dll = data["dll"].get<std::string>();
-        if (data.contains("icon")) addon.manifest.icon = data["icon"].get<std::string>();
-
-        if (data.contains("dependencies") && data["dependencies"].is_array()) {
-            for (const auto& dep : data["dependencies"])
-                addon.manifest.dependencies.push_back(dep.get<std::string>());
-        }
-        if (data.contains("tags") && data["tags"].is_array()) {
-            for (const auto& tag : data["tags"])
-                addon.manifest.tags.push_back(tag.get<std::string>());
-        }
-
-        addon.manifest.parsed = true;
-    } catch (const std::exception& e) {
-        LOG_WARN("AddonManager", "Failed to parse addon.json for '%s': %s", addon.id.c_str(), e.what());
+std::string AddonManager::WhyNotLoadable(const AddonInfo& addon) {
+    if (!addon.manifest.minHostVersion.empty() && ParseApiVersion(addon.manifest.minHostVersion) > (uint32_t)LSPROXY_API_VERSION_INT) {
+        const std::string why = "Needs a newer " LSPROXY_PRODUCT_NAME " (addon API " + addon.manifest.minHostVersion +
+                                " or newer; this one provides " LSPROXY_API_VERSION_STRING ")";
+        LOG_ERROR("AddonManager", "Not loading '%s': %s", addon.id.c_str(), why.c_str());
+        return why;
     }
+
+    const int level = SecurityLevel();
+    if (level >= 1 && addon.security != SecurityVerdict::Trusted) {
+        const char* problem = addon.security == SecurityVerdict::Tampered ? "does not match its trusted hash" : "is not on the trusted list";
+        if (level >= 2) {
+            const std::string why = std::string("Blocked: the DLL ") + problem + " (Settings > Security Level)";
+            LOG_WARN("AddonManager", "Not loading '%s': %s", addon.id.c_str(), why.c_str());
+            return why;
+        }
+        LOG_WARN("AddonManager", "Loading '%s' although its DLL %s", addon.id.c_str(), problem);
+    }
+    return {};
 }
 
-void AddonManager::PopulateFromExports(AddonInfo& addon) {
-    if (!addon.hModule) return;
-
-    if (addon.manifest.name.empty() && addon.GetNameFunc) {
-        const char* val = SehGetString(addon.GetNameFunc);
-        if (val) addon.manifest.name = val;
-    }
-    if (addon.manifest.version.empty() && addon.GetVersionFunc) {
-        const char* val = SehGetString(addon.GetVersionFunc);
-        if (val) addon.manifest.version = val;
-    }
-    if (addon.manifest.author.empty() && addon.GetAuthorFunc) {
-        const char* val = SehGetString(addon.GetAuthorFunc);
-        if (val) addon.manifest.author = val;
-    }
-    if (addon.manifest.description.empty() && addon.GetDescFunc) {
-        const char* val = SehGetString(addon.GetDescFunc);
-        if (val) addon.manifest.description = val;
+void AddonManager::FillFromExports(AddonInfo& addon) {
+    struct Field { std::string* into; const char* (*getter)(); };
+    const Field fields[] = {
+        { &addon.manifest.name, addon.exports.name },
+        { &addon.manifest.version, addon.exports.version },
+        { &addon.manifest.author, addon.exports.author },
+        { &addon.manifest.description, addon.exports.description },
+    };
+    for (const Field& f : fields) {
+        if (!f.into->empty()) continue;   // addon.json wins
+        if (const char* text = guarded::Text(f.getter)) *f.into = text;
     }
 }
 
-void AddonManager::LoadAddons() {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    for (auto& addon : m_addons) {
-        if (addon.enabled && !addon.hModule) {
-            LoadAddon(addon);
-        }
-    }
-}
+void AddonManager::LoadModule(AddonInfo& addon) {
+    addon.errorMessage = WhyNotLoadable(addon);
+    if (!addon.errorMessage.empty()) return;
 
-void AddonManager::LoadAddon(AddonInfo& addon) {
-    addon.errorMessage.clear();
-
-    if (!addon.manifest.minHostVersion.empty()) {
-        const uint32_t need = ParseVersionInt(addon.manifest.minHostVersion);
-        if (need > (uint32_t)LSPROXY_API_VERSION_INT) {
-            addon.errorMessage = "Needs a newer " LSPROXY_PRODUCT_NAME " (addon API " + addon.manifest.minHostVersion +
-                                 " or newer; this one provides " LSPROXY_API_VERSION_STRING ")";
-            LOG_ERROR("AddonManager", "Not loading '%s': %s", addon.id.c_str(), addon.errorMessage.c_str());
-            return;
-        }
-    }
-
-    // Settings > Security Level: 0 allow all, 1 warn, 2 block anything not on trusted_addons.json.
-    const int securityLevel = ConfigManager::Instance().GlobalGetOr<int>(nullptr, "security_level", 0);
-    if (securityLevel >= 1 && addon.security != SecurityVerdict::Trusted) {
-        const char* what = addon.security == SecurityVerdict::Tampered ? "does not match its trusted hash"
-                                                                       : "is not on the trusted list";
-        if (securityLevel >= 2) {
-            addon.errorMessage = std::string("Blocked: the DLL ") + what + " (Settings > Security Level)";
-            LOG_WARN("AddonManager", "Not loading '%s': %s", addon.id.c_str(), addon.errorMessage.c_str());
-            return;
-        }
-        LOG_WARN("AddonManager", "Loading '%s' although its DLL %s", addon.id.c_str(), what);
-    }
-
-    HMODULE hAddon = LoadLibraryExW(addon.dllPath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (!hAddon) {
-        hAddon = LoadLibraryW(addon.dllPath.c_str());
-    }
-
-    if (!hAddon) {
-        DWORD err = GetLastError();
-        addon.errorMessage = "LoadLibrary failed (error " + std::to_string(err) + ")";
+    HMODULE module = LoadLibraryExW(addon.dllPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (!module) module = LoadLibraryW(addon.dllPath.c_str());
+    if (!module) {
+        addon.errorMessage = "LoadLibrary failed (error " + std::to_string(GetLastError()) + ")";
         LOG_ERROR("AddonManager", "Failed to load '%s': %s", addon.id.c_str(), addon.errorMessage.c_str());
         return;
     }
 
-    addon.hModule = hAddon;
+    addon.hModule = module;
     addon.faulted = false;
+    BindExports(module, addon.exports);
+    addon.capabilities = guarded::Capabilities(module);
+    FillFromExports(addon);
+    LOG_INFO("AddonManager", "Loaded addon '%s' v%s", addon.GetDisplayName().c_str(), addon.GetDisplayVersion().c_str());
+}
 
-    addon.InitFunc = (AddonInit_t)GetProcAddress(hAddon, "AddonInitialize");
-    if (!addon.InitFunc)
-        addon.InitFunc = (AddonInit_t)GetProcAddress(hAddon, "AddonInit");
+bool AddonManager::StartAddon(AddonInfo& addon, ImGuiContext* ctx) {
+    if (!addon.IsLoaded() || !addon.exports.init || !ctx) return false;
 
-    addon.ShutdownFunc = (AddonShutdown_t)GetProcAddress(hAddon, "AddonShutdown");
-    addon.RenderSettingsFunc = (AddonRenderSettings_t)GetProcAddress(hAddon, "AddonRenderSettings");
-    addon.InterceptResourceFunc = (AddonInterceptResource_t)GetProcAddress(hAddon, "AddonInterceptResource");
-    addon.GetNameFunc = (GetAddonName_t)GetProcAddress(hAddon, "GetAddonName");
-    addon.GetVersionFunc = (GetAddonVersion_t)GetProcAddress(hAddon, "GetAddonVersion");
-    addon.GetAuthorFunc = (GetAddonAuthor_t)GetProcAddress(hAddon, "GetAddonAuthor");
-    addon.GetDescFunc = (GetAddonDescription_t)GetProcAddress(hAddon, "GetAddonDescription");
+    ImGuiMemAllocFunc alloc = nullptr;
+    ImGuiMemFreeFunc release = nullptr;
+    void* userData = nullptr;
+    ImGui::GetAllocatorFunctions(&alloc, &release, &userData);
 
-    GetAddonCaps_t getCaps = (GetAddonCaps_t)GetProcAddress(hAddon, "GetAddonCapabilities");
-    if (getCaps) {
-        addon.capabilities = SehGetCaps(getCaps);
+    if (!guarded::Initialize(addon.exports, m_host, ctx, (void*)alloc, (void*)release, userData)) {
+        addon.faulted = true;
+        addon.errorMessage = "Crashed during initialization";
+        LOG_ERROR("AddonManager", "Addon '%s' crashed during init!", addon.id.c_str());
+        return false;
     }
+    Announce(LSPROXY_EVENT_ADDON_LOADED, addon);
+    return true;
+}
 
-    PopulateFromExports(addon);
+void AddonManager::UnloadModule(AddonInfo& addon) {
+    if (!addon.IsLoaded()) return;
+    guarded::Shutdown(addon.exports);
+    Announce(LSPROXY_EVENT_ADDON_UNLOADED, addon);
+    FreeLibrary(addon.hModule);
+    addon.hModule = nullptr;
+    addon.exports = AddonExports{};
+    addon.capabilities = 0;
+    addon.faulted = false;
+}
 
-    LOG_INFO("AddonManager", "Loaded addon '%s' v%s",
-             addon.GetDisplayName().c_str(), addon.GetDisplayVersion().c_str());
+void AddonManager::LoadAddons() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (AddonInfo& addon : m_addons)
+        if (addon.enabled && !addon.IsLoaded()) LoadModule(addon);
 }
 
 void AddonManager::InitializeAddons(ImGuiContext* ctx) {
     std::lock_guard<std::mutex> lock(m_mutex);
-
-    ImGuiMemAllocFunc alloc_func;
-    ImGuiMemFreeFunc free_func;
-    void* user_data;
-    ImGui::GetAllocatorFunctions(&alloc_func, &free_func, &user_data);
-
-    for (auto& addon : m_addons) {
-        if (!addon.enabled || !addon.hModule || !addon.InitFunc) continue;
-
-        bool success = SehInitAddon(addon.InitFunc, m_host, ctx,
-                                    (void*)alloc_func, (void*)free_func, user_data);
-        if (!success) {
-            addon.faulted = true;
-            addon.errorMessage = "Crashed during initialization";
-            LOG_ERROR("AddonManager", "Addon '%s' crashed during init!", addon.id.c_str());
-        } else {
-            LsProxyAddonEventData eventData;
-            eventData.addonName = addon.GetDisplayName().c_str();
-            eventData.addonVersion = addon.GetDisplayVersion().c_str();
-            EventBus::Instance().Publish(LSPROXY_EVENT_ADDON_LOADED, &eventData, sizeof(eventData));
-        }
-    }
+    for (AddonInfo& addon : m_addons)
+        if (addon.enabled) StartAddon(addon, ctx);
 }
 
 void AddonManager::UnloadAddons() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    for (int i = (int)m_addons.size() - 1; i >= 0; i--) {
-        if (m_addons[i].hModule) {
-            UnloadAddon(m_addons[i]);
-        }
-    }
-}
-
-void AddonManager::UnloadAddon(AddonInfo& addon) {
-    if (!addon.hModule) return;
-
-    if (addon.ShutdownFunc) {
-        SehShutdownAddon(addon.ShutdownFunc);
-    }
-
-    LsProxyAddonEventData eventData;
-    eventData.addonName = addon.GetDisplayName().c_str();
-    eventData.addonVersion = addon.GetDisplayVersion().c_str();
-    EventBus::Instance().Publish(LSPROXY_EVENT_ADDON_UNLOADED, &eventData, sizeof(eventData));
-
-    FreeLibrary(addon.hModule);
-    addon.hModule = nullptr;
-    addon.InitFunc = nullptr;
-    addon.ShutdownFunc = nullptr;
-    addon.RenderSettingsFunc = nullptr;
-    addon.InterceptResourceFunc = nullptr;
-    addon.GetNameFunc = nullptr;
-    addon.GetVersionFunc = nullptr;
-    addon.GetAuthorFunc = nullptr;
-    addon.GetDescFunc = nullptr;
-    addon.capabilities = 0;
-    addon.faulted = false;
+    for (auto it = m_addons.rbegin(); it != m_addons.rend(); ++it) UnloadModule(*it);   // dependents first
 }
 
 void AddonManager::ReloadAddons() {
@@ -432,101 +275,69 @@ void AddonManager::ReloadAddons() {
     LoadAddons();
 }
 
-void AddonManager::LoadAddonIcons() {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    for (auto& addon : m_addons) {
-        if (addon.iconTexture) continue; // Already loaded
-        if (addon.iconPath.empty()) continue;
-
-        addon.iconTexture = IconLoader_LoadFromFile(addon.iconPath);
-    }
-}
+// ---------------------------------------------------------------------------------------------------------------------------------
+// While it runs
+// ---------------------------------------------------------------------------------------------------------------------------------
 
 void AddonManager::ToggleAddon(int index, bool enable) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (index < 0 || index >= (int)m_addons.size()) return;
-
-    auto& addon = m_addons[index];
+    if (!InRange(m_addons, index)) return;
+    AddonInfo& addon = m_addons[index];
     addon.enabled = enable;
 
-    // If addon requires restart, just save the config - don't hot load/unload
     if (addon.RequiresRestart()) {
-        LOG_INFO("AddonManager", "Addon '%s' requires restart to %s",
-                 addon.GetDisplayName().c_str(), enable ? "enable" : "disable");
-    } else {
-        if (enable && !addon.hModule) {
-            LoadAndInitAddon(addon);
-        } else if (!enable && addon.hModule) {
-            UnloadAddon(addon);
-        }
+        // It cannot be loaded or unloaded under a running Lossless Scaling: only remember the choice for the next start.
+        LOG_INFO("AddonManager", "Addon '%s' requires restart to %s", addon.GetDisplayName().c_str(), enable ? "enable" : "disable");
+    } else if (enable && !addon.IsLoaded()) {
+        LoadModule(addon);
+        StartAddon(addon, ImGui::GetCurrentContext());
+    } else if (!enable) {
+        UnloadModule(addon);
     }
 
     ConfigManager::Instance().SetAddonEnabled(addon.id, enable);
     ConfigManager::Instance().Save();
 }
 
-// Load an addon after startup: needs the ImGui context of the calling (GUI) thread.
-void AddonManager::LoadAndInitAddon(AddonInfo& addon) {
-    LoadAddon(addon);
-    if (!addon.hModule || !addon.InitFunc) return;
-
-    ImGuiContext* ctx = ImGui::GetCurrentContext();
-    if (!ctx) return;
-
-    ImGuiMemAllocFunc alloc_func;
-    ImGuiMemFreeFunc free_func;
-    void* user_data;
-    ImGui::GetAllocatorFunctions(&alloc_func, &free_func, &user_data);
-
-    if (!SehInitAddon(addon.InitFunc, m_host, ctx, (void*)alloc_func, (void*)free_func, user_data)) {
-        addon.faulted = true;
-        addon.errorMessage = "Crashed during initialization";
-        LOG_ERROR("AddonManager", "Addon '%s' crashed during init!", addon.id.c_str());
-        return;
-    }
-    LsProxyAddonEventData eventData;
-    eventData.addonName = addon.GetDisplayName().c_str();
-    eventData.addonVersion = addon.GetDisplayVersion().c_str();
-    EventBus::Instance().Publish(LSPROXY_EVENT_ADDON_LOADED, &eventData, sizeof(eventData));
-}
-
 void AddonManager::LoadAddonNow(int index) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (index < 0 || index >= (int)m_addons.size()) return;
-    auto& addon = m_addons[index];
-    if (addon.enabled && !addon.hModule) LoadAndInitAddon(addon);
+    if (!InRange(m_addons, index)) return;
+    AddonInfo& addon = m_addons[index];
+    if (!addon.enabled || addon.IsLoaded()) return;
+    LoadModule(addon);
+    StartAddon(addon, ImGui::GetCurrentContext());
 }
 
 void AddonManager::RenderAddonSettings(int index) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (index < 0 || index >= (int)m_addons.size()) return;
+    if (!InRange(m_addons, index)) return;
+    AddonInfo& addon = m_addons[index];
+    if (!addon.IsLoaded() || !addon.exports.renderSettings || addon.settingsFaulted) return;
 
-    auto& addon = m_addons[index];
-    if (addon.hModule && addon.RenderSettingsFunc && !addon.settingsFaulted) {
-        const uint32_t before = InvalidParameterCount();
-        SehRenderSettings(addon.RenderSettingsFunc);
-        // A bad argument to a CRT function makes the call fail and leaves whatever the addon does
-        // next undefined, and the panel runs every frame. Stop drawing it after the first event.
-        if (InvalidParameterCount() != before) {
-            addon.settingsFaulted = true;
-            addon.errorMessage = "Its settings panel hit an invalid parameter and was turned off (see Logs)";
-            LOG_ERROR("AddonManager", "Settings panel of '%s' hit an invalid CRT parameter; not drawing it again this session",
-                      addon.id.c_str());
-        }
+    const uint32_t invalidBefore = InvalidParameterCount();
+    guarded::RenderSettings(addon.exports);
+    // A bad argument to a CRT function makes that call fail and leaves whatever the addon does next undefined, and the panel is drawn
+    // every frame, so it is switched off for the session after the first such event.
+    if (InvalidParameterCount() != invalidBefore) {
+        addon.settingsFaulted = true;
+        addon.errorMessage = "Its settings panel hit an invalid parameter and was turned off (see Logs)";
+        LOG_ERROR("AddonManager", "Settings panel of '%s' hit an invalid CRT parameter; not drawing it again this session", addon.id.c_str());
     }
 }
 
-bool AddonManager::InterceptResource(const wchar_t* name, const wchar_t* type,
-                                     const void** outData, uint32_t* outSize) {
+bool AddonManager::InterceptResource(const wchar_t* name, const wchar_t* type, const void** outData, uint32_t* outSize) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    for (const auto& addon : m_addons) {
-        if (addon.enabled && addon.InterceptResourceFunc && !addon.faulted) {
-            if (SehInterceptResource(addon.InterceptResourceFunc, name, type, outData, outSize)) {
-                return true;
-            }
-        }
+    for (const AddonInfo& addon : m_addons) {
+        if (!addon.enabled || addon.faulted) continue;
+        if (guarded::Intercept(addon.exports, name, type, outData, outSize)) return true;
     }
     return false;
+}
+
+void AddonManager::LoadAddonIcons() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (AddonInfo& addon : m_addons)
+        if (!addon.iconTexture && !addon.iconPath.empty()) addon.iconTexture = IconLoader_LoadFromFile(addon.iconPath);
 }
 
 std::vector<AddonInfo>& AddonManager::GetAddons() { return m_addons; }

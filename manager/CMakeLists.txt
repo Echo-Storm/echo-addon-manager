@@ -27,6 +27,9 @@ set(CORE_SOURCES
 
 set(ADDON_SOURCES
     src/addon/addon_manager.cpp
+    src/addon/addon_manifest.cpp
+    src/addon/addon_discovery.cpp
+    src/addon/addon_runtime.cpp
     src/addon/addon_security.cpp
     src/addon/addon_dependency.cpp
     src/addon/addon_install.cpp
