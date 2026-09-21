@@ -114,6 +114,26 @@ int wmain(int argc, wchar_t** argv) {
         Check("the folder used last time is offered", RememberedFolder() == ls.wstring() && remembered);
         for (const auto& c : FindCandidates()) if (!LooksLikeLosslessScaling(c.dir)) { Check("every folder offered looks like Lossless Scaling", false, Narrow(c.dir)); break; }
         Check("every folder offered looks like Lossless Scaling", true);
+
+        // Copies that are not from Steam live anywhere: the usual places on a drive are scanned (one level under the drive's root and under a short list of
+        // usual parent folders), and only folders that look like Lossless Scaling count
+        MakeLs(L"drive\\Utilities\\Lossless Scaling");
+        MakeLs(L"drive\\Games\\Lossless Scaling 3.2.2");
+        MakeLs(L"drive\\Lossless Scaling");
+        MakeLs(L"drive\\Steam\\steamapps\\common\\Lossless Scaling");
+        MakeLs(L"drive\\Program Files (x86)\\LosslessScaling");
+        MakeLs(L"drive\\Utilities\\deeper\\Lossless Scaling");
+        fs::create_directories(g_root / L"drive" / L"Utilities" / L"Lossless Scaling Notes");
+        fs::create_directories(g_root / L"drive" / L"Utilities" / L"Other tool");
+        Write(g_root / L"drive" / L"Utilities" / L"Other tool" / L"LosslessScaling.exe", "not it: the folder's name says nothing about Lossless Scaling");
+        const auto scanned = ScanDrive((g_root / L"drive").wstring());
+        auto has = [&](const wchar_t* rel) { for (const auto& d : scanned) if (LowerCase(d) == LowerCase((g_root / L"drive" / rel).wstring())) return true; return false; };
+        Check("a copy under Utilities, one under Games (with a version in its name), one in the root, one in a Steam library and one named LosslessScaling are all found",
+              has(L"Utilities\\Lossless Scaling") && has(L"Games\\Lossless Scaling 3.2.2") && has(L"Lossless Scaling") && has(L"Steam\\steamapps\\common\\Lossless Scaling") &&
+              has(L"Program Files (x86)\\LosslessScaling"), std::to_string(scanned.size()) + " found");
+        Check("a folder with the right name but no LosslessScaling.exe is not offered", !has(L"Utilities\\Lossless Scaling Notes"));
+        Check("a folder with the wrong name is not offered, and nothing two levels down is searched", !has(L"Utilities\\Other tool") && !has(L"Utilities\\deeper\\Lossless Scaling") && scanned.size() == 5, std::to_string(scanned.size()));
+        Check("a drive that does not exist scans as empty", ScanDrive(L"Q:\\no\\such\\drive").empty() && ScanDrive(L"").empty());
     }
 
     printf("== reading the state of a folder\n");

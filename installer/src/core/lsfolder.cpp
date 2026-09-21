@@ -63,6 +63,32 @@ void Add(std::vector<Candidate>& out, const std::wstring& dir, const char* how) 
 
 } // namespace
 
+std::vector<std::wstring> ScanDrive(const std::wstring& driveRoot) {
+    std::vector<std::wstring> found;
+    if (driveRoot.empty()) return found;
+    static const wchar_t* const kParents[] = {
+        L"", L"Utilities", L"Games", L"Apps", L"Programs", L"Tools", L"Software", L"Program Files", L"Program Files (x86)",
+        L"Steam\\steamapps\\common", L"SteamLibrary\\steamapps\\common", L"Games\\Steam\\steamapps\\common", L"Games\\SteamLibrary\\steamapps\\common"};
+    namespace fs = std::filesystem;
+    for (const wchar_t* parent : kParents) {
+        std::error_code ec;
+        const fs::path dir = *parent ? fs::path(driveRoot) / parent : fs::path(driveRoot);
+        if (!fs::is_directory(dir, ec)) continue;
+        for (fs::directory_iterator it(dir, fs::directory_options::skip_permission_denied, ec), end; !ec && it != end; it.increment(ec)) {
+            std::error_code e2;
+            if (!it->is_directory(e2)) continue;
+            const std::wstring name = LowerCase(it->path().filename().wstring());
+            if (name.rfind(L"lossless scaling", 0) != 0 && name.rfind(L"losslessscaling", 0) != 0) continue;
+            const std::wstring candidate = it->path().wstring();
+            if (!LooksLikeLosslessScaling(candidate)) continue;
+            bool seen = false;
+            for (const auto& f : found) if (LowerCase(f) == LowerCase(candidate)) seen = true;
+            if (!seen) found.push_back(candidate);
+        }
+    }
+    return found;
+}
+
 std::vector<Candidate> FindCandidates() {
     std::vector<Candidate> found;
 
@@ -104,6 +130,15 @@ std::vector<Candidate> FindCandidates() {
     Add(found, L"C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling", "default location");
     Add(found, L"C:\\Program Files\\Lossless Scaling", "default location");
     Add(found, L"C:\\Program Files (x86)\\Lossless Scaling", "default location");
+
+    // 5. copies that are not from Steam: the usual places on every fixed drive
+    const DWORD drives = GetLogicalDrives();
+    for (int i = 0; i < 26; ++i) {
+        if (!(drives & (1u << i))) continue;
+        const std::wstring root = std::wstring(1, static_cast<wchar_t>(L'A' + i)) + L":\\";
+        if (GetDriveTypeW(root.c_str()) != DRIVE_FIXED) continue;
+        for (const auto& dir : ScanDrive(root)) Add(found, dir, "found on a drive");
+    }
     return found;
 }
 

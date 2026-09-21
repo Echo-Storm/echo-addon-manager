@@ -16,6 +16,14 @@ bool LooksLikeLosslessScaling(const std::wstring& dir);
 // The library folders named in Steam's libraryfolders.vdf ("path" entries, with the doubled backslashes undone).
 std::vector<std::wstring> ParseSteamLibraries(const std::string& vdfText);
 
+// Folders on one drive that look like Lossless Scaling: a folder whose name starts with "Lossless Scaling" or "LosslessScaling", directly under the drive's root or under
+// a short list of usual parents (Utilities, Games, Apps, Program Files, Steam library folders...). One level only, so it is quick and never crawls a disk.
+std::vector<std::wstring> ScanDrive(const std::wstring& driveRoot);
+
+// Folders on one drive that look like Lossless Scaling: a folder whose name starts with "Lossless Scaling" or "LosslessScaling", directly under the drive's root or under
+// a short list of usual parents (Utilities, Games, Apps, Program Files, Steam library folders...). One level only, so it is quick and never crawls a disk.
+std::vector<std::wstring> ScanDrive(const std::wstring& driveRoot);
+
 // Every place worth offering, best first, each checked with LooksLikeLosslessScaling and listed once.
 std::vector<Candidate> FindCandidates();
 

@@ -128,6 +128,12 @@ void Refresh(App& a) {
     a.writable = CanWriteFolder(a.folder);
 }
 
+// A folder the person chose (from the list or with Browse) is remembered at once, so the next start offers it first, even if nothing was installed. Only a folder
+// that really is Lossless Scaling's is kept.
+void RememberChoice(const App& a) {
+    if (a.state.situation != Situation::NotLosslessScaling) RememberFolder(a.folder);
+}
+
 // --------------------------------------------------------------------------------------------------------------------------------------- pages
 
 HRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, LONG_PTR data);
@@ -331,7 +337,7 @@ bool RestartElevated(App& a) {
 HRESULT OnButton(HWND hwnd, App& a, int id) {
     if (id >= kCandidate0 && id < kCandidate0 + 8) {
         const size_t i = static_cast<size_t>(id - kCandidate0);
-        if (i < a.candidates.size()) { a.folder = a.candidates[i].dir; Refresh(a); Navigate(hwnd, MainPage(a)); }
+        if (i < a.candidates.size()) { a.folder = a.candidates[i].dir; Refresh(a); RememberChoice(a); Navigate(hwnd, MainPage(a)); }
         return S_FALSE;
     }
     switch (id) {
@@ -346,7 +352,7 @@ HRESULT OnButton(HWND hwnd, App& a, int id) {
         return S_FALSE;
     case kBrowse: {
         const std::wstring picked = PickFile(hwnd, true);
-        if (!picked.empty()) { a.folder = picked; Refresh(a); Navigate(hwnd, MainPage(a)); }
+        if (!picked.empty()) { a.folder = picked; Refresh(a); RememberChoice(a); Navigate(hwnd, MainPage(a)); }
         return S_FALSE;
     }
     case kAdmin:
