@@ -94,6 +94,7 @@ What each of these measurably does, knob by knob, is in [dlssnr-knobs.md](dlssnr
 | Model passes | 1 | How many times the model reworks each frame (1 to 4); every pass takes the previous result as its input, so the effect compounds. Each extra pass costs roughly another model run: watch the model time and the "keeps up with" line. If the model cannot keep up it skips frames and the last result is carried forward. Compare with the Before / after hotkey: more passes can look over-processed. |
 | Give Lossless Scaling GPU priority | on | Raises Lossless Scaling's D3D11 device to GPU thread priority +7 so LSFG's own passes and presents pre-empt the model on the shared GPU. Leave it on unless you are measuring. |
 | Blend amount | 1.00 | How much of the delta is added at present time. Above 1 exaggerates the model's edit. |
+| Ghost guard | 0.50 | Stops the faint copy of the previous frame that can trail moving things. The delta is made from an older frame and moved onto the current one with Lossless Scaling's motion data; where that data is unreliable (the edge of a moving object, something just uncovered) it lands in the wrong place. The guard fades the delta there, and a little more the older the delta is, and leaves still and steadily moving areas alone. 0 = off, 1 = strongest. *Diagnostic view > Ghost guard* shows where it acts (dark = faded). |
 | Limit per-pixel change | 0.50 | Clamp on the per-channel delta (0..1 scale). Limits how far one pixel may move. |
 | Protect bright areas from | 0.85 | Fades the delta out as the source luminance rises from here to white. Keeps the model from crushing bright areas. 1.00 turns it off. |
 | Temporal smoothing | off | Blends the model's change for this frame with its change for the previous one, moved along with the picture by Lossless Scaling's motion data. Calms shimmer and crawling in fine detail (distant roads, fences, foliage) at the price of a little softness or ghosting when the camera moves fast. 0 is off; try 0.3 first. Costs almost nothing (one work-resolution pass). |
@@ -229,7 +230,12 @@ addon uses the swap chain vtable precisely so they do.
 stages* shows how far each present gets. If *targeted* is zero the tap has not seen a real frame
 yet; if *with delta* is zero the model has not finished a run.
 
-**The image morphs or ghosts on generated frames.** Turn on *Debug view > LSFG flow* to confirm
+**A faint copy of the previous frame trails moving things (only with Neural Rendering on).** The delta comes from an older frame and is moved by
+Lossless Scaling's motion data, which is coarse and wrong at object edges. Raise *Ghost guard* (0.5 is the default; try 0.7 to 1), then lower *Limit per-pixel change*
+and *Fine detail strength*, and keep *Temporal smoothing* at 0 to 0.3. A smaller *Model resolution* makes the delta fresher. *Diagnostic view > Ghost guard* shows where
+the guard fades the delta; the *applied at offset* number under *Technical status* is the delta's age in frames.
+
+**The image morphs on generated frames.** Turn on *Debug view > LSFG flow* to confirm
 the flow is being seen (the panel shows its size next to the flow checkbox). If it reads "no flow
 texture seen yet", the tap did not identify LSFG's flow pass; try *Clear table* and let it
 re-learn.

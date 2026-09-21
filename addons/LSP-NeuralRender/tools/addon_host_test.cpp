@@ -96,6 +96,9 @@ int main(int argc, char** argv) {
     std::string shotPath; int shotW = 760, shotH = 3400;
     for (int i = 4; i < argc; ++i) { if (!strncmp(argv[i], "shot=", 5)) shotPath = argv[i] + 5; else if (!strncmp(argv[i], "shotW=", 6)) shotW = atoi(argv[i] + 6); else if (!strncmp(argv[i], "shotH=", 6)) shotH = atoi(argv[i] + 6); }
     const bool shotMode = !shotPath.empty();
+    // flowsplit=1: the right half of the fake LSFG flow has both fields pointing the same way (they disagree), the left half agrees
+    bool flowSplit = false;
+    for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "flowsplit=", 10)) flowSplit = atoi(argv[i] + 10) != 0;
 
     // ImGui: headless normally; with shot= it renders through the DX11 backend into an offscreen target, in the manager's theme
     ImGuiContext* ctx = ImGui::CreateContext(); ImGuiIO& io = ImGui::GetIO(); io.DisplaySize = ImVec2(1280, 800); io.DeltaTime = 1.0f / 60; io.IniFilename = nullptr;
@@ -112,7 +115,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "flowsplit", 9)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     Init(&host, ctx, (void*)af, (void*)ff, ud);
@@ -174,7 +177,10 @@ int main(int argc, char** argv) {
     // Constant (+4, 0) units = 8 flow px to the left in the previous frame; zw = the reverse field.
     const UINT FLW = W / 4, FLH = H / 4;
     ID3D11Texture2D* flow16 = MakeTex(dev, FLW, FLH, DXGI_FORMAT_R16G16B16A16_FLOAT, true); ID3D11UnorderedAccessView* uFlow16 = uav(flow16); ID3D11ShaderResourceView* sPyr3 = srv(pyr[3]), * sFlow16 = srv(flow16);
-    ID3D11ComputeShader* csFlow16 = MakeCS(dev, "Texture2D<float> c:register(t4); RWTexture2D<float4> o:register(u0); [numthreads(8,8,1)] void main(uint3 id:SV_DispatchThreadID){ o[id.xy]=float4(4,0,-4,0)+c[id.xy/8].x*0; }");
+    const std::string flowSrc = flowSplit
+        ? "Texture2D<float> c:register(t4); RWTexture2D<float4> o:register(u0); [numthreads(8,8,1)] void main(uint3 id:SV_DispatchThreadID){ o[id.xy]=(id.x<" + std::to_string(FLW / 2) + " ? float4(4,0,-4,0) : float4(4,0,4,0))+c[id.xy/8].x*0; }"
+        : std::string("Texture2D<float> c:register(t4); RWTexture2D<float4> o:register(u0); [numthreads(8,8,1)] void main(uint3 id:SV_DispatchThreadID){ o[id.xy]=float4(4,0,-4,0)+c[id.xy/8].x*0; }");
+    ID3D11ComputeShader* csFlow16 = MakeCS(dev, flowSrc.c_str());
     if (!flow16 || !uFlow16 || !sPyr3 || !sFlow16 || !csFlow16) { printf("flow16 setup failed\n"); return 1; }
 
     uint64_t presents = 0, composedSeen = 0, checks = 0; double lastMean = 0;

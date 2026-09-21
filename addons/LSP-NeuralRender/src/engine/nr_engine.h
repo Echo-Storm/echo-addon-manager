@@ -31,6 +31,7 @@ struct NrParams {
     float workingScale = 0.35f;   // the frame is shrunk by this before the model sees it (the only cost lever)
     float composeIntensity = 1.0f;// how much of the delta lands
     float maxDelta = 0.5f;        // clamp on |delta|
+    float ghostGuard = 0.5f;      // compose side: 0 = off; fades the delta where LSFG's two motion fields disagree and as the delta ages
     float hiProtect = 0.85f;      // fade the delta as the source luminance rises from here to white (1 = off)
     uint32_t passes = 1;          // model runs per frame (1..4): each pass takes the previous result as its colour input
     float sharpen = 0.0f;         // compose side: contrast-adaptive sharpening of the presented frame, 0 = off
@@ -48,7 +49,7 @@ struct NrParams {
     uint32_t hudCount = 0;
     float hud[kMaxHud][4] = {};   // left, top, right, bottom, 0..1
     float hudFeather = 0.004f;    // soft edge of those rectangles, as a fraction of the screen
-    uint32_t debugView = 0;       // 0 result, 1 original, 2 delta x4, 3 frame role (real/generated), 4 LSFG flow
+    uint32_t debugView = 0;       // 0 result, 1 original, 2 delta x4, 3 frame role (real/generated), 4 LSFG flow, 5 ghost guard weight
 
     bool CreateKeysEqual(const NrParams& o) const { return workingScale == o.workingScale; }
     LspnrTuning Tuning() const { return LspnrTuning{ style, useAutoMask, 1u, intensity, localStructure, localTone, skinStructure }; }

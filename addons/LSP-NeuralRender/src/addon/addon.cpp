@@ -83,9 +83,9 @@ static void HudParse(const std::string& s, NrParams& p) {
 }
 static std::string PresetSerialize(const NrParams& p) {
     char b[1024];
-    snprintf(b, sizeof b, "passes=%u;style=%u;autoMask=%u;intensity=%g;localStructure=%g;localTone=%g;skinStructure=%g;useFlow=%d;workingScale=%g;composeIntensity=%g;maxDelta=%g;hiProtect=%g;sharpen=%g;saturation=%g;vibrance=%g;brightness=%g;contrast=%g;gamma=%g;shadows=%g;highlights=%g;grain=%g;grainSize=%g;deltaSmooth=%g;hudFeather=%g;hud=%s",
+    snprintf(b, sizeof b, "passes=%u;style=%u;autoMask=%u;intensity=%g;localStructure=%g;localTone=%g;skinStructure=%g;useFlow=%d;workingScale=%g;composeIntensity=%g;maxDelta=%g;hiProtect=%g;sharpen=%g;saturation=%g;vibrance=%g;brightness=%g;contrast=%g;gamma=%g;shadows=%g;highlights=%g;grain=%g;grainSize=%g;deltaSmooth=%g;ghostGuard=%g;hudFeather=%g;hud=%s",
              p.passes, p.style, p.useAutoMask, p.intensity, p.localStructure, p.localTone, p.skinStructure, p.useFlow ? 1 : 0, p.workingScale, p.composeIntensity, p.maxDelta, p.hiProtect, p.sharpen, p.saturation, p.vibrance, p.brightness, p.contrast, p.gamma,
-             p.shadows, p.highlights, p.grain, p.grainSize, p.deltaSmooth, p.hudFeather, HudSerialize(p).c_str());
+             p.shadows, p.highlights, p.grain, p.grainSize, p.deltaSmooth, p.ghostGuard, p.hudFeather, HudSerialize(p).c_str());
     return b;
 }
 static bool PresetApplyTo(const std::string& data, NrParams& p) {
@@ -105,7 +105,7 @@ static bool PresetApplyTo(const std::string& data, NrParams& p) {
         else if (k == "gamma") p.gamma = std::clamp(v, 0.5f, 2.0f);
         else if (k == "shadows") p.shadows = std::clamp(v, -1.0f, 1.0f); else if (k == "highlights") p.highlights = std::clamp(v, -1.0f, 1.0f);
         else if (k == "grain") p.grain = std::clamp(v, 0.0f, 1.0f); else if (k == "grainSize") p.grainSize = std::clamp(v, 1.0f, 4.0f);
-        else if (k == "deltaSmooth") p.deltaSmooth = std::clamp(v, 0.0f, 0.95f); else if (k == "hudFeather") p.hudFeather = std::clamp(v, 0.0f, 0.05f);
+        else if (k == "ghostGuard") p.ghostGuard = std::clamp(v, 0.0f, 1.0f); else if (k == "deltaSmooth") p.deltaSmooth = std::clamp(v, 0.0f, 0.95f); else if (k == "hudFeather") p.hudFeather = std::clamp(v, 0.0f, 0.05f);
         else if (k == "hud") HudParse(vs, p); else continue;
         any = true;
     }
@@ -238,9 +238,9 @@ static void LoadConfig() {
     c.p.style = CfgGetI("style", 0); c.p.useAutoMask = CfgGetI("autoMask", 1);
     c.p.intensity = CfgGetF("intensity", 1.0f); c.p.localStructure = CfgGetF("localStructure", 1.0f); c.p.localTone = CfgGetF("localTone", 1.0f); c.p.skinStructure = CfgGetF("skinStructure", -1.0f);
     c.p.useFlow = CfgGetI("useFlow", 1) != 0; c.p.flowUnit = CfgGetF("flowUnit", 2.0f);
-    c.p.workingScale = CfgGetF("workingScale", 0.35f); c.p.composeIntensity = CfgGetF("composeIntensity", 1.0f); c.p.maxDelta = CfgGetF("maxDelta", 0.5f);
+    c.p.workingScale = CfgGetF("workingScale", 0.35f); c.p.composeIntensity = CfgGetF("composeIntensity", 1.0f); c.p.maxDelta = CfgGetF("maxDelta", 0.5f); c.p.ghostGuard = std::clamp(CfgGetF("ghostGuard", 0.5f), 0.0f, 1.0f);
     c.p.hiProtect = CfgGetF("hiProtect", 0.85f); c.p.debugView = CfgGetI("debugView", 0);
-    if (c.p.debugView > 4) c.p.debugView = 0;
+    if (c.p.debugView > 5) c.p.debugView = 0;
     c.lsFirst = CfgGetI("lsFirst", 1) != 0;
     c.p.passes = (uint32_t)std::clamp(CfgGetI("passes", 1), 1, 4);
     c.p.sharpen = std::clamp(CfgGetF("sharpen", 0.0f), 0.0f, 1.0f);
@@ -275,7 +275,7 @@ static void SaveConfig() {
     CfgSetI("enabled", c.enabled); CfgSetI("style", c.p.style); CfgSetI("autoMask", c.p.useAutoMask);
     CfgSetF("intensity", c.p.intensity); CfgSetF("localStructure", c.p.localStructure); CfgSetF("localTone", c.p.localTone); CfgSetF("skinStructure", c.p.skinStructure);
     CfgSetI("useFlow", c.p.useFlow); CfgSetF("flowUnit", c.p.flowUnit);
-    CfgSetF("workingScale", c.p.workingScale); CfgSetF("composeIntensity", c.p.composeIntensity); CfgSetF("maxDelta", c.p.maxDelta);
+    CfgSetF("workingScale", c.p.workingScale); CfgSetF("composeIntensity", c.p.composeIntensity); CfgSetF("maxDelta", c.p.maxDelta); CfgSetF("ghostGuard", c.p.ghostGuard);
     CfgSetF("hiProtect", c.p.hiProtect); CfgSetI("debugView", c.p.debugView);
     CfgSetI("lsFirst", c.lsFirst);
     CfgSetI("passes", (int)c.p.passes); CfgSetF("sharpen", c.p.sharpen); CfgSetF("saturation", c.p.saturation); CfgSetF("vibrance", c.p.vibrance); CfgSetF("brightness", c.p.brightness); CfgSetF("contrast", c.p.contrast); CfgSetF("gamma", c.p.gamma); CfgSetI("hotkeys", c.hotkeys);
@@ -616,7 +616,7 @@ static void PresentBody(IDXGISwapChain* sc) {
     if (FAILED(sc->GetBuffer(0, IID_PPV_ARGS(&bb))) || !bb) return;
     uint32_t fw = 0, fh = 0; ID3D11Resource* flow = p.useFlow ? g_tap.NewestFlow(fw, fh) : nullptr;
     Compose11::Args a; a.target = bb; a.delta = dsrv; a.flow = flow; a.flowW = fw; a.flowH = fh; a.flowUnit = p.flowUnit;
-    a.offset = (float)(pi.target - (double)d); a.intensity = p.composeIntensity; a.maxDelta = p.maxDelta; a.hiProtect = p.hiProtect; a.debugView = p.debugView; a.isGen = pi.gen;
+    a.offset = (float)(pi.target - (double)d); a.intensity = p.composeIntensity; a.maxDelta = p.maxDelta; a.ghostGuard = p.ghostGuard; a.hiProtect = p.hiProtect; a.debugView = p.debugView; a.isGen = pi.gen;
     a.sharpen = p.sharpen; a.compare = (uint32_t)cmp; a.splitPos = g_splitPos; a.marker = marker;
     a.saturation = p.saturation; a.vibrance = p.vibrance;
     a.brightness = p.brightness; a.contrast = p.contrast; a.gamma = p.gamma;
@@ -675,6 +675,8 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         { std::lock_guard<std::mutex> lk(g_cfgMu); for (auto& pr : g_presets) { names.push_back(pr.name); datas.push_back(pr.data); } }
         const std::string now = PresetSerialize(c.p);
         if (s_active >= (int)names.size()) s_active = -1;
+        // a look saved by an older version lacks newer keys; compare it as it would apply now, so it still reads as unchanged
+        for (auto& d : datas) { NrParams t = c.p; PresetApplyTo(d, t); d = PresetSerialize(t); }
         if (s_active < 0) for (size_t i = 0; i < datas.size(); ++i) if (datas[i] == now) { s_active = (int)i; break; }   // recognise the look already in use
         const bool modified = s_active >= 0 && datas[s_active] != now;
         const std::string label = s_active >= 0 ? names[s_active] + (modified ? "  (changed)" : "") : std::string("Custom");
@@ -797,6 +799,8 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         Tip("Raises Lossless Scaling's own graphics work above the model's on the shared card, so frame generation and presenting are not delayed while the model runs. Recommended.");
         changed |= SL("Blend amount", &c.p.composeIntensity, 0.0f, 2.0f);
         Tip("How much of the model's change is added to each presented frame. 1 = exactly what the model made; 0 = none; above 1 exaggerates it.");
+        changed |= SL("Ghost guard", &c.p.ghostGuard, 0.0f, 1.0f, c.p.ghostGuard <= 0.001f ? "off" : "%.2f");
+        Tip("Stops the faint copy of the previous frame that can trail moving things. The model works on an older frame and its change is moved onto the current one with Lossless Scaling's motion data; where that motion data is unreliable (the edge of a moving object, something just uncovered) the change lands in the wrong place. This fades the change out there, and a little more the older it is, and leaves still and steadily moving areas alone. 0 = off, 0.5 = a good start, 1 = strongest. To see where it acts, set Diagnostic view to Ghost guard: dark areas are faded.");
         changed |= SL("Limit per-pixel change", &c.p.maxDelta, 0.05f, 1.0f);
         Tip("The most any pixel's colour may be changed (0..1 of full range). Lower is safer and subtler; it stops the model from making harsh jumps.");
         changed |= SL("Protect bright areas from", &c.p.hiProtect, 0.5f, 1.0f, c.p.hiProtect >= 0.999f ? "off" : "%.2f");
@@ -964,8 +968,8 @@ LSPROXY_EXPORT void AddonRenderSettings() {
       ImGui::Text("d3d11 hook: %d entry points   other-adapter dispatches: %llu   tapped device: %s", g_hookCount, (unsigned long long)g_otherDispatches, tdi.c_str()); }
     }
     if (lsp::SectionHeader("Advanced")) {
-        int dv = (int)c.p.debugView; const char* views[] = { "Result", "Original", "Delta x4", "Frame role (green real, red generated)", "LSFG flow" };
-        if (ImGui::Combo("Diagnostic view", &dv, views, 5)) { c.p.debugView = dv; changed = true; }
+        int dv = (int)c.p.debugView; const char* views[] = { "Result", "Original", "Delta x4", "Frame role (green real, red generated)", "LSFG flow", "Ghost guard (white = full effect)" };
+        if (ImGui::Combo("Diagnostic view", &dv, views, 6)) { c.p.debugView = dv; changed = true; }
         Tip("Shows what the addon is doing instead of the finished picture: the original frame, the model's change amplified 4x, which frames are real or generated, or the motion data. Leave on Result for normal use.");
         changed |= SL("Slow-model watchdog (ms)", &c.watchdogMs, 20.0f, 200.0f, "%.0f");
         Tip("If the model takes longer than this for 30 frames in a row, Neural Render switches itself off so it can never hurt your frame rate. It re-arms itself after 10 seconds, up to three times per session.");

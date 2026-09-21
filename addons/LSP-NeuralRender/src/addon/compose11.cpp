@@ -22,10 +22,11 @@ cbuffer CB : register(b0) {
     float  intensity;
     float  maxDelta;
     float  hiProtect;
-    uint   debugView;    // 0 result, 1 original, 2 delta x4, 3 frame role, 4 flow
+    uint   debugView;    // 0 result, 1 original, 2 delta x4, 3 frame role, 4 flow, 5 ghost guard weight
     uint   flags;        // bit0 flow bound, bit1 generated frame
     float2 uvPerUnit;    // one flow unit in uv
-    float2 pad;
+    float  ghostGuard;     // 0 = off, 1 = full: fade the delta where the two motion fields disagree and as it ages
+    float  flowPxPerUnit;  // flow-texture pixels in one flow unit
     float  sharpen;      // 0 = off
     uint   compare;      // 0 enhanced, 1 split (left half original), 2 original only
     float  splitPos;
@@ -79,7 +80,18 @@ void CSCompose(uint3 id : SV_DispatchThreadID) {
         // where this pixel's content was in frame d: forward along previous->current for a delta from before this
         // frame, back along current->previous for a delta from after it
         float2 suv = offset > 0.0 ? uv - offset * fl.zw * uvPerUnit : uv + offset * fl.xy * uvPerUnit;
-        float3 d = tDelta.SampleLevel(sLin, suv, 0).rgb;
+        // Ghost guard. The delta was made from an older frame and is moved here by LSFG's flow, so it lands in the wrong place
+        // where that flow is unreliable, which shows as a faint copy of the previous frame. LSFG gives two fields, current to
+        // previous (xy) and previous to current (zw); on a steady move one is the reverse of the other. Where their sum is
+        // large (an object edge, something just uncovered) the delta is faded out, and it is faded a little more the older it is.
+        float ghostW = 1.0;
+        if (ghostGuard > 0.001 && (flags & 1u) != 0u) {
+            const float disagree = length(fl.xy + fl.zw) * flowPxPerUnit;               // in flow-texture pixels
+            const float wCons = 1.0 - smoothstep(0.3, 1.5, disagree);
+            const float wAge = rcp(1.0 + 0.35 * max(0.0, offset - 1.0));               // a delta more than a frame old
+            ghostW = lerp(1.0, wCons * wAge, saturate(ghostGuard));
+        }
+        float3 d = tDelta.SampleLevel(sLin, suv, 0).rgb * ghostW;
         float wh = hiProtect < 0.999 ? 1.0 - smoothstep(hiProtect, 1.0, dot(o.rgb, kLuma)) : 1.0;
         d = clamp(d * intensity, -maxDelta, maxDelta) * wh;
         r = saturate(o.rgb + d);
@@ -128,6 +140,7 @@ void CSCompose(uint3 id : SV_DispatchThreadID) {
         else if (debugView == 2) r = saturate(0.5 + d * 4.0);
         else if (debugView == 3) r = saturate(r + ((flags & 2u) ? float3(0.15, 0, 0) : float3(0, 0.15, 0)));
         else if (debugView == 4) r = saturate(float3(0.5 + fl.xy / 16.0, 0.5));
+        else if (debugView == 5) r = float3(ghostW, ghostW, ghostW);   // white = the delta lands in full, dark = faded out
     }
     if ((flags & 4u) != 0u) {   // show the protected areas: a green tint and outline (display only)
         float inside = 0.0, edge = 0.0; const float px = 1.5 / (float)dstSize.x;
@@ -150,7 +163,7 @@ void CSCompose(uint3 id : SV_DispatchThreadID) {
 }
 )HLSL";
 
-struct ComposeCB { uint32_t dstW, dstH; float offset, intensity, maxDelta, hiProtect; uint32_t debugView, flags; float uvPerUnitX, uvPerUnitY, pad0, pad1; float sharpen; uint32_t compare; float splitPos; uint32_t marker; float saturation; float vibrance; float brightness; float contrast; float gamma; float shadows, highlights, grain; uint32_t grainSeed; float grainSize; uint32_t hudCount; float hudFeather; float hud[6][4]; };
+struct ComposeCB { uint32_t dstW, dstH; float offset, intensity, maxDelta, hiProtect; uint32_t debugView, flags; float uvPerUnitX, uvPerUnitY, ghostGuard, flowPxPerUnit; float sharpen; uint32_t compare; float splitPos; uint32_t marker; float saturation; float vibrance; float brightness; float contrast; float gamma; float shadows, highlights, grain; uint32_t grainSeed; float grainSize; uint32_t hudCount; float hudFeather; float hud[6][4]; };
 // The HLSL cbuffer packs into 16-byte rows: hud[] starts at byte 112 and the whole buffer is a multiple of 16
 // (CreateBuffer rejects any other size for a constant buffer).
 static_assert(offsetof(ComposeCB, gamma) == 80 && offsetof(ComposeCB, hud) == 112 && sizeof(ComposeCB) == 208, "ComposeCB must match the HLSL cbuffer layout");
@@ -236,6 +249,7 @@ bool Compose11::Run(ID3D11DeviceContext* ctx, const Args& a) {
     cb.hudCount = a.hudCount > 6u ? 6u : a.hudCount; cb.hudFeather = a.hudFeather; memcpy(cb.hud, a.hud, sizeof cb.hud);
     if (a.hudShow) cb.flags |= 4u;
     const float fu = a.flowUnit > 0.1f ? a.flowUnit : 2.0f;
+    cb.flowPxPerUnit = 1.0f / fu; cb.ghostGuard = flowSrv ? (a.ghostGuard < 0.0f ? 0.0f : a.ghostGuard > 1.0f ? 1.0f : a.ghostGuard) : 0.0f;
     cb.uvPerUnitX = (flowSrv && a.flowW) ? 1.0f / (fu * (float)a.flowW) : 0.0f; cb.uvPerUnitY = (flowSrv && a.flowH) ? 1.0f / (fu * (float)a.flowH) : 0.0f;
     D3D11_MAPPED_SUBRESOURCE m{}; if (SUCCEEDED(ctx->Map(m_cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) { memcpy(m.pData, &cb, sizeof cb); ctx->Unmap(m_cb, 0); }
 

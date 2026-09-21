@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **DLSS 5 Neural Rendering: Ghost guard.** New slider that fades the model's change where Lossless Scaling's motion data is unreliable and as the change ages, to remove the faint
+  copy of the previous frame that could trail moving things. Default 0.5; 0 restores the old behaviour. See the addon's changelog.
+
 ## 0.1.0 (first release)
 
 The first release of Echo Addon Manager as its own project, with a fresh history. It started from FrankBarretta's

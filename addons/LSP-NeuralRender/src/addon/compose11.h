@@ -21,6 +21,7 @@ public:
         ID3D11Resource* flow = nullptr; uint32_t flowW = 0, flowH = 0; float flowUnit = 2.0f;   // LSFG flow (RGBA16F) or nullptr
         float offset = 0;                              // presented frame - d, in real frames
         float intensity = 1, maxDelta = 0.5f, hiProtect = 0.85f; uint32_t debugView = 0; bool isGen = false;
+        float ghostGuard = 0;                          // 0 = off; see the shader: fades the delta where the motion fields disagree and with its age
         float sharpen = 0;                             // 0 = off; CAS-style, on the composed frame
         float saturation = 1, vibrance = 0;            // colour: 1 / 0 = unchanged
         float brightness = 0, contrast = 1, gamma = 1; // tone: 0 / 1 / 1 = unchanged

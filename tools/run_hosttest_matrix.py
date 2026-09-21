@@ -149,6 +149,26 @@ def scenario_smooth_passes(ctx, res, text, frame):
     res.check('3 passes with smoothing stay in a sane range', d < 40, 'mean abs change %.2f' % d)
 
 
+def _halves(frame, pat):
+    """Mean absolute change against the pattern in the left and right half (clear of the middle and the edges)."""
+    l = np.abs(frame[:, 16: W // 2 - 16] - pat[:, 16: W // 2 - 16]).mean()
+    r = np.abs(frame[:, W // 2 + 16: W - 16] - pat[:, W // 2 + 16: W - 16]).mean()
+    return l, r
+
+
+def scenario_ghost_off(ctx, res, text, frame):
+    l, r = _halves(frame, ctx['pat'])
+    ctx['ghost_off'] = (l, r)
+    res.check('guard off: both halves are enhanced', l > 0.3 and r > 0.3, 'left %.2f right %.2f' % (l, r))
+
+
+def scenario_ghost_on(ctx, res, text, frame):
+    l, r = _halves(frame, ctx['pat'])
+    lo, ro = ctx['ghost_off']
+    res.check('guard on: the half whose motion fields agree keeps its enhancement', l > 0.75 * lo, '%.2f vs %.2f without the guard' % (l, lo))
+    res.check('guard on: the half whose motion fields disagree is faded out', r < 0.25 * ro, '%.2f vs %.2f without the guard' % (r, ro))
+
+
 def scenario_none(ctx, res, text, frame):
     pass
 
@@ -164,6 +184,8 @@ SCENARIOS = [
     ('grain_inside_hud', ['grain=0.6', 'hud=0,0,0.5,1', 'hudFeather=0'], scenario_grain_hud),
     ('smooth', ['deltaSmooth=0.5'], scenario_smooth),
     ('smooth_passes3', ['deltaSmooth=0.5', 'passes=3'], scenario_smooth_passes),
+    ('ghost_off', ['flowsplit=1', 'ghostGuard=0'], scenario_ghost_off),
+    ('ghost_on', ['flowsplit=1', 'ghostGuard=1'], scenario_ghost_on),
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),
 ]
 

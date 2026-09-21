@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Ghost guard** (new slider, default 0.5, 0 = the old behaviour): fades the model's delta where LSFG's two motion fields disagree (object edges, newly
+  uncovered areas) and a little more the older the delta is, which removes the faint copy of the previous frame that trailed moving things. Diagnostic view
+  "Ghost guard" shows the weight. Saved looks made earlier still read as unchanged. Offline test: with a fake flow whose right half disagrees with itself, that half
+  is faded from 6.33 to 0.19 mean change and the agreeing half is untouched.
+
 ## 0.5.0-echo.1 (local fork, 2026-09-21)
 
 - Reports **live status and metrics** to the host (frame time, model cost, how often the model keeps up, GPU start time; a one-line status on the
