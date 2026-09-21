@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The manager window's code was rewritten** (window, tray icon, hotkey, dpi, the D3D11 device, the icons and the frame with its tabs and status bar), split into
+  small modules under `manager/src/gui/window`, with a new offline test that drives the real window (`lsproxy_guitest`, run three ways) and checks the
+  placement, hotkey text, scale limits and status text on their own. The pictures are pixel-identical to before. Fixed on the way: with the interface size
+  set above or below 100 % the window was saved at a size divided by that factor and came back smaller after each close; the saved size now uses the display
+  scale only. The hotkey label in the tray tip and the balloon uses the same F1 to F12 limit the hotkey itself does. The share of the manager's code that is
+  still the original project's is now 29.4% (counting the ReShade and Windowed features as the original's).
 - Neural Rendering's helper DLL, test tools and internal names no longer use the old `lspnr` prefix (details in the addon's changelog). Nothing changes on screen.
 
 ## 0.2.0 (2026-09-21)

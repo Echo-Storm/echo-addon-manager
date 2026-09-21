@@ -136,7 +136,7 @@ See [docs/addon-authors.md](docs/addon-authors.md): the exports, the host interf
 
 ## Credits
 
-Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta**, and we are grateful for it. About a third
+Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta**, and we are grateful for it. Just under a third
 of the manager's code (mainly the proxy DLL and the DirectX 11 and shader hooks) is still theirs, and the ReShade and Windowed features started there as
 addons; the rest, including how addons are found, checked and loaded, the settings file, the event system, the window and the live status and metrics,
 was written or rewritten since (`tools/measure_original_share.py` measures it). Neural Rendering is by **andreiday**, extended here. The full list, with licences, is in [NOTICE.md](NOTICE.md). Lossless Scaling belongs to its author; this project is unofficial.

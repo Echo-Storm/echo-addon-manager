@@ -19,6 +19,7 @@
 #include "src/gui/widgets/toast.h"
 #include "src/gui/widgets/status_bar.h"
 #include "src/gui/widgets/empty_state.h"
+#include "src/gui/window/status_text.h"
 #include "src/gui/tabs/tab_about.h"
 #include "src/gui/tabs/tab_features.h"
 #include "src/config/config_manager.h"
@@ -102,7 +103,7 @@ int main(int argc, char** argv) {
     float model = 0.5f, sharpen = 0.0f, vib = 1.2f, blend = 0.72f, gamma = 1.0f; int passes = 1, grain = 2; bool sw = true, sw2 = false; int sel = 0;
     const float dModel = 0.35f, dSharpen = 0.0f, dVib = 0.0f, dBlend = 1.0f, dGamma = 1.0f; const int dPasses = 1, dGrain = 1;
     if (!clean) widgets::ToastShow("Installed 'Cool Addon' (switched off). Turn it on with its switch.", widgets::ToastType::Success, 1000.0f);
-    const std::string status = std::string(LSPROXY_PRODUCT_NAME " " LSPROXY_VERSION_STRING) + (clean ? "   |   1 addon, 1 on" : "   |   3 addons, 1 on");   // the tidy scene has just Neural Rendering, as a real install does
+    const std::string status = window::StatusCounts(clean ? 1 : 3, 1);   // the tidy scene has just Neural Rendering, as a real install does
 
     // live data for the cards and the Performance tab: 20 s of a game near 60 fps with a few hitches, a model at ~6.6 ms, a GPU at its cap
     {

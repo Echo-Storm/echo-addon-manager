@@ -80,7 +80,6 @@ set(GUI_SOURCES
     src/gui/tabs/tab_features.cpp
     src/gui/tabs/tab_settings.cpp
     src/gui/tabs/tab_logs.cpp
-    src/gui/tabs/tab_logs.cpp
     src/gui/tabs/tab_performance.cpp
     src/gui/tabs/tab_about.cpp
     src/gui/widgets/toggle_switch.cpp
@@ -90,6 +89,14 @@ set(GUI_SOURCES
     src/gui/widgets/status_bar.cpp
     src/gui/widgets/empty_state.cpp
     src/gui/widgets/file_dialog.cpp
+    src/gui/window/chrome.cpp
+    src/gui/window/dpi.cpp
+    src/gui/window/hotkey.cpp
+    src/gui/window/main_frame.cpp
+    src/gui/window/placement.cpp
+    src/gui/window/status_text.cpp
+    src/gui/window/tray.cpp
+    src/gui/window/window_device.cpp
 )
 
 set(IMGUI_SOURCES
@@ -147,6 +154,7 @@ add_executable(lsproxy_uipreview EXCLUDE_FROM_ALL
     src/gui/widgets/addon_card.cpp
     src/gui/widgets/status_bar.cpp
     src/gui/widgets/empty_state.cpp
+    src/gui/window/status_text.cpp
     src/gui/tabs/tab_about.cpp
     src/gui/tabs/tab_features.cpp
     src/features/features.cpp
@@ -205,5 +213,14 @@ add_executable(lsproxy_featurestest EXCLUDE_FROM_ALL tools/features_test.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(lsproxy_featurestest PRIVATE ${imgui_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
 target_link_libraries(lsproxy_featurestest d3d11 dxgi user32 minhook)
+
+# Smoke test of the manager window (real GUI thread, hidden: no window appears). Run it twice: plain, and with the argument "place":
+# cmake --build . --config Release --target lsproxy_guitest
+add_executable(lsproxy_guitest EXCLUDE_FROM_ALL tools/gui_test.cpp
+    ${ADDON_SOURCES} ${FEATURE_SOURCES} ${EVENT_SOURCES} ${HOST_SOURCES} ${CONFIG_SOURCES} ${LOG_SOURCES}
+    src/core/d3d11_hook.cpp src/core/shader_hook.cpp
+    ${GUI_SOURCES} ${IMGUI_SOURCES})
+target_include_directories(lsproxy_guitest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
+target_link_libraries(lsproxy_guitest d3d11 dxgi d3dcompiler bcrypt minhook)
 
 install(DIRECTORY sdk/include/lsproxy DESTINATION include)

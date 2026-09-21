@@ -4,7 +4,7 @@ Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/Los
 That project's proxy DLL and its DirectX 11 and shader hooks, and the ReShade and Windowed features (they began as addons), are the foundation of this one, and
 we are grateful for them. At the start of this repository about half of the manager's source lines were still that code (48% by
 `git blame`, before the history was started fresh); after the addon handling, safety checks, settings file, event system, host interface and
-part of the window code were rewritten, about a third is (32.7% by `tools/measure_original_share.py`, which compares against the original's lines; that counts the ReShade and Windowed
+the window code were rewritten, just under a third is (29.4% by `tools/measure_original_share.py`, which compares against the original's lines; that counts the ReShade and Windowed
 features, now in `manager/src/features`, as the original's, since they began as its addons). The window, tabs, Performance, backup, install and remove, tray, shared look and the live status and metrics interface are
 new. The original copyright and licence are in [LICENSE](LICENSE), which must stay with every copy, however much of it remains.
 
