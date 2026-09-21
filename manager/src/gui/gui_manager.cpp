@@ -433,7 +433,7 @@ void GuiManager::StartGuiThread(AddonManager* manager) {
     if (HANDLE thread = CreateThread(NULL, 0, GuiThread, NULL, 0, NULL)) CloseHandle(thread);
 }
 
-DWORD WINAPI GuiManager::GuiThread(LPVOID lpParam) {
+DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
     // Load addons in GUI thread to avoid loader lock
     // Settings > "Auto-load addons on startup": when off, addons wait for "Load now" in the manager.
     if (g_manager) {
