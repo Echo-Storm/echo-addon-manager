@@ -17,6 +17,8 @@ addons, a live view of frame time and GPU load while a game runs, and one-click 
 **ReShade input passthrough** and **Windowed mode**. It is free and MIT-licensed. It is an unofficial project, not affiliated with the Lossless Scaling developers: read the
 [disclaimer](DISCLAIMER.md) before you install it.
 
+[![build](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml/badge.svg)](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml)
+
 Status: **0.6.0**, on the way to 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
 
 ## Get started

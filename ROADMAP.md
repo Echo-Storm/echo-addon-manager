@@ -16,7 +16,7 @@ Status on 2026-09-21, at version 0.6.0 (the current work is on `main`).
 | 7 | **Help when something goes wrong** | **Done** on `main` | A troubleshooting table in the README, a questions-and-answers page (`docs/faq.md`), the diagnostics zip and the log. More entries will come from real questions. |
 | 8 | **Crash safety** | Done | Exit-path tests, isolated addon calls, the compatibility test in its own process, atomic settings writes. |
 | 9 | **Model compatibility data** | **Done** on `main`, needs data | The self-test writes a shareable report (`--report`, and an *Open the compatibility report* button) and `docs/model-compatibility.md` is the table. It has one row (the maintainer's card); more come from other people's reports. |
-| 10 | **Automated builds** | **Set up** on `main` | `.github/workflows/build.yml` runs `tools/ci.ps1` (manager, installer and sample addon from a clean checkout, and the tests that need no GPU) on every push and pull request. Neural Rendering needs NVIDIA's SDK and the window tests need a desktop, so those stay on the maintainer's machine. |
+| 10 | **Automated builds** | **Done** on `main` (green on GitHub) | `.github/workflows/build.yml` runs `tools/ci.ps1` (manager, installer and sample addon from a clean checkout, and the tests that need no GPU) on every push and pull request. Neural Rendering needs NVIDIA's SDK and the window tests need a desktop, so those stay on the maintainer's machine. |
 
 ## The installer, in detail
 
