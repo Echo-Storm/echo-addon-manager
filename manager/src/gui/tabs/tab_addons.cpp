@@ -373,7 +373,7 @@ void RenderTabAddons(AddonManager* manager) {
     auto resolveSelection = [&]() {
         for (int i = 0; i < (int)addons.size(); i++)
             if (addons[i].id == s_selectedId) return i;
-        if (!addons.empty()) { s_selectedId = addons[0].id; return 0; }
+        if (!addons.empty()) { SelectAddon(addons[0]); return 0; }   // the remembered one is gone (removed, renamed): pick the first, and remember that
         return -1;
     };
     int sel = resolveSelection();
