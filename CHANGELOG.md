@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **The Neural Rendering panel is reorganised** into titled blocks with a line between them: **Status**, **Requirements**, **Saved looks (load and save your settings)**, **Neural Rendering**
+  (the on/off switch) and **Settings** (the sections with the sliders). Requirements is always open now. It starts with what you have to do yourself, providing your own copy of
+  `nvngx_dlssnr.dll`, in three numbered steps, then a one-line verdict, the rows, and the actions with the two main ones first (Browse, Test compatibility). Saved looks says what a look
+  is and what Save, Save as new and Delete do; its list is now labelled *Saved look*. The first slider section is *Model (what it does to the picture)*, so it no longer sounds like a saved look.
+- **You provide the model file yourself, said up front:** an important notice at the top of the README and of the addon's README, in the release's `INSTALL.txt`, and in the addon's description on its card.
+- **Settings tab:** the backup section is now *Backup and restore (save and load your settings)* with a line saying what it keeps, so it is clear that all addon settings and saved looks travel in one file.
+
 ## 0.2.3 (2026-09-21)
 
 Upgrading from 0.2.2: copy the new files over the old ones. Nothing to migrate. `addons\DLSS5NR01` gains one file, `nr_selftest.exe`. If your security software

@@ -92,8 +92,12 @@ void RenderTabSettings(AddonManager* manager) {
     ImGui::Dummy(ImVec2(0, S(4)));
 
     // ---- Backup and restore
-    lsp::SectionLabel("Backup and restore");
+    lsp::SectionLabel("Backup and restore (save and load your settings)");
     ImGui::Dummy(ImVec2(0, S(2)));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+    ImGui::TextWrapped("Save the settings of this manager and of every addon into one file, and load them back later or on another PC. The addons' own saved looks are kept in the same file.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0, S(4)));
     if (lsp::Button("Save settings to a file", lsp::icons::kSave, lsp::ButtonKind::Primary)) {
         std::wstring path;
         SYSTEMTIME t; GetLocalTime(&t);

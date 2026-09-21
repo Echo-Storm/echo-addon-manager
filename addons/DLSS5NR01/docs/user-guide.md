@@ -37,10 +37,14 @@ To update, replace the two DLLs while Lossless Scaling is closed. To uninstall, 
 
 ### Checking that everything is in place
 
-At the top of the panel, the **Requirements** section lists what Neural Rendering needs and what was found: the NVIDIA graphics card, the NVIDIA
-driver's NGX core (`_nvngx.dll`, found through the driver's registry entry), the model file, this addon's helper DLL and the engine's state. Each
-row is OK, NOTE or MISSING, and a row that is not OK says what to do. It opens by itself when something is missing, and a red line above it says
-what stops Neural Rendering from running. Nothing is loaded or downloaded to do this: it reads file names, sizes and version numbers.
+The panel is laid out in titled blocks, each set off by a line: **Status**, **Requirements**, **Saved looks**, **Neural Rendering** (the on/off switch) and
+**Settings** (the sections with the sliders).
+
+The **Requirements** block is always open. It starts with the one thing you have to do yourself: provide your own copy of `nvngx_dlssnr.dll`, which is not included and is
+never downloaded. Three numbered steps say where it goes and what to press. Below them a one-line verdict ("Everything is in place", "Ready, with a note", or "Not ready
+yet" with the reason) is followed by one row for each thing Neural Rendering needs: the NVIDIA graphics card, the NVIDIA driver's NGX core (`_nvngx.dll`, found through
+the driver's registry entry), the model file, this addon's helper DLL, the compatibility test and the engine's state. Each row is OK, NOTE or MISSING, and a row that is
+not OK says what to do. Nothing is loaded or downloaded to check: it reads file names, sizes and version numbers.
 
 - **Model file**: a copy of a different version, or of a different size than the one this addon was tested with (310.8, 158.2 MB), is a NOTE, not an
   error: it may well work. A file far smaller than the model (under 20 MB) is treated as missing, since it cannot be the model.
@@ -60,7 +64,12 @@ what stops Neural Rendering from running. Nothing is loaded or downloaded to do 
 
 This addon does not download the model file, and this project does not say where to get it.
 Settings live in Echo Addon Manager's `addons\config.json` under the key `DLSS5NR01`; delete
-that block to reset them.
+that block to reset them. To keep or move all your settings, use *Save settings to a file* and *Load settings from a file* on the manager's Settings tab.
+
+### Saved looks (load and save your settings)
+
+A look is a saved set of the sliders below it. The **Saved look** list loads one when you pick it; **Save** updates the look you picked; **Save as new** keeps the sliders as they
+are now under a name you choose; **Delete** removes the picked look after asking. The *Next preset* hotkey cycles through your looks in the game.
 
 ## First run
 
@@ -97,7 +106,7 @@ defaults without touching presets, hotkeys or the advanced settings.
 Everything applies on the next frame. Only *Working scale* re-creates the model's feature, which
 takes a moment and resets its temporal history.
 
-### Look (what the model does to the picture)
+### Model (what it does to the picture)
 
 | Control | Default | What it does |
 |---|---|---|

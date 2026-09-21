@@ -171,6 +171,13 @@ static void Note(const char* fmt, ...) {
     ImGui::TextWrapped("%s", b);
     ImGui::PopStyleColor();
 }
+// A titled block of the panel: some room, a thin line, the title in the small capitals of the other apps, and a little room under it.
+static void Block(const char* title, bool first = false) {
+    const float u = ImGui::GetFontSize();
+    if (!first) { ImGui::Dummy(ImVec2(0, u * 0.7f)); ImGui::Separator(); ImGui::Dummy(ImVec2(0, u * 0.5f)); }
+    lsp::SectionLabel(title);
+    ImGui::Dummy(ImVec2(0, u * 0.35f));
+}
 static void SetStatus(const char* s) { std::lock_guard<std::mutex> lk(g_statusMu); g_status = s; }
 static std::string GetStatus() { std::lock_guard<std::mutex> lk(g_statusMu); return g_status; }
 
@@ -754,6 +761,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
     // status
     std::string status = GetStatus(), frameInfo, adapterName; bool hasDisplay;
     { std::lock_guard<std::mutex> lk(g_statusMu); frameInfo = g_frameInfo; adapterName = g_adapterName; hasDisplay = g_hasDisplay; }
+    Block("Status", true);
     if (g_killed) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kDanger)); ImGui::Text("DISABLED: %s", g_killReason.c_str()); ImGui::PopStyleColor(); ImGui::SameLine(); if (ImGui::SmallButton("Re-arm")) { g_killed = false; g_watchdogHits = 0; g_watchdogKill = false; g_rearms = 0; } Tip("Turn Neural Render back on after it switched itself off. If it switches off again, the reason above is still true."); }
     else { ImGui::PushStyleColor(ImGuiCol_Text, g_nrRuns ? lsp::theme::V(lsp::theme::kAccent) : lsp::theme::V(lsp::theme::kWarn)); ImGui::Text("%s", status.c_str()); ImGui::PopStyleColor(); }
     if (g_engine.IsFailed()) { ImGui::TextColored(lsp::theme::V(lsp::theme::kDanger), "engine: %s", g_engine.Stats().lastError); ImGui::SameLine(); if (ImGui::SmallButton("Retry engine")) { g_engineLuidValid = false; if (g_tapLuidValid) StartEngine(g_tapLuid); } Tip("Try to start the DLSS model again on the current graphics card."); }
@@ -761,25 +769,27 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         bool have; { std::lock_guard<std::mutex> lk(g_reqMu); have = g_reqHave; }
         const bool failed = g_engine.IsFailed();
         const req::Report rep = RequirementsNow(failed, g_engine.IsReady(), g_nrRuns > 0, g_engine.Stats().lastError);
-        // One line that is always there, even while the section below is folded: all in place, a note, or what stops it from running
-        if (!have) ImGui::TextDisabled("Requirements: checking...");
-        else if (rep.overall == req::Level::Missing) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kDanger)); ImGui::TextWrapped("Neural Rendering cannot run yet. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
-        else if (rep.overall == req::Level::Note) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kWarn)); ImGui::TextWrapped("Requirements: %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
-        else { ImGui::TextColored(lsp::theme::V(lsp::theme::kAccent), "Requirements: all in place"); if (!rep.rows.empty()) { ImGui::SameLine(); ImGui::TextDisabled("%s", rep.rows[0].value.c_str()); } }
-        if (lsp::SectionHeader("Requirements", have && rep.overall != req::Level::Ok)) {
-            if (!have) ImGui::TextDisabled("Checking...");
+        Block("Requirements");
+        ImGui::TextWrapped("You provide the model file yourself: nvngx_dlssnr.dll is not included with this addon and is never downloaded.");
+        ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.25f));
+        Note("1. Put your copy of nvngx_dlssnr.dll in the Lossless Scaling folder, next to LosslessScaling.exe. The Browse button below copies it there for you.");
+        Note("2. Press Test compatibility to check that it works on your graphics card.");
+        Note("3. Turn on Enable below, then start your game and scale it as usual.");
+        ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.4f));
+        // the verdict, in one line
+        if (!have) ImGui::TextDisabled("Checking...");
+        else if (rep.overall == req::Level::Missing) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kDanger)); ImGui::TextWrapped("Not ready yet. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
+        else if (rep.overall == req::Level::Note) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kWarn)); ImGui::TextWrapped("Ready, with a note. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
+        else { ImGui::TextColored(lsp::theme::V(lsp::theme::kAccent), "Everything is in place."); }
+        ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
+        {   // (always open)
             for (const auto& row : rep.rows) {
                 const ImVec4 col = row.level == req::Level::Ok ? lsp::theme::V(lsp::theme::kAccent) : (row.level == req::Level::Note ? lsp::theme::V(lsp::theme::kWarn) : lsp::theme::V(lsp::theme::kDanger));
                 ImGui::TextColored(col, row.level == req::Level::Ok ? "OK     " : (row.level == req::Level::Note ? "NOTE   " : "MISSING"));
                 ImGui::SameLine(ImGui::GetFontSize() * 5.2f); ImGui::Text("%s", row.label.c_str()); ImGui::SameLine(ImGui::GetFontSize() * 13.0f); ImGui::TextWrapped("%s", row.value.c_str());
                 if (!row.hint.empty()) { ImGui::Indent(ImGui::GetFontSize() * 1.7f); ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)); ImGui::TextWrapped("%s", row.hint.c_str()); ImGui::PopStyleColor(); ImGui::Unindent(ImGui::GetFontSize() * 1.7f); }
             }
-            if (ImGui::SmallButton("Check again")) ScanRequirements();
-            Tip("Look again at the graphics card, the NVIDIA driver, the model file and the helper DLL. Use it after putting a file in place.");
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Open the Lossless Scaling folder")) ShellExecuteW(nullptr, L"open", g_lsDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            Tip("Where the model file, nvngx_dlssnr.dll, goes: next to LosslessScaling.exe.");
-            ImGui::SameLine();
+            ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.4f));
             const bool placing = g_placeBusy.load();
             if (placing) ImGui::BeginDisabled();
             if (ImGui::SmallButton(placing ? "Waiting for the file dialog..." : "Browse for the model file...")) BrowseAndPlace();
@@ -791,11 +801,20 @@ LSPROXY_EXPORT void AddonRenderSettings() {
             if (ImGui::SmallButton(testing ? "Testing..." : "Test compatibility")) RunSelfTestAsync();
             if (testing) ImGui::EndDisabled();
             Tip("Runs the model file once, in a separate program, on your graphics card, and says whether it works there. It uses the graphics card for a few seconds, so do it before you start a game. It cannot take Lossless Scaling down if the model misbehaves.");
+            ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.15f));
+            if (ImGui::SmallButton("Open the Lossless Scaling folder")) ShellExecuteW(nullptr, L"open", g_lsDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            Tip("Where the model file, nvngx_dlssnr.dll, goes: next to LosslessScaling.exe.");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Check again")) ScanRequirements();
+            Tip("Look again at the graphics card, the NVIDIA driver, the model file and the helper DLL. Use it after putting a file in place.");
             { std::string msg; bool ok; { std::lock_guard<std::mutex> lk(g_reqMu); msg = g_placeMsg; ok = g_placeOk; }
               if (!msg.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? lsp::theme::V(lsp::theme::kAccent) : lsp::theme::V(lsp::theme::kWarn)); ImGui::TextWrapped("%s", msg.c_str()); ImGui::PopStyleColor(); } }
         }
     }
-    // ---- Saved looks, at the top. Pick one to apply it; Save updates it (or asks for a name); Save as new keeps the current sliders under a
+    Block("Saved looks (load and save your settings)");
+    Note("A look is a saved set of the sliders below. Pick one from the list to load it. Save updates the look you picked; Save as new keeps the sliders as they are now under a name of your choice.");
+    ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
+    // ---- Saved looks. Pick one to apply it; Save updates it (or asks for a name); Save as new keeps the current sliders under a
     // ---- new name; Delete asks first. A look is the sliders below (model knobs, picture, HUD areas), not the hotkeys or advanced settings.
     {
         static int s_active = -1; static char s_name[48] = ""; static bool s_askSave = false, s_askDelete = false;
@@ -809,7 +828,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         const bool modified = s_active >= 0 && datas[s_active] != now;
         const std::string label = s_active >= 0 ? names[s_active] + (modified ? "  (changed)" : "") : std::string("Custom");
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 13.0f);
-        if (ImGui::BeginCombo("Look", label.c_str())) {
+        if (ImGui::BeginCombo("Saved look", label.c_str())) {
             for (int i = 0; i < (int)names.size(); ++i)
                 if (ImGui::Selectable(names[i].c_str(), i == s_active)) {
                     const float was = c.p.workingScale;
@@ -870,7 +889,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         }
     }
 
-    Note("Sliders: double-click to reset, Ctrl+click to type a value, Ctrl+scroll to fine-tune. The small tick marks the default.");
+    Block("Neural Rendering");
     changed |= ImGui::Checkbox("Enable DLSS 5 Neural Rendering", &c.enabled);
     Tip("Master switch. Off = Lossless Scaling runs untouched and the model stops.\nTo compare before and after while playing, use the Before / after hotkey instead: it keeps the model running.");
     ImGui::SameLine(); if (ImGui::SmallButton("Reset history")) g_requestReset = true;
@@ -881,7 +900,10 @@ LSPROXY_EXPORT void AddonRenderSettings() {
     }
     Tip("Put the look and quality sliders back to this addon's defaults. Your presets, hotkeys and the advanced settings are not touched.");
 
-    if (lsp::SectionHeader("Look (what the model does to the picture)", true)) {
+    Block("Settings");
+    Note("Open a section to change it. Sliders: double-click to reset, Ctrl+click to type a value, Ctrl+scroll to fine-tune. The small tick marks the default.");
+    ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
+    if (lsp::SectionHeader("Model (what it does to the picture)", true)) {
         // Read by the model at every evaluate: changes apply on the next frame. Ranges are what the model honours
         // (docs/dlssnr-knobs.md): intensity clamps at 1, the local strengths do not clamp at all.
         int style = (int)c.p.style; const char* styles[] = { "Standard", "Natural", "Cinematic" };
@@ -1180,4 +1202,4 @@ LSPROXY_EXPORT uint32_t GetAddonCapabilities() { return LSPROXY_CAP_HAS_SETTINGS
 LSPROXY_EXPORT const char* GetAddonName() { return "DLSS 5 Neural Rendering"; }
 LSPROXY_EXPORT const char* GetAddonVersion() { return "0.2.3"; }
 LSPROXY_EXPORT const char* GetAddonAuthor() { return "andreiday"; }
-LSPROXY_EXPORT const char* GetAddonDescription() { return "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait."; }
+LSPROXY_EXPORT const char* GetAddonDescription() { return "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. Needs your own copy of nvngx_dlssnr.dll (not included, never downloaded)."; }

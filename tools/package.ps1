@@ -51,6 +51,11 @@ Echo Addon Manager $Version
 
 The addon manager for Lossless Scaling. Read DISCLAIMER.md first.
 
+IMPORTANT: DLSS 5 Neural Rendering needs a file you provide yourself. It needs your own copy of nvngx_dlssnr.dll. It is NOT included in this
+download, this project does not download it, and it does not say where to get it. Put your copy in the Lossless Scaling folder, next to
+LosslessScaling.exe (the addon's "Browse for the model file..." button copies it there for you), then press "Test compatibility" in the addon's
+panel. Everything else here works without it.
+
 Install (Lossless Scaling 3.2.2.0 was the tested version)
 -------
 1. Close Lossless Scaling and open its folder, for example

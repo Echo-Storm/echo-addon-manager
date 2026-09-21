@@ -2,6 +2,12 @@
 
 <p align="center"><b>The addon manager for Lossless Scaling.</b><br>Install, switch on and tune addons from one window, and watch your frame rate and GPU while you play.</p>
 
+> [!IMPORTANT]
+> **DLSS 5 Neural Rendering needs a file you provide yourself.** It needs your own copy of `nvngx_dlssnr.dll`. That file is **not included** in this
+> download, this project **does not download it**, and it does not say where to get it. Put your copy in the Lossless Scaling folder, next to
+> `LosslessScaling.exe` (the addon's **Browse for the model file...** button copies it there for you), then press **Test compatibility** in the addon's panel.
+> Everything else here, including the manager, ReShade input passthrough and Windowed mode, works without it.
+
 Echo Addon Manager loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it a proper addon system: one window
 to install, switch on and tune addons, a live view of frame time and GPU load while a game runs, and one-click backup of every setting. It ships with the
 **DLSS 5 Neural Rendering** addon and two built-in features, **ReShade input passthrough** and **Windowed mode**, and it is free and MIT-licensed. It is an unofficial project, not

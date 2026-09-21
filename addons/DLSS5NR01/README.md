@@ -1,5 +1,10 @@
 # DLSS 5 Neural Rendering (DLSS5NR01)
 
+> [!IMPORTANT]
+> **You provide the model file yourself.** This addon needs your own copy of `nvngx_dlssnr.dll`. It is **not included**, it is **never downloaded**, and this project does not say
+> where to get it. Put your copy in the Lossless Scaling folder, next to `LosslessScaling.exe` (the addon's **Browse for the model file...** button copies it there for you),
+> then press **Test compatibility** in the addon's panel.
+
 An addon for Echo Addon Manager, the addon manager for Lossless Scaling, that runs NVIDIA DLSS 5
 Neural Rendering (DLSSNR) on the frames Lossless Scaling captures and applies the result to every
 frame Lossless Scaling presents, real and generated. Nothing is injected into the game. No ReShade.
@@ -38,9 +43,11 @@ Documentation: [User guide](docs/user-guide.md) · [Architecture](docs/architect
    ```
    <Lossless Scaling>\addons\DLSS5NR01\DLSS5NR01.dll
    <Lossless Scaling>\addons\DLSS5NR01\nvngx.dll_dlss5nr01.dll
+   <Lossless Scaling>\addons\DLSS5NR01\nr_selftest.exe
    <Lossless Scaling>\addons\DLSS5NR01\addon.json
    ```
-2. Put `nvngx_dlssnr.dll` in the Lossless Scaling folder (next to `LosslessScaling.exe`).
+2. Put your own copy of `nvngx_dlssnr.dll` in the Lossless Scaling folder (next to `LosslessScaling.exe`), or open the addon's panel and press
+   *Browse for the model file...* to copy it there. Then press *Test compatibility*.
 3. Start Lossless Scaling, open Echo Addon Manager, enable *DLSS 5 Neural Rendering*
    and open its settings.
 4. Start scaling a game. The status line goes from *waiting for LSFG dispatches* to *engine:

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Panel reorganised into titled, separated blocks: Status, Requirements (always open, with numbered instructions, a one-line verdict, the rows, and the main actions first), Saved looks (load and
+  save your settings, with an explanation), Neural Rendering (the on/off switch) and Settings. The look list is labelled *Saved look*, and the first slider section is now *Model (what it does to
+  the picture)*. The provide-your-own-model-file notice is at the top of the README and in the addon's description.
+
 ## 0.2.3 (2026-09-21)
 
 - New **compatibility self-test**: `nr_selftest.exe` (in the addon folder) loads the model in its own process, creates feature 18 on the NVIDIA card at 1280x720, evaluates a
