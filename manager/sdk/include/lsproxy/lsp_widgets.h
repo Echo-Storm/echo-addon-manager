@@ -158,7 +158,8 @@ inline void ApplyStyle(ImGuiStyle& style) {
 
 } // namespace theme
 
-// A small uppercase label, letter-spaced, in the dimmed accent: the "ADD" / "QUEUE" / "LOG" headings of the other apps.
+// A small uppercase label, letter-spaced, in the accent: the "ADD" / "QUEUE" / "LOG" headings of the other apps. It is the heading of a block
+// that cannot be closed, in the same green as the title of an open SectionHeader, so an open section and a plain heading read alike.
 inline void SectionLabel(const char* text) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -167,7 +168,7 @@ inline void SectionLabel(const char* text) {
     char up[2] = { 0, 0 };
     for (const char* c = text; *c; ++c) {
         up[0] = (char)toupper((unsigned char)*c);
-        dl->AddText(ImVec2(x, p.y), theme::U(theme::kAccentDim, ImGui::GetStyle().Alpha), up);
+        dl->AddText(ImVec2(x, p.y), theme::U(theme::kAccent, ImGui::GetStyle().Alpha), up);
         x += ImGui::CalcTextSize(up).x + spacing;
     }
     ImGui::Dummy(ImVec2(x - p.x, ImGui::GetTextLineHeight()));

@@ -7,6 +7,8 @@
   on/off switch, and a list of sections to open. A check in the scenario runner fails if a section is ever set to open by default.
 - **The open / close control of a section is now a boxed plus or minus**, not a small arrow: a white plus when the section is closed, a green minus when it is open, and it lights up when you point at it,
   so it is obvious that the section can be opened. It is the shared section widget, so the Performance tab's *All live values* section has it too.
+- **Headings that cannot be closed are now the same bright green as an open section** (they were the dim green of a closed one), in the Neural Rendering panel and in the manager's own tabs
+  (Settings, Features, About). Only a closed section is dim now, so at a glance bright means "this is open or always shown".
 
 ## 0.4.0 (2026-09-21)
 
