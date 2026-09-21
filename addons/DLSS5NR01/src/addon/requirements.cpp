@@ -243,15 +243,39 @@ ProcessResult RunProcess(const std::wstring& commandLine, unsigned timeoutMs) {
         SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof limits);
     }
 
-    STARTUPINFOW si = {};
-    si.cb = sizeof si;
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = nul; si.hStdOutput = out; si.hStdError = out;
+    // The program is started normally, already inside the job (Windows 10 and later take the job as a creation attribute). It is deliberately not
+    // started suspended and resumed: that is how malware starts processes it wants to tamper with, and security software watches for it.
+    STARTUPINFOEXW si = {};
+    si.StartupInfo.cb = sizeof si;
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    si.StartupInfo.hStdInput = nul; si.StartupInfo.hStdOutput = out; si.StartupInfo.hStdError = out;
+    std::vector<unsigned char> attributeStorage;
+    bool jobAtCreation = false, attributesReady = false;
+    if (job) {
+        SIZE_T bytes = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
+        attributeStorage.resize(bytes);
+        auto* attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributeStorage.data());
+        if (InitializeProcThreadAttributeList(attributes, 1, 0, &bytes)) {
+            attributesReady = true;
+            HANDLE jobs[1] = { job };
+            if (UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST, jobs, sizeof jobs, nullptr, nullptr)) {
+                si.lpAttributeList = attributes;
+                jobAtCreation = true;
+            }
+        }
+    }
     PROCESS_INFORMATION pi = {};
     std::wstring cmd = commandLine;   // CreateProcess may write into it
-    if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {
-        if (job) AssignProcessToJobObject(job, pi.hProcess);   // without it (already in a job that forbids nesting) the program just is not ended with us
-        ResumeThread(pi.hThread);
+    BOOL created = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | (jobAtCreation ? EXTENDED_STARTUPINFO_PRESENT : 0), nullptr, nullptr, &si.StartupInfo, &pi);
+    if (!created && jobAtCreation) {   // a system that does not know the job attribute: start it plainly and put it in the job straight after
+        si.lpAttributeList = nullptr;
+        jobAtCreation = false;
+        created = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si.StartupInfo, &pi);
+    }
+    if (attributesReady) DeleteProcThreadAttributeList(reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributeStorage.data()));
+    if (created) {
+        if (job && !jobAtCreation) AssignProcessToJobObject(job, pi.hProcess);   // without it (already in a job that forbids nesting) the program just is not ended with us
         r.started = true;
         if (WaitForSingleObject(pi.hProcess, timeoutMs) == WAIT_TIMEOUT) {
             r.timedOut = true;

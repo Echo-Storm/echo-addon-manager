@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 (2026-09-21)
 
 - New **compatibility self-test**: `nr_selftest.exe` (in the addon folder) loads the model in its own process, creates feature 18 on the NVIDIA card at 1280x720, evaluates a
   synthetic picture and checks it changed; it prints `SELFTEST <code> <KEY> <words>` and exits with the same code (0 pass, 10 to 20 for what went wrong). The addon's
