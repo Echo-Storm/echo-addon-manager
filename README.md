@@ -25,7 +25,7 @@ affiliated with the Lossless Scaling developers; read the [disclaimer](DISCLAIME
 <sub>These pictures are rendered offscreen by the project's own preview tool (`tools/ui_preview.ps1`), so the Performance numbers and log lines are sample data, not a
 measurement. The Neural Rendering panel comes from the offline test host.</sub>
 
-Status: **0.2.0.** Built and tested against Lossless Scaling **3.2.2.0** (the official build) on Windows 11 with an RTX 4070 Ti SUPER; other
+Status: **0.2.1.** Built and tested against Lossless Scaling **3.2.2.0** (the official build) on Windows 11 with an RTX 4070 Ti SUPER; other
 setups are untested.
 
 ## What you get

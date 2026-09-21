@@ -44,7 +44,16 @@ static bool WaitFor(bool (*cond)(), int ms) {
     for (int t = 0; t < ms; t += 20) { if (cond()) return true; Sleep(20); }
     return cond();
 }
-static HWND Find() { return FindWindowW(kClass, nullptr); }
+// Only a window of THIS process: a real manager window (Lossless Scaling running with the manager) has the same class name, and this test sends
+// close and destroy messages, which must never reach it.
+static HWND Find() {
+    for (HWND h = nullptr; (h = FindWindowExW(nullptr, h, kClass, nullptr)) != nullptr;) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(h, &pid);
+        if (pid == GetCurrentProcessId()) return h;
+    }
+    return nullptr;
+}
 static bool WindowThere() { return Find() != nullptr; }
 static bool WindowGone() { return Find() == nullptr; }
 static bool Hidden() { return !GuiManager::WindowVisible(); }
