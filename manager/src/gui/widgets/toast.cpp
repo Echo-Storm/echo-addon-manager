@@ -6,80 +6,79 @@
 namespace lsproxy {
 namespace widgets {
 
-struct ToastEntry {
-    std::string message;
+namespace {
+
+struct Toast {
+    std::string text;
     ToastType type;
-    float duration;
-    float elapsed;
+    float lifetime;   // seconds it stays up
+    float age;        // seconds it has been up
 };
 
-static std::deque<ToastEntry> s_toasts;
-static constexpr int MAX_VISIBLE = 5;
+std::deque<Toast> g_toasts;
+constexpr int kMostShown = 5;        // stacked at once, newest on top
+constexpr size_t kMostKept = 20;     // waiting to be shown
+constexpr float kFadeIn = 0.3f;
+constexpr float kFadeOut = 0.5f;
+
+struct Colours { ImVec4 fill, edge; };
+
+Colours ColoursFor(ToastType type, float alpha) {
+    using namespace lsp::theme;
+    switch (type) {
+        case ToastType::Success: return { ImVec4(0.243f, 0.353f, 0.180f, 0.95f * alpha), V(kAccent, alpha) };
+        case ToastType::Warning: return { ImVec4(0.42f, 0.32f, 0.10f, 0.95f * alpha), V(kWarn, alpha) };
+        case ToastType::Error:   return { ImVec4(0.290f, 0.125f, 0.125f, 0.95f * alpha), ImVec4(0.627f, 0.251f, 0.251f, alpha) };
+        default:                 return { ImVec4(0.157f, 0.157f, 0.157f, 0.95f * alpha), V(kBorderBright, alpha) };
+    }
+}
+
+float Opacity(const Toast& t) {
+    float a = 1.0f;
+    if (t.age < kFadeIn) a = t.age / kFadeIn;
+    else if (t.age > t.lifetime - kFadeOut) a = (t.lifetime - t.age) / kFadeOut;
+    return a < 0.0f ? 0.0f : a;
+}
+
+bool Expired(const Toast& t) { return t.age >= t.lifetime; }
+
+} // namespace
 
 void ToastShow(const std::string& message, ToastType type, float duration) {
-    s_toasts.push_back({message, type, duration, 0.0f});
-    if (s_toasts.size() > 20) s_toasts.pop_front();
+    g_toasts.push_back({ message, type, duration, 0.0f });
+    if (g_toasts.size() > kMostKept) g_toasts.pop_front();
 }
 
 void ToastRender() {
-    float dt = ImGui::GetIO().DeltaTime;
-    ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    const float dt = ImGui::GetIO().DeltaTime;
+    const ImVec2 screen = ImGui::GetIO().DisplaySize;
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
 
-    float yOffset = S(10.0f);
-    int visible = 0;
+    float top = S(10.0f);
+    int shown = 0;
+    for (int i = (int)g_toasts.size() - 1; i >= 0 && shown < kMostShown; --i) {
+        Toast& t = g_toasts[i];
+        t.age += dt;   // only the toasts that are on screen age
+        if (Expired(t)) continue;
 
-    for (int i = (int)s_toasts.size() - 1; i >= 0 && visible < MAX_VISIBLE; i--) {
-        auto& t = s_toasts[i];
-        t.elapsed += dt;
+        const float alpha = Opacity(t);
+        const Colours c = ColoursFor(t.type, alpha);
 
-        if (t.elapsed >= t.duration) continue;
+        const ImVec2 text = ImGui::CalcTextSize(t.text.c_str());
+        const float pad = S(12.0f);
+        const float w = text.x + pad * 2;
+        const float h = text.y + pad * 2;
+        const ImVec2 min(screen.x - w - S(15.0f), top), max(min.x + w, min.y + h);
 
-        // Fade in/out
-        float alpha = 1.0f;
-        if (t.elapsed < 0.3f) alpha = t.elapsed / 0.3f;
-        else if (t.elapsed > t.duration - 0.5f) alpha = (t.duration - t.elapsed) / 0.5f;
-        if (alpha < 0.0f) alpha = 0.0f;
+        draw->AddRectFilled(min, max, ImGui::GetColorU32(c.fill), S(4.0f));
+        draw->AddRect(min, max, ImGui::GetColorU32(c.edge), S(4.0f));
+        draw->AddText(ImVec2(min.x + pad, min.y + pad), ImGui::GetColorU32(ImVec4(1, 1, 1, alpha)), t.text.c_str());
 
-        // Color based on type
-        ImVec4 bgColor;
-        switch (t.type) {
-            case ToastType::Success: bgColor = ImVec4(0.243f, 0.353f, 0.180f, 0.95f * alpha); break;   // #3e5a2e
-            case ToastType::Warning: bgColor = ImVec4(0.42f, 0.32f, 0.10f, 0.95f * alpha); break;
-            case ToastType::Error:   bgColor = ImVec4(0.290f, 0.125f, 0.125f, 0.95f * alpha); break;   // #4a2020
-            default:                 bgColor = ImVec4(0.157f, 0.157f, 0.157f, 0.95f * alpha); break;    // #282828
-        }
-
-        ImVec2 textSize = ImGui::CalcTextSize(t.message.c_str());
-        float padding = S(12.0f);
-        float toastWidth = textSize.x + padding * 2;
-        float toastHeight = textSize.y + padding * 2;
-
-        float x = displaySize.x - toastWidth - S(15.0f);
-        float y = yOffset;
-
-        ImDrawList* drawList = ImGui::GetForegroundDrawList();
-        drawList->AddRectFilled(
-            ImVec2(x, y), ImVec2(x + toastWidth, y + toastHeight),
-            ImGui::GetColorU32(bgColor), S(4.0f));
-        drawList->AddRect(
-            ImVec2(x, y), ImVec2(x + toastWidth, y + toastHeight),
-            ImGui::GetColorU32(ImVec4(t.type == ToastType::Success ? lsp::theme::V(lsp::theme::kAccent, alpha)
-                                     : t.type == ToastType::Warning ? lsp::theme::V(lsp::theme::kWarn, alpha)
-                                     : t.type == ToastType::Error ? ImVec4(0.627f, 0.251f, 0.251f, alpha)
-                                     : lsp::theme::V(lsp::theme::kBorderBright, alpha))), S(4.0f));
-        drawList->AddText(
-            ImVec2(x + padding, y + padding),
-            ImGui::GetColorU32(ImVec4(1, 1, 1, alpha)),
-            t.message.c_str());
-
-        yOffset += toastHeight + S(5.0f);
-        visible++;
+        top += h + S(5.0f);
+        ++shown;
     }
 
-    // Remove expired
-    while (!s_toasts.empty() && s_toasts.front().elapsed >= s_toasts.front().duration) {
-        s_toasts.pop_front();
-    }
+    while (!g_toasts.empty() && Expired(g_toasts.front())) g_toasts.pop_front();
 }
 
 } // namespace widgets
