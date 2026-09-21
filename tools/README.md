@@ -16,6 +16,8 @@ Where a script needs your Lossless Scaling folder it takes `-LsDir` (or reads th
 | `run_hosttest_matrix.py` | Runs the Neural Rendering test host through ten scenarios (base compose, HUD protection, sharpen, shadows, highlights, grain, smoothing and more) and checks the presented frame against a synthetic pattern. Needs `nvngx_dlssnr.dll` (`--snippet` or `LS_DIR`). |
 | `ui_preview.ps1` | Renders every tab, the addon cards and the addon panels offscreen to PNG. Set `LSP_PREVIEW_CLEAN=1` for the tidy scene used in the README. |
 | `make_readme_shots.py` | Crops those renders into `docs/images`. |
+| `compare_ui_renders.py` | Compares two folders of offscreen renders picture by picture (used to prove a rewrite of window code changed nothing you can see). |
+| `measure_original_share.py` | How much of `manager/src` and `manager/sdk` is still the code this project started from, against a checkout of the original (see NOTICE.md). |
 | `package.ps1` | Builds the release zip in `dist\` (`-Version`, `-SkipBuild`). Never packages NVIDIA's SDK or the DLSSNR snippet. |
 | `deploy.ps1` | Copies a build into a Lossless Scaling folder, with backups. `-What host\|nr\|reshade\|windowed\|all`. |
 | `analyze_ls_logs.py` | Summarises `LSP_NeuralRender.log`: frame-time distribution, model cost, presets applied. |
