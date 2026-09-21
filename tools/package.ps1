@@ -1,6 +1,6 @@
 # Builds Release and assembles dist\EchoAddonManager-<version>-x64.zip: the manager, the addons that build, an install note, and the licences.
 # NVIDIA's DLSS SDK and the DLSSNR snippet are never packaged. Neural Rendering is left out (with a note) when it did not build.
-#   powershell -File tools\package.ps1 [-Version 0.1.0] [-SkipBuild]
+#   powershell -File tools\package.ps1 [-Version 0.2.0] [-SkipBuild]
 param(
     [string]$Version = '',
     [switch]$SkipBuild
@@ -63,6 +63,9 @@ Install (Lossless Scaling 3.2.2.0 was the tested version)
    If you used the old separate ReShade or Windowed addon folders, the manager ignores them; you can remove them.
 
 Updating: close Lossless Scaling and copy the new files over the old ones. Your settings (addons\config.json) carry over.
+From 0.1.0: Neural Rendering is now addons\DLSS5NR01 (it was addons\LSP-NeuralRender) and its saved settings and looks move to the new name by themselves
+the first time it starts. ReShade passthrough and Windowed mode are built in (Features tab). The old LSP-NeuralRender, LSP-ReShade and LSP-Windowed
+folders are ignored by the manager; you can remove them.
 After a Lossless Scaling update: it may put its own Lossless.dll back. Delete the stale Lossless_original.dll, rename the new
 Lossless.dll to Lossless_original.dll, and copy ours in again.
 

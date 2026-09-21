@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-09-21)
 
 - **Renamed to DLSS5NR01** (it was `LSP-NeuralRender`; the prefix meant LosslessProxy, and the addon has been changed a great deal from the original). The folder, the settings
   id, the DLL (`DLSS5NR01.dll`) and the log (`logs\DLSS5NR01.log`) all carry the new name; the name on screen is still DLSS 5 Neural Rendering. `addon.json` says
