@@ -42,8 +42,8 @@ Documentation: [User guide](docs/user-guide.md) · [Architecture](docs/architect
 
 ## Install
 
-1. Download the latest release zip and extract it. Copy the `addons\DLSS5NR01` folder into
-   your Lossless Scaling folder so you have:
+1. Download the latest release zip and run `EchoAddonManagerSetup.exe` from it: it installs the manager and this addon, with backups. Or do it by hand: extract the zip and copy the
+   `addons\DLSS5NR01` folder into your Lossless Scaling folder so you have:
    ```
    <Lossless Scaling>\addons\DLSS5NR01\DLSS5NR01.dll
    <Lossless Scaling>\addons\DLSS5NR01\nvngx.dll_dlss5nr01.dll

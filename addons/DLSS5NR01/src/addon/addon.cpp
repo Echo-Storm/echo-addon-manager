@@ -1201,6 +1201,6 @@ LSPROXY_EXPORT void AddonShutdown() {
 
 LSPROXY_EXPORT uint32_t GetAddonCapabilities() { return LSPROXY_CAP_HAS_SETTINGS | LSPROXY_CAP_D3D11_DEVICE_ACCESS; }
 LSPROXY_EXPORT const char* GetAddonName() { return "DLSS 5 Neural Rendering"; }
-LSPROXY_EXPORT const char* GetAddonVersion() { return "0.5.0"; }
+LSPROXY_EXPORT const char* GetAddonVersion() { return "0.6.0"; }
 LSPROXY_EXPORT const char* GetAddonAuthor() { return "andreiday"; }
 LSPROXY_EXPORT const char* GetAddonDescription() { return "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. Needs your own copy of nvngx_dlssnr.dll (not included, never downloaded)."; }

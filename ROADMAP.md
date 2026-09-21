@@ -3,11 +3,11 @@
 What 1.0 should mean: someone who has never seen this project can **install it, keep it up to date, understand what it does and does not do, and get help**, without
 editing files by hand, and the promises it makes (the addon API, the settings file, safety) are stable. This page is honest about where each part stands.
 
-Status on 2026-09-21, at version 0.5.0 (the current work is on `main`).
+Status on 2026-09-21, at version 0.6.0 (the current work is on `main`).
 
 | # | For 1.0 | State | Notes |
 |---|---------|-------|-------|
-| 1 | **An installer**: install, update, repair after a Lossless Scaling update, uninstall | **Built, needs a real try** | `EchoAddonManagerSetup.exe`: one file, a small wizard, with the core (folder detection, backups, rollback, repair, uninstall) tested on fake folders and the exe tested end to end. Not yet used on a real install by a person; the "restart as administrator" path is untested. Comes with the next release. See below. |
+| 1 | **An installer**: install, update, repair after a Lossless Scaling update, uninstall | **Done** (0.6.0) | `EchoAddonManagerSetup.exe`: one file, a small wizard, with the core (folder detection, backups, rollback, repair, uninstall) tested on fake folders and the exe tested end to end. Tried on a real install by the maintainer (the folder search, the pages, reinstall); the "restart as administrator" path and Windows SmartScreen's reaction are not verified. See below. |
 | 2 | **An update check** | **Done** (0.5.0) | Once a day, on by default, off in *Settings > Updates*; never downloads or installs; the only network access. |
 | 3 | **A frozen, documented addon API** | Open | The API is at 1.0.0 and documented (`docs/addon-authors.md`), with tests. Left: a written compatibility promise (what will and will not change before 2.0) and a sample addon that builds against the SDK. |
 | 4 | **Every shipped feature checked in real use** | **Needs you** | Neural Rendering, the window, the tray and hotkey, and the exit path are checked live. Not yet: ReShade passthrough (hotkey and auto-click) and Windowed mode (the virtual display after a restart) have only passed offline tests. A short live try settles both. |

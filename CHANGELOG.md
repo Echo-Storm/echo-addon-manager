@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-09-21)
 
-- **Toward 1.0: `EchoAddonManagerSetup.exe`, a single-file installer with a window** (`installer/`; in the package from the next release). It finds the Lossless Scaling folder
-  (a running copy, Steam libraries, the usual places, the last folder used, or "Browse" for a copy that is not from Steam), says what state it is in and offers the one thing that fits:
+Upgrading from 0.5.0: run `EchoAddonManagerSetup.exe` from the new zip (it offers **Update**), or copy the new files over the old ones as before. Nothing to migrate. The addon API is unchanged (1.0.0).
+The main news is the installer; the README was rewritten around it.
+
+- **`EchoAddonManagerSetup.exe`: an installer with a window, in one file** (`installer/`, in the zip). It finds the Lossless Scaling folder (a running copy, the last folder used, Steam
+  libraries, the usual places on every drive such as `Utilities` and `Games`, or "Browse" for any other copy; a folder you pick is remembered), says what state it is in and offers the one thing that fits:
   **Install**, **Update**, **Repair** (after a Lossless Scaling update put its own `Lossless.dll` back) or **Reinstall**, plus **Uninstall** (keeping or taking out the addons).
   It refuses while Lossless Scaling runs, backs up everything it replaces, verifies by hash, undoes itself if anything fails, and never touches the person's settings, other addons or
   removed addons. When the folder needs administrator rights it offers to restart itself as administrator. Afterwards it can copy the person's own `nvngx_dlssnr.dll` into the folder
@@ -11,6 +14,9 @@
   folder; a silent mode (`--silent install|uninstall|status --folder <dir>`) exists for scripts. Windows' own TaskDialog draws it. New offline tests in the runner: the file bundle
   (28 checks, including damaged and hostile bundles that must write nothing) and the exe end to end on fake folders (25 checks: silent install, reinstall, repair after an update,
   uninstall, refusals, Lossless Scaling running, and the window opening and closing by itself). The package script builds the exe with the files inside, and checks it installs them byte for byte.
+- **The README was rewritten** around the installer: what it is, a three-step start with a picture of Setup, what ships, how to keep it up to date (the update check and Setup's *Update* and
+  *Repair*), a troubleshooting section, and the install by hand kept as the alternative. The addon README and user guide say Setup installs the addon. `INSTALL.txt` in the zip starts with Setup.
+- The build instructions no longer list build targets that were removed (`-Only host,reshade,windowed`); they say `-Only host,nr`.
 
 ## 0.5.0 (2026-09-21)
 

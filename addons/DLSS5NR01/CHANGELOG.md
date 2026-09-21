@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 (2026-09-21)
+
+- No functional change. The version follows the manager (0.6.0). The README and the user guide say that the manager's new Setup installs this addon (and can copy your own model file into place).
+
 ## 0.5.0 (2026-09-21)
 
 - No functional change. The version follows the manager (0.5.0). The README, the user guide and `INSTALL.txt` now name the game this was tested with: World of Warcraft: Forever (the beta;
