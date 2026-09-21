@@ -70,10 +70,10 @@ void RenderTabAbout() {
     ImGui::Dummy(ImVec2(0, S(14)));
     lsp::SectionLabel("Thanks");
     ImGui::TextWrapped("This began as LosslessProxy by FrankBarretta (MIT), and we are grateful for it. About a third of this program's code "
-                       "is still theirs: the part that loads into Lossless Scaling and hooks DirectX 11 and its shaders, the safety checks "
-                       "on addons and the event system, plus the ReShade and Windowed addons, which we fixed and reworked. Everything "
-                       "else was written or rewritten since: how addons are found, loaded and switched, the settings file, the window, "
-                       "tabs, Performance, backup, install and remove, the tray and the shared look.");
+                       "is still theirs: mainly the part that loads into Lossless Scaling and hooks DirectX 11 and its shaders, plus the "
+                       "ReShade and Windowed addons, which we fixed and reworked. Everything else was written or rewritten since: how "
+                       "addons are found, checked, loaded and switched, the settings file, the event system, the window, tabs, "
+                       "Performance, backup, install and remove, the tray and the shared look.");
     ImGui::Dummy(ImVec2(0, S(4)));
     if (lsp::Button("The original project", lsp::icons::kExternal, lsp::ButtonKind::Flat)) OpenUrl("https://github.com/FrankBarretta/LosslessProxy");
     ImGui::Dummy(ImVec2(0, S(10)));

@@ -4,44 +4,21 @@
 
 namespace lsproxy {
 
+// Optional integrity checking of addon DLLs against addons\trusted_addons.json, a file of the form
+//   { "<addon id>": ["<SHA-256 of its DLL, in hex>", ...], ... }
+// The verdict is only used when Settings > Security is above "allow everything".
 class AddonSecurity {
 public:
-    // Compute SHA-256 hash of a file
+    // The SHA-256 of a file as 64 lowercase hex digits, or "" if the file cannot be read.
     static std::string ComputeSHA256(const std::wstring& filePath);
 
-    // Verify DLL against trusted hashes
+    // Trusted when the DLL's hash is one of the addon's listed hashes, Tampered when the addon is listed but this DLL is not one of them,
+    // Unknown when there is no list, the addon is not on it, or the DLL cannot be read.
     static SecurityVerdict VerifyDll(const std::wstring& dllPath, const std::string& addonId);
 
-    // Load trusted hashes from trusted_addons.json
+    // Reads trusted_addons.json from `basePath` (the addons folder) and replaces whatever list was loaded before. No file means an empty
+    // list; a file that cannot be parsed leaves the previous list in place.
     static void LoadTrustedHashes(const std::wstring& basePath);
-
-    // SEH-safe function call wrapper
-    template<typename Ret, typename Func, typename... Args>
-    static Ret SafeCall(const char* context, Ret defaultVal, Func func, Args... args);
 };
-
-// Template implementation
-template<typename Ret, typename Func, typename... Args>
-Ret AddonSecurity::SafeCall(const char* context, Ret defaultVal, Func func, Args... args) {
-    __try {
-        return func(args...);
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        // Can't call LOG_ERROR here due to SEH/C++ mixing rules
-        // The caller should log after catching
-        return defaultVal;
-    }
-}
-
-// Specialization for void return
-template<typename Func, typename... Args>
-void SafeCallVoid(const char* context, Func func, Args... args) {
-    __try {
-        func(args...);
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        // Caller handles logging
-    }
-}
 
 } // namespace lsproxy

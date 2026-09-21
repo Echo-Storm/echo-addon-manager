@@ -1,11 +1,10 @@
 # Notice and credits
 
 Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta** (MIT, 2025).
-That project's proxy DLL, its DirectX 11 and shader hooks, its safety checks on addons and its event system, and the ReShade and
-Windowed addons are the foundation of this one, and we are grateful for them. At the start of this repository about half of the manager's
-source lines were still that code (48% by `git blame`, before the history was started fresh); after the addon handling, settings file, host
-interface and part of the window code were rewritten, about a third is (33.8% by `tools/measure_original_share.py`, which compares against the
-original's lines). The window, tabs, Performance, backup, install and remove, tray, shared look and the live status and metrics interface are
+That project's proxy DLL and its DirectX 11 and shader hooks, and the ReShade and Windowed addons, are the foundation of this one, and
+we are grateful for them. At the start of this repository about half of the manager's source lines were still that code (48% by
+`git blame`, before the history was started fresh); after the addon handling, safety checks, settings file, event system, host interface and
+part of the window code were rewritten, about a third is (31.3% by `tools/measure_original_share.py`, which compares against the original's lines). The window, tabs, Performance, backup, install and remove, tray, shared look and the live status and metrics interface are
 new. The original copyright and licence are in [LICENSE](LICENSE), which must stay with every copy, however much of it remains.
 
 ## What is in this repository, and under what terms

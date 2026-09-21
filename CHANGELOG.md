@@ -6,8 +6,10 @@
   (on the `rewrite` branch until it has run in Lossless Scaling). New offline test `lsproxy_coretest` covers scanning, manifests, loading, starting, switching,
   removing, installing, the security levels, a faulting addon, the settings file and the host interface (94 checks); the window pictures are pixel-identical
   before and after (`tools/compare_ui_renders.py`). Small fixes on the way: a wrong-typed field in `addon.json` is skipped instead of dropping the rest of the
-  manifest, and loading a second settings file no longer inherits what the first one last saved. The share of the manager's code that is still the original
-  project's went from 42.8% to 33.8% (`tools/measure_original_share.py`).
+  manifest, and loading a second settings file no longer inherits what the first one last saved. The addon safety checks (SHA-256 against `trusted_addons.json`), the dependency ordering and the event bus were rewritten too, with fixes: the addon list
+  no longer reverses its order every time it is sorted (installing or removing an addon used to flip it), a trusted-hash list that is loaded again replaces the old
+  one instead of adding to it, a hash written in capitals matches, and a subscriber that faults is now logged. The share of the manager's code that is still the
+  original project's went from 42.8% to 31.3% (`tools/measure_original_share.py`); the offline test now has 122 checks.
 - **DLSS 5 Neural Rendering: Ghost guard.** New slider that fades the model's change where Lossless Scaling's motion data is unreliable and as the change ages, to remove the faint
   copy of the previous frame that could trail moving things. Default 0.5; 0 restores the old behaviour. See the addon's changelog.
 

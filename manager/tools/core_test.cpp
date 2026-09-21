@@ -340,6 +340,14 @@ static void TestSecurity(const fs::path& T) {
     AddonSecurity::LoadTrustedHashes(dir2.wstring());
     Check("loading the list again replaces it", AddonSecurity::VerifyDll(dll, "sec_ok") == SecurityVerdict::Unknown);
 
+    const fs::path dir4 = T / "sec4";
+    fs::create_directories(dir4);
+    std::string upper = abc;
+    for (char& c : upper) c = (char)toupper((unsigned char)c);
+    WriteFile(dir4 / "trusted_addons.json", R"({"sec_upper":[")" + upper + R"("]})");
+    AddonSecurity::LoadTrustedHashes(dir4.wstring());
+    Check("a listed hash may be written in capitals", AddonSecurity::VerifyDll(dll, "sec_upper") == SecurityVerdict::Trusted);
+
     const fs::path dir3 = T / "sec3";
     fs::create_directories(dir3);
     WriteFile(dir3 / "trusted_addons.json", "{ broken");

@@ -1,12 +1,14 @@
 #include "addon_security.h"
 #include "../log/logger.h"
 #include "../../third_party/nlohmann/json.hpp"
+#include <algorithm>
 #include <bcrypt.h>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
-#include <sstream>
+#include <mutex>
 #include <unordered_map>
+#include <vector>
 
 #pragma comment(lib, "bcrypt.lib")
 
@@ -14,93 +16,102 @@ namespace fs = std::filesystem;
 
 namespace lsproxy {
 
-static std::unordered_map<std::string, std::vector<std::string>> g_trustedHashes;
+namespace {
+
+std::mutex g_listMutex;
+std::unordered_map<std::string, std::vector<std::string>> g_trusted;   // addon id -> its allowed hashes, lowercase hex
+
+std::string Lower(std::string text) {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    return text;
+}
+
+// Closes a CNG algorithm provider and hash object however the function that opened them ends.
+struct Sha256 {
+    BCRYPT_ALG_HANDLE alg = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    std::vector<UCHAR> state;
+
+    bool Open() {
+        if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) != 0) return false;
+        DWORD stateSize = 0, got = 0;
+        if (BCryptGetProperty(alg, BCRYPT_OBJECT_LENGTH, (PUCHAR)&stateSize, sizeof stateSize, &got, 0) != 0) return false;
+        state.resize(stateSize);
+        return BCryptCreateHash(alg, &hash, state.data(), stateSize, nullptr, 0, 0) == 0;
+    }
+    ~Sha256() {
+        if (hash) BCryptDestroyHash(hash);
+        if (alg) BCryptCloseAlgorithmProvider(alg, 0);
+    }
+};
+
+} // namespace
 
 std::string AddonSecurity::ComputeSHA256(const std::wstring& filePath) {
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file.is_open()) return "";
+    std::ifstream in(filePath, std::ios::binary);
+    if (!in) return {};
 
-    BCRYPT_ALG_HANDLE hAlg = nullptr;
-    BCRYPT_HASH_HANDLE hHash = nullptr;
+    Sha256 sha;
+    if (!sha.Open()) return {};
 
-    if (BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) != 0) {
-        return "";
+    std::vector<char> chunk(64 * 1024);
+    while (in) {
+        in.read(chunk.data(), (std::streamsize)chunk.size());
+        const std::streamsize got = in.gcount();
+        if (got > 0 && BCryptHashData(sha.hash, (PUCHAR)chunk.data(), (ULONG)got, 0) != 0) return {};
     }
 
-    DWORD hashObjSize = 0, dataSize = 0;
-    BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH, (PUCHAR)&hashObjSize, sizeof(DWORD), &dataSize, 0);
+    UCHAR digest[32];
+    if (BCryptFinishHash(sha.hash, digest, sizeof digest, 0) != 0) return {};
 
-    std::vector<uint8_t> hashObj(hashObjSize);
-    if (BCryptCreateHash(hAlg, &hHash, hashObj.data(), hashObjSize, nullptr, 0, 0) != 0) {
-        BCryptCloseAlgorithmProvider(hAlg, 0);
-        return "";
+    static const char kDigits[] = "0123456789abcdef";
+    std::string hex;
+    hex.reserve(64);
+    for (UCHAR byte : digest) {
+        hex.push_back(kDigits[byte >> 4]);
+        hex.push_back(kDigits[byte & 0x0F]);
     }
-
-    char buffer[8192];
-    while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0) {
-        BCryptHashData(hHash, (PUCHAR)buffer, (ULONG)file.gcount(), 0);
-    }
-
-    DWORD hashSize = 32; // SHA-256 = 32 bytes
-    std::vector<uint8_t> hash(hashSize);
-    BCryptFinishHash(hHash, hash.data(), hashSize, 0);
-    BCryptDestroyHash(hHash);
-    BCryptCloseAlgorithmProvider(hAlg, 0);
-
-    std::ostringstream oss;
-    for (uint8_t b : hash) {
-        oss << std::hex << std::setfill('0') << std::setw(2) << (int)b;
-    }
-    return oss.str();
+    return hex;
 }
 
 SecurityVerdict AddonSecurity::VerifyDll(const std::wstring& dllPath, const std::string& addonId) {
-    if (g_trustedHashes.empty()) {
-        return SecurityVerdict::Unknown;
+    std::vector<std::string> allowed;
+    {
+        std::lock_guard<std::mutex> lock(g_listMutex);
+        const auto entry = g_trusted.find(addonId);
+        if (entry == g_trusted.end()) return SecurityVerdict::Unknown;
+        allowed = entry->second;
     }
 
-    auto it = g_trustedHashes.find(addonId);
-    if (it == g_trustedHashes.end()) {
-        return SecurityVerdict::Unknown;
-    }
-
-    std::string hash = ComputeSHA256(dllPath);
-    if (hash.empty()) {
-        return SecurityVerdict::Unknown;
-    }
-
-    for (const auto& trusted : it->second) {
-        if (trusted == hash) {
-            return SecurityVerdict::Trusted;
-        }
-    }
-
-    return SecurityVerdict::Tampered;
+    const std::string actual = ComputeSHA256(dllPath);
+    if (actual.empty()) return SecurityVerdict::Unknown;
+    return std::find(allowed.begin(), allowed.end(), actual) != allowed.end() ? SecurityVerdict::Trusted : SecurityVerdict::Tampered;
 }
 
 void AddonSecurity::LoadTrustedHashes(const std::wstring& basePath) {
-    fs::path hashFile = fs::path(basePath) / "trusted_addons.json";
-    if (!fs::exists(hashFile)) {
-        LOG_DEBUG("Security", "No trusted_addons.json found, skipping hash verification");
-        return;
-    }
+    const fs::path file = fs::path(basePath) / "trusted_addons.json";
+    std::unordered_map<std::string, std::vector<std::string>> loaded;
 
-    try {
-        std::ifstream file(hashFile);
-        auto data = nlohmann::json::parse(file);
-
-        for (auto& [addonId, hashes] : data.items()) {
-            if (hashes.is_array()) {
-                for (const auto& h : hashes) {
-                    g_trustedHashes[addonId].push_back(h.get<std::string>());
-                }
-            }
+    std::error_code ec;
+    if (fs::exists(file, ec)) {
+        std::ifstream in(file);
+        const nlohmann::json doc = nlohmann::json::parse(in, nullptr, /*allow_exceptions=*/false);
+        if (!doc.is_object()) {
+            LOG_ERROR("Security", "Failed to parse trusted_addons.json: it is not a JSON object; keeping the list loaded before");
+            return;
         }
-
-        LOG_INFO("Security", "Loaded trusted hashes for %zu addons", g_trustedHashes.size());
-    } catch (const std::exception& e) {
-        LOG_ERROR("Security", "Failed to parse trusted_addons.json: %s", e.what());
+        for (const auto& [addonId, hashes] : doc.items()) {
+            if (!hashes.is_array()) continue;
+            for (const auto& h : hashes)
+                if (h.is_string()) loaded[addonId].push_back(Lower(h.get<std::string>()));
+        }
+        LOG_INFO("Security", "Loaded trusted hashes for %zu addons", loaded.size());
+    } else {
+        LOG_DEBUG("Security", "No trusted_addons.json found, skipping hash verification");
     }
+
+    std::lock_guard<std::mutex> lock(g_listMutex);
+    g_trusted = std::move(loaded);
 }
 
 } // namespace lsproxy

@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <functional>
 #include <shared_mutex>
 #include <unordered_map>
 #include <vector>
@@ -9,12 +8,15 @@ namespace lsproxy {
 
 using EventCallback = void(*)(uint32_t eventId, const void* data, uint32_t dataSize, void* userData);
 
+// The publish and subscribe channel between the host and its addons. Subscribers to one event are called in the order they subscribed, on
+// the thread that publishes. A subscriber that faults is skipped and logged, and never stops the ones after it. Publishing works from a copy
+// of the subscriber list, so a subscriber may subscribe or unsubscribe (itself included) from inside its own callback.
 class EventBus {
 public:
     static EventBus& Instance();
 
-    void Subscribe(uint32_t eventId, EventCallback callback, void* userData = nullptr);
-    void Unsubscribe(uint32_t eventId, EventCallback callback);
+    void Subscribe(uint32_t eventId, EventCallback callback, void* userData = nullptr);   // a null callback is ignored
+    void Unsubscribe(uint32_t eventId, EventCallback callback);   // removes every subscription of that callback to the event
     void Publish(uint32_t eventId, const void* data = nullptr, uint32_t dataSize = 0);
 
 private:
