@@ -736,7 +736,11 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         bool have; { std::lock_guard<std::mutex> lk(g_reqMu); have = g_reqHave; }
         const bool failed = g_engine.IsFailed();
         const req::Report rep = RequirementsNow(failed, g_engine.IsReady(), g_nrRuns > 0, g_engine.Stats().lastError);
-        if (have && rep.overall == req::Level::Missing) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kDanger)); ImGui::TextWrapped("Neural Rendering cannot run yet. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
+        // One line that is always there, even while the section below is folded: all in place, a note, or what stops it from running
+        if (!have) ImGui::TextDisabled("Requirements: checking...");
+        else if (rep.overall == req::Level::Missing) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kDanger)); ImGui::TextWrapped("Neural Rendering cannot run yet. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
+        else if (rep.overall == req::Level::Note) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kWarn)); ImGui::TextWrapped("Requirements: %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
+        else { ImGui::TextColored(lsp::theme::V(lsp::theme::kAccent), "Requirements: all in place"); if (!rep.rows.empty()) { ImGui::SameLine(); ImGui::TextDisabled("%s", rep.rows[0].value.c_str()); } }
         if (lsp::SectionHeader("Requirements", have && rep.overall != req::Level::Ok)) {
             if (!have) ImGui::TextDisabled("Checking...");
             for (const auto& row : rep.rows) {
