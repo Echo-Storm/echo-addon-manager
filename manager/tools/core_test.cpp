@@ -73,6 +73,117 @@ static bool EnabledInFile(const fs::path& cfg, const std::string& id, bool* pres
     return has && j["addons"][id]["_enabled"].get<bool>();
 }
 
+static nlohmann::json ReadJson(const fs::path& p) {
+    std::ifstream f(p);
+    return nlohmann::json::parse(f, nullptr, false);
+}
+
+// The settings file: reading, writing, the two kinds of value, the enabled flag, and what happens to a damaged file.
+static void TestConfig(const fs::path& T) {
+    using nlohmann::json;
+    printf("== settings file\n");
+    ConfigManager& C = ConfigManager::Instance();
+    const fs::path base = T / "cfg";
+
+    {   // a new file, written and read back
+        const fs::path dir = base / "new";
+        fs::create_directories(dir);
+        const fs::path p = dir / "config.json";
+        C.Load(p.wstring());
+        Check("with no file, everything reads as its default", C.Get("x", "k", "dflt") == "dflt" && C.GlobalGet(nullptr, "k").is_null() && C.IsAddonEnabled("x", true) && !C.IsAddonEnabled("x", false));
+        C.Set("x", "k", "v");
+        C.SetAddonEnabled("x", false);
+        C.GlobalSet("ui", "size", 125);
+        C.GlobalSet(nullptr, "level", 2);
+        C.Save();
+        Check("Save writes the file", fs::exists(p));
+        const json j = ReadJson(p);
+        Check("an addon's values, its enabled flag and the host's settings land where documented",
+              j["addons"]["x"]["k"] == "v" && j["addons"]["x"]["_enabled"] == false && j["global"]["ui"]["size"] == 125 && j["global"]["level"] == 2);
+        Check("no temporary file is left beside it", !fs::exists(fs::path(p) += ".tmp"));
+        fs::remove(p);
+        C.Save();
+        Check("saving settings that have not changed does not rewrite the file", !fs::exists(p));
+        C.Set("x", "k", "w");
+        C.Save();
+        Check("a change is written", fs::exists(p) && ReadJson(p)["addons"]["x"]["k"] == "w");
+
+        C.Load(p.wstring());
+        Check("loading the file again gives the same values", C.Get("x", "k") == "w" && !C.IsAddonEnabled("x", true) && C.GlobalGetOr<int>("ui", "size", 0) == 125 && C.GlobalGetOr<int>(nullptr, "level", 0) == 2);
+        Check("a host setting of the wrong type reads as the default", C.GlobalGetOr<std::string>("ui", "size", "none") == "none" && C.GlobalGetOr<int>("ui", "absent", 9) == 9);
+    }
+
+    {   // the kinds of value, and the enabled flag in its old and new places
+        const fs::path dir = base / "types";
+        fs::create_directories(dir);
+        const fs::path p = dir / "config.json";
+        WriteFile(p, R"({"addons":{"t":{"s":"text","b":true,"n":3.5,"i":7,"o":{"a":1},"_enabled":true,"enabled":"yes"},"l":{"enabled":false},"m":{"enabled":"yes"}}})");
+        C.Load(p.wstring());
+        Check("text, booleans and numbers all read back as text", C.Get("t", "s") == "text" && C.Get("t", "b") == "1" && C.Get("t", "n") == "3.5" && C.Get("t", "i") == "7");
+        Check("an object reads as the default", C.Get("t", "o", "dflt") == "dflt");
+        Check("an addon's own 'enabled' text is not the host's flag", C.Get("t", "enabled") == "yes" && C.IsAddonEnabled("t", false));
+        Check("the old boolean 'enabled' is still honoured", !C.IsAddonEnabled("l", true));
+        Check("a text 'enabled' is not taken as the flag", C.IsAddonEnabled("m", true) && !C.IsAddonEnabled("m", false));
+        C.SetAddonEnabled("l", true);
+        const json snap = C.Snapshot();
+        Check("setting the flag moves it to _enabled and drops the old boolean", snap["addons"]["l"]["_enabled"] == true && !snap["addons"]["l"].contains("enabled"));
+        C.SetAddonEnabled("m", false);
+        Check("...but leaves an addon's own 'enabled' text alone", C.Snapshot()["addons"]["m"]["enabled"] == "yes");
+    }
+
+    for (const char* bad : { "{ this is not json", "[1, 2, 3]" }) {   // a damaged file is kept, not overwritten
+        const fs::path dir = base / (std::string("bad") + (bad[0] == '[' ? "_array" : "_text"));
+        fs::create_directories(dir);
+        const fs::path p = dir / "config.json";
+        WriteFile(p, bad);
+        C.Load(p.wstring());
+        std::ifstream kept(fs::path(p) += ".corrupt");
+        const std::string keptText((std::istreambuf_iterator<char>(kept)), std::istreambuf_iterator<char>());
+        Check("a damaged settings file is kept as config.json.corrupt", keptText == bad, bad);
+        Check("...and the settings start empty", C.Get("x", "k", "dflt") == "dflt");
+        const std::string mark = std::string("v") + (bad[0] == '[' ? "2" : "1");
+        C.Set("x", "k", mark);
+        C.Save();
+        Check("...and saving then writes a valid file", ReadJson(p)["addons"]["x"]["k"] == mark);
+    }
+
+    {   // a second file loaded later starts from a clean slate
+        const fs::path one = base / "first" / "config.json", two = base / "second" / "config.json";
+        fs::create_directories(one.parent_path());
+        fs::create_directories(two.parent_path());
+        C.Load(one.wstring());
+        C.Set("q", "k", "same");
+        C.Save();
+        C.Load(two.wstring());
+        C.Set("q", "k", "same");
+        C.Save();
+        Check("a file loaded later is written even when it holds what the previous file did", fs::exists(two));
+    }
+
+    {   // a whole-file replacement, as settings restore does
+        const fs::path dir = base / "replace";
+        fs::create_directories(dir);
+        const fs::path p = dir / "config.json";
+        C.Load(p.wstring());
+        C.Replace(json{ { "addons", { { "r", { { "_enabled", false } } } } }, { "global", { { "log_level", 3 } } } });
+        Check("Replace swaps everything and saves at once", !C.IsAddonEnabled("r", true) && ReadJson(p)["global"]["log_level"] == 3);
+        C.Replace(json::array({ 1, 2 }));
+        Check("Replace with something that is not an object leaves an empty object", C.Snapshot().is_object() && C.Snapshot().empty());
+    }
+
+    {   // the very old settings file, addons_config.ini
+        const fs::path dir = base / "migrate";
+        fs::create_directories(dir / "One");
+        fs::create_directories(dir / "Two");
+        fs::create_directories(dir / "Three");
+        WriteFile(dir / "addons_config.ini", "[Addons]\nOne=0\nTwo=1\n");
+        const fs::path p = dir / "config.json";
+        C.Load(p.wstring());
+        Check("settings from the old .ini are carried over, one per addon folder", !C.IsAddonEnabled("One", true) && C.IsAddonEnabled("Two", false) && C.IsAddonEnabled("Three", false));
+        Check("...and written to config.json straight away", fs::exists(p) && ReadJson(p)["addons"]["One"]["_enabled"] == false);
+    }
+}
+
 static void OnEvent(uint32_t, const void*, uint32_t, void* user) { ++*(int*)user; }
 
 int main() {
@@ -102,6 +213,9 @@ int main() {
     WriteFile(A / "nodll" / "readme.txt", "no DLL in here");
     MakeAddon(A, ".hidden", "hidden.dll");                                                     // dot folders are staging areas
     WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false}},"global":{"security_level":0}})");
+
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    try { TestConfig(T); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
 
     HostImpl host;
     int loadedEvents = 0, unloadedEvents = 0;
