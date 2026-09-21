@@ -96,6 +96,8 @@ int main(int argc, char** argv) {
     std::string shotPath; int shotW = 760, shotH = 3400;
     for (int i = 4; i < argc; ++i) { if (!strncmp(argv[i], "shot=", 5)) shotPath = argv[i] + 5; else if (!strncmp(argv[i], "shotW=", 6)) shotW = atoi(argv[i] + 6); else if (!strncmp(argv[i], "shotH=", 6)) shotH = atoi(argv[i] + 6); }
     const bool shotMode = !shotPath.empty();
+    bool openSections = true;   // sectionsOpen=0 leaves every collapsible section as it is on first start (closed)
+    for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "sectionsOpen=0")) openSections = false;
     // flowsplit=1: the right half of the fake LSFG flow has both fields pointing the same way (they disagree), the left half agrees
     bool flowSplit = false;
     for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "flowsplit=", 10)) flowSplit = atoi(argv[i] + 10) != 0;
@@ -115,7 +117,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     Init(&host, ctx, (void*)af, (void*)ff, ud);
@@ -125,7 +127,7 @@ int main(int argc, char** argv) {
             ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ImVec2((float)shotW, 0.0f));
             ImGui::Begin("Addon Manager", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
             for (const char* h : { "Model (what it does to the picture)", "Quality and performance", "Picture (sharpness, tone, colour, grain)", "Keep the HUD untouched", "Compare and hotkeys", "Games (a look per program)", "Frame detection (advanced)", "Technical status", "Advanced" })
-                ImGui::GetStateStorage()->SetInt(ImGui::GetID(h), 1);
+                if (openSections) ImGui::GetStateStorage()->SetInt(ImGui::GetID(h), 1);
         } else { ImGui::SetNextWindowSize(ImVec2(900, 700)); ImGui::Begin("Addon Manager"); }
         Render(); ImGui::End();
     };

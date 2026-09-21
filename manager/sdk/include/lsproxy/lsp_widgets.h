@@ -290,7 +290,7 @@ inline bool SliderInt(const char* label, int* v, int vmin, int vmax, const char*
 // Section headers, buttons, icons
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-// A collapsible section: chevron, letter-spaced uppercase label in the accent, a hairline under it. Returns whether it is open
+// A collapsible section: a boxed plus or minus, letter-spaced uppercase label in the accent, a hairline under it. Returns whether it is open
 // (state is kept by ImGui per window, keyed by the label, like ImGui::CollapsingHeader; `defaultOpen` applies the first time).
 inline bool SectionHeader(const char* label, bool defaultOpen = false) {
     ImGuiWindow* win = ImGui::GetCurrentWindow();
@@ -308,10 +308,17 @@ inline bool SectionHeader(const char* label, bool defaultOpen = false) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float a = ImGui::GetStyle().Alpha;
     if (hovered) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), theme::U(theme::kRowHover, a), 3.0f);
-    const float ico = ImGui::GetFontSize() * 0.75f;
-    svg::Draw(dl, open ? icons::kChevronDown : icons::kChevronRight, ImVec2(p.x + h * 0.25f, p.y + (h - ico) * 0.5f), ico, theme::U(open || hovered ? theme::kAccent : theme::kAccentDim, a), 2.4f);
+    // The open / close control: a small box with a plus (closed) or a minus (open), so it reads as a button. White when closed, green when open or hovered.
+    const float box = ImGui::GetFontSize() * 0.95f;
+    const float bx = p.x + h * 0.15f, by = p.y + (h - box) * 0.5f;
+    const ImU32 sign = theme::U(open ? theme::kAccent : (hovered ? theme::kAccentHot : theme::kText), a);
+    dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + box, by + box), theme::U(hovered ? theme::kButtonHover : theme::kButton, a), 3.0f);
+    dl->AddRect(ImVec2(bx, by), ImVec2(bx + box, by + box), theme::U(open || hovered ? theme::kAccentDim : theme::kBorderBright, a), 3.0f, 0, 1.2f);
+    const float cx = bx + box * 0.5f, cy = by + box * 0.5f, arm = box * 0.27f, thick = (std::max)(1.6f, ImGui::GetFontSize() * 0.12f);
+    dl->AddLine(ImVec2(cx - arm, cy), ImVec2(cx + arm, cy), sign, thick);
+    if (!open) dl->AddLine(ImVec2(cx, cy - arm), ImVec2(cx, cy + arm), sign, thick);
     const float spacing = (std::max)(1.2f, ImGui::GetFontSize() * 0.12f);
-    float x = p.x + h * 0.25f + ico + ImGui::GetFontSize() * 0.5f;
+    float x = bx + box + ImGui::GetFontSize() * 0.65f;
     const float ty = p.y + (h - ImGui::GetTextLineHeight()) * 0.5f;
     char up[2] = { 0, 0 };
     const ImU32 col = theme::U(open || hovered ? theme::kAccent : theme::kAccentDim, a);

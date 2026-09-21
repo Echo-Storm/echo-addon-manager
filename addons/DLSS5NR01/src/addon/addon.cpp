@@ -171,6 +171,7 @@ static void Note(const char* fmt, ...) {
     ImGui::TextWrapped("%s", b);
     ImGui::PopStyleColor();
 }
+// Every collapsible section of the panel starts closed (lsp::SectionHeader with no second argument); the person opens what they need.
 // A titled block of the panel: some room, a thin line, the title in the small capitals of the other apps, and a little room under it.
 static void Block(const char* title, bool first = false) {
     const float u = ImGui::GetFontSize();
@@ -903,7 +904,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
     Block("Settings");
     Note("Open a section to change it. Sliders: double-click to reset, Ctrl+click to type a value, Ctrl+scroll to fine-tune. The small tick marks the default.");
     ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
-    if (lsp::SectionHeader("Model (what it does to the picture)", true)) {
+    if (lsp::SectionHeader("Model (what it does to the picture)")) {
         // Read by the model at every evaluate: changes apply on the next frame. Ranges are what the model honours
         // (docs/dlssnr-knobs.md): intensity clamps at 1, the local strengths do not clamp at all.
         int style = (int)c.p.style; const char* styles[] = { "Standard", "Natural", "Cinematic" };
@@ -924,7 +925,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         Tip("Feeds the motion Lossless Scaling's frame generation measures (its optical flow) to the model as motion vectors, and uses it to slide the enhancement onto the generated in-between frames. Turn it off only to test without motion.");
         { const NrStats& fs = g_engine.Stats(); ImGui::SameLine(); if (fs.hasFlow) ImGui::TextDisabled("(flow %ux%u)", fs.flowW, fs.flowH); else ImGui::TextDisabled("(no flow texture seen yet)"); }
     }
-    if (lsp::SectionHeader("Quality and performance", true)) {
+    if (lsp::SectionHeader("Quality and performance")) {
         // The model costs ~10 ms + ~7 ms per megapixel on Ampere. The working scale is the only cost lever: past the
         // frame interval the model simply skips frames and the present side carries the last delta forward.
         createChanged |= SL("Model resolution", &c.p.workingScale, 0.25f, 1.0f, "%.2f x the frame");
@@ -956,7 +957,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         changed |= SL("Protect bright areas from", &c.p.hiProtect, 0.5f, 1.0f, c.p.hiProtect >= 0.999f ? "off" : "%.2f");
         Tip("The model's change fades out as a pixel's brightness rises from this level to white, so highlights are not crushed. At the far right (off) the change applies everywhere.");
     }
-    if (lsp::SectionHeader("Picture (sharpness, tone, colour, grain)", true)) {
+    if (lsp::SectionHeader("Picture (sharpness, tone, colour, grain)")) {
         // Compose side, applied to every presented frame, real and generated alike.
         changed |= SL("Sharpen", &c.p.sharpen, 0.0f, 1.0f, c.p.sharpen <= 0.001f ? "off" : "%.2f");
         Tip("Contrast-adaptive sharpening of every presented frame, after the model's change is added. The model and the upscale both soften the picture; a little sharpening (0.2 to 0.4) puts the bite back. Costs almost nothing.");
@@ -1007,7 +1008,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         if (c.p.hudCount) { ImGui::SameLine(); if (ImGui::SmallButton("Clear all")) { c.p.hudCount = 0; changed = true; } }
         Note("Areas are saved with the preset, so each game can have its own layout.");
     }
-    if (lsp::SectionHeader("Compare and hotkeys", true)) {
+    if (lsp::SectionHeader("Compare and hotkeys")) {
         int cm = g_compare; const char* cms[] = { "Enhanced", "Split: left original | right enhanced", "Original only (before)" };
         if (ImGui::Combo("Compare view", &cm, cms, 3)) g_compare = cm;
         Tip("Enhanced = normal. Split = left of the line is the original, right is enhanced. Original only = as if Neural Render were off (it saves the compose work but the model keeps running). Display only; not saved.");

@@ -222,6 +222,19 @@ def selftest_exe_checks(nr_dir, snippet):
     return 1 if bad else 0
 
 
+def panel_sections_closed_check():
+    """Every collapsible section of the Neural Rendering panel must start closed: lsp::SectionHeader is called without its default-open argument."""
+    import re
+    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'addons', 'DLSS5NR01', 'src', 'addon', 'addon.cpp')
+    text = open(src, encoding='utf-8', errors='replace').read()
+    headers = re.findall(r'lsp::SectionHeader\(([^;{]*?)\)\)\s*\{', text)
+    opens = [h for h in headers if re.search(r',\s*true\s*$', h.strip())]
+    print('== panel sections')
+    ok = len(headers) >= 6 and not opens
+    print('  %s  all %d collapsible sections start closed%s' % ('PASS' if ok else 'FAIL', len(headers), '' if not opens else '  (open by default: %s)' % ', '.join(opens)))
+    return 0 if ok else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--nr', default=DEFAULT_NR)
@@ -255,6 +268,7 @@ def main():
         failed += 0 if res.ok else 1
     if not only:
         failed += selftest_exe_checks(a.nr, a.snippet)
+        failed += panel_sections_closed_check()
     print('\n%s' % ('ALL SCENARIOS PASSED' if not failed else '%d SCENARIO(S) FAILED' % failed))
     print('logs and frames in', a.out)
     return 1 if failed else 0

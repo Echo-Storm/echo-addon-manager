@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Every collapsible section of the Neural Rendering panel now starts closed.** *Model*, *Quality and performance*, *Picture* and *Compare and hotkeys* used to open by themselves; now all nine
+  sections (with *Keep the HUD untouched*, *Games*, *Frame detection*, *Technical status* and *Advanced*) start folded, so the panel opens as a short page: Status, Requirements, Saved looks, the
+  on/off switch, and a list of sections to open. A check in the scenario runner fails if a section is ever set to open by default.
+- **The open / close control of a section is now a boxed plus or minus**, not a small arrow: a white plus when the section is closed, a green minus when it is open, and it lights up when you point at it,
+  so it is obvious that the section can be opened. It is the shared section widget, so the Performance tab's *All live values* section has it too.
+
 ## 0.4.0 (2026-09-21)
 
 Upgrading from 0.2.3: copy the new files over the old ones. Nothing to migrate. The version number goes from 0.2.3 to 0.4.0 on purpose: 0.3 is skipped, because

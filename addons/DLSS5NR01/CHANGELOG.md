@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- All nine collapsible sections of the panel start closed (four used to open by themselves). The offline test host takes `sectionsOpen=0` to render the panel as it looks on first start, and the
+  scenario runner checks that no section is set to open by default.
+- The open / close control of a section is a boxed plus (closed, white) or minus (open, green) instead of a small arrow (`lsp::SectionHeader` in the shared widgets).
+
 ## 0.4.0 (2026-09-21)
 
 - Panel reorganised into titled, separated blocks: Status, Requirements (always open, with numbered instructions, a one-line verdict, the rows, and the main actions first), Saved looks (load and
