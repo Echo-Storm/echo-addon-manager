@@ -180,6 +180,15 @@ int main(int argc, char** argv) {
     fs::create_directories(dir);
     ConfigManager::Instance().Load((dir / "config.json").wstring());
 
+    if (argc > 1 && !strcmp(argv[1], "abrupt")) {
+        // The process ends with a feature's watcher thread running and features::Stop never called, which is what can happen when Lossless
+        // Scaling exits. A std::thread still joinable when this program's statics are destroyed calls std::terminate: the exit code would be a crash.
+        features::SetOn(0, true);   // ReShade passthrough: starts its watcher thread
+        Sleep(300);
+        printf("abrupt exit with the ReShade watcher running\n");
+        exit(0);   // runs the static destructors, as a DLL's are run when the process ends
+    }
+
     printf("== the list of features\n");
     Check("two features are built in", features::Count() == 2 && IndexOfFeature("LSP-ReShade") == 0 && IndexOfFeature("LSP-Windowed") == 1);
     Check("the retired standalone addons are recognised by folder name", features::IsRetiredAddonId("LSP-ReShade") && features::IsRetiredAddonId("LSP-Windowed") && !features::IsRetiredAddonId("DLSS5NR01"));

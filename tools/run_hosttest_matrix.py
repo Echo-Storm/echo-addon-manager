@@ -186,6 +186,7 @@ SCENARIOS = [
     ('smooth_passes3', ['deltaSmooth=0.5', 'passes=3'], scenario_smooth_passes),
     ('ghost_off', ['flowsplit=1', 'ghostGuard=0'], scenario_ghost_off),
     ('ghost_on', ['flowsplit=1', 'ghostGuard=1'], scenario_ghost_on),
+    ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),
 ]
 

@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "flowsplit", 9)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     Init(&host, ctx, (void*)af, (void*)ff, ud);
@@ -269,6 +269,12 @@ int main(int argc, char** argv) {
         printf("[check-res2] %ux%u frame texture: %llu pixels changed (%s); presented buffers composed in %llu of %llu samples (%s)\n", W2, H2, (unsigned long long)changed, changed == 0 ? "read-only" : "WRITTEN", (unsigned long long)composed2, (unsigned long long)checks2, composed2 >= checks2 / 2 && checks2 ? "TAP FOLLOWED" : "TAP LOST");
     }
     host.PublishEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, nullptr, 0);
+    for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "exitmode=abrupt")) {
+        // What Lossless Scaling does at exit: the process ends with the addon still loaded and AddonShutdown never called. The addon's static
+        // destructors then run in DLL_PROCESS_DETACH, and a std::thread still joinable there calls std::terminate.
+        printf("done (abrupt exit: no AddonShutdown)\n"); fflush(stdout);
+        ExitProcess(0);
+    }
     Shut();
     if (shotMode) shot.Shutdown();
     sc->Release(); DestroyWindow(hwnd);

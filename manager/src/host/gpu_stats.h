@@ -12,6 +12,9 @@ namespace lsproxy {
 class GpuStats {
 public:
     static GpuStats& Instance();
+    // If the process ends with the sampler still running (Shutdown was not called), let go of it: destroying a joinable std::thread calls
+    // std::terminate, which would crash Lossless Scaling at exit.
+    ~GpuStats() { if (m_thread.joinable()) m_thread.detach(); }
 
     struct Snapshot {
         bool ok = false;               // NVML loaded and a GPU answered

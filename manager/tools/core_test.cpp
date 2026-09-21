@@ -7,6 +7,7 @@
 #include "src/addon/addon_security.h"
 #include "src/config/config_manager.h"
 #include "src/event/event_system.h"
+#include "src/host/gpu_stats.h"
 #include "src/host/host_impl.h"
 #include "src/host/metrics.h"
 #include "src/log/logger.h"
@@ -14,6 +15,7 @@
 #include "imgui.h"
 #include <windows.h>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -413,7 +415,15 @@ static void TestEvents() {
 
 static void OnEvent(uint32_t, const void*, uint32_t, void* user) { ++*(int*)user; }
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc > 1 && !strcmp(argv[1], "abrupt-gpu")) {
+        // The process ends with the Performance tab's sampler thread running and GpuStats::Shutdown never called, as when Lossless Scaling exits.
+        // A std::thread still joinable when the singleton is destroyed calls std::terminate: the exit code would be a crash.
+        GpuStats::Instance().Wanted();
+        Sleep(300);
+        printf("abrupt exit with the GPU sampler running\n"); fflush(stdout);
+        exit(0);   // runs the static destructors, as a DLL's are run when the process ends
+    }
     const fs::path T = fs::temp_directory_path() / ("lsp_coretest_" + std::to_string(GetCurrentProcessId()));
     std::error_code ec;
     fs::remove_all(T, ec);

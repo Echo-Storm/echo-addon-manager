@@ -26,7 +26,15 @@ std::atomic<bool> g_hotkeyShift{ false };
 std::atomic<bool> g_autoClick{ true };
 
 // ---- the watcher
-std::thread g_watcher;
+// If the process ends with the watcher still running (features::Stop was not called), the holder lets go of it instead of destroying a joinable
+// std::thread, which would call std::terminate and crash Lossless Scaling at exit.
+struct WatcherThread {
+    std::thread t;
+    ~WatcherThread() { if (t.joinable()) t.detach(); }
+    bool joinable() const { return t.joinable(); }
+    void join() { t.join(); }
+    WatcherThread& operator=(std::thread&& other) { t = std::move(other); return *this; }
+} g_watcher;
 std::atomic<bool> g_running{ false };
 std::atomic<bool> g_simulating{ false };      // an auto click and repress is in progress: ignore the hotkey meanwhile
 std::atomic<int> g_clickThreads{ 0 };         // auto click threads still running

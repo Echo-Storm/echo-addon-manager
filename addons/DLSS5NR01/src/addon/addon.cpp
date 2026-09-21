@@ -127,7 +127,6 @@ static std::atomic<bool> g_armed{ false }, g_killed{ false }, g_engineStarting{ 
 static std::string g_status = "waiting for device", g_killReason; static std::mutex g_statusMu;
 static ID3D11Device* g_dev = nullptr; static ID3D11DeviceContext* g_ctx = nullptr;
 static LUID g_luid{}; static std::string g_adapterName; static bool g_hasDisplay = false; static bool g_engineLuidValid = false; static LUID g_engineLuid{};
-static std::thread g_initThread;
 static std::wstring g_lsDir, g_addonDir;
 static FILE* g_logFile = nullptr; static std::mutex g_logMu;
 static uint64_t g_nrRuns = 0; static double g_lastNrMs = 0, g_avgNrMs = 0, g_lastTotalMs = 0; static uint32_t g_watchdogHits = 0;
@@ -306,7 +305,9 @@ static std::string Wide2Narrow(const std::wstring& w) { std::string s(w.size() *
 // ---- Requirements (requirements.h). What is on this machine is gathered off the UI thread (it reads file headers, including the model's, which is
 // large); the engine's own state is added when the panel is drawn, so it is always current.
 static std::mutex g_reqMu; static req::Inputs g_reqIn; static bool g_reqHave = false;
-static std::thread g_reqThread; static std::atomic<bool> g_reqBusy{ false };
+// These two helper threads are detached and tracked by a flag, never kept as a std::thread object: Lossless Scaling ends the process without
+// calling AddonShutdown, and a std::thread that is still joinable when this DLL's statics are destroyed calls std::terminate (a crash at exit).
+static std::atomic<bool> g_reqBusy{ false };
 static std::wstring ModelPathNow() {
     std::string sp; { std::lock_guard<std::mutex> lk(g_cfgMu); sp = g_cfg.snippetPath; }
     return sp.empty() ? g_lsDir + L"\\nvngx_dlssnr.dll" : Narrow2Wide(sp);
@@ -323,13 +324,12 @@ static void ScanRequirementsGuarded(const std::wstring& model, const std::wstrin
 }
 static void ScanRequirements() {
     if (g_reqBusy.exchange(true)) return;
-    if (g_reqThread.joinable()) g_reqThread.join();   // the previous scan has finished (it clears the flag last)
     const std::wstring model = ModelPathNow(), addonDir = g_addonDir;
-    g_reqThread = std::thread([model, addonDir] { ScanRequirementsGuarded(model, addonDir); g_reqBusy = false; });
+    std::thread([model, addonDir] { ScanRequirementsGuarded(model, addonDir); g_reqBusy = false; }).detach();
 }
 // "Browse for the model file": the user picks their own copy of nvngx_dlssnr.dll and it is copied into the Lossless Scaling folder (req::PlaceModel).
 // The file dialog is modal and blocks its thread, so it runs on a worker thread, never on the manager's UI thread.
-static std::thread g_placeThread; static std::atomic<bool> g_placeBusy{ false };
+static std::atomic<bool> g_placeBusy{ false };
 static std::string g_placeMsg; static bool g_placeOk = false;   // guarded by g_reqMu
 static std::wstring PickModelFile() {
     wchar_t file[MAX_PATH * 2] = {};
@@ -355,8 +355,7 @@ static void PlaceModelGuarded() {   // no objects here: __try cannot unwind them
 }
 static void BrowseAndPlace() {
     if (g_placeBusy.exchange(true)) return;
-    if (g_placeThread.joinable()) g_placeThread.join();   // the previous one has finished (it clears the flag last)
-    g_placeThread = std::thread([] { PlaceModelGuarded(); g_placeBusy = false; });
+    std::thread([] { PlaceModelGuarded(); g_placeBusy = false; }).detach();
 }
 static req::Report RequirementsNow(bool engineFailed, bool engineReady, bool engineRunning, const char* engineError) {
     req::Inputs in; { std::lock_guard<std::mutex> lk(g_reqMu); in = g_reqIn; }
@@ -367,8 +366,9 @@ static req::Report RequirementsNow(bool engineFailed, bool engineReady, bool eng
 
 static void StartEngine(LUID luid) {
     if (g_engineStarting.exchange(true)) return;
-    if (g_initThread.joinable()) g_initThread.join();
-    g_initThread = std::thread([luid]() {
+    // Detached and tracked by g_engineStarting (cleared on every path out): a std::thread object kept in a static would still be joinable if the
+    // process ends without AddonShutdown, and destroying it then calls std::terminate.
+    std::thread([luid]() {
       try {
         { std::lock_guard<std::mutex> lk(g_tapMu); g_bridge.Shutdown(); if (g_engine.IsReady() || g_engine.IsFailed()) g_engine.Shutdown(); }
         std::string sp; { std::lock_guard<std::mutex> lk(g_cfgMu); sp = g_cfg.snippetPath; }
@@ -388,7 +388,7 @@ static void StartEngine(LUID luid) {
         g_failedLuid = luid; g_failedLuidValid = true;
         SetStatus("engine failed (exception; see the log)"); g_engineStarting = false;
       }
-    });
+    }).detach();
 }
 
 static void DropDevice() {   // under g_tapMu
@@ -1132,9 +1132,8 @@ LSPROXY_EXPORT void AddonShutdown() {
     PresentHook::Uninstall();
     DispatchHook::Uninstall();
     if (g_host) { g_host->UnsubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_READY, OnDeviceEvent); g_host->UnsubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent); }
-    if (g_initThread.joinable()) g_initThread.join();
-    if (g_reqThread.joinable()) g_reqThread.join();
-    if (g_placeThread.joinable()) { if (g_placeBusy) g_placeThread.detach(); else g_placeThread.join(); }   // an open file dialog cannot be joined; the process is ending
+    for (int i = 0; i < 3000 && g_engineStarting; ++i) Sleep(10);   // let a model load that is in progress finish (as the join used to)
+    for (int i = 0; i < 300 && g_reqBusy; ++i) Sleep(10);   // a requirements scan takes milliseconds; an open file dialog is left (the process is ending)
     { std::lock_guard<std::mutex> lk(g_tapMu); g_bridge.Shutdown(); g_compose.Shutdown(); g_engine.Shutdown(); }
     SaveConfig();
     if (g_logFile) { fclose(g_logFile); g_logFile = nullptr; }
