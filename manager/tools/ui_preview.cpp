@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
     char* cleanEnv = nullptr; size_t cleanLen = 0; _dupenv_s(&cleanEnv, &cleanLen, "LSP_PREVIEW_CLEAN");
     const bool clean = cleanEnv != nullptr; free(cleanEnv);
     AddonInfo a, b, c;
-    a.id = "DLSS5NR01"; a.manifest.name = "DLSS 5 Neural Rendering"; a.manifest.version = "0.6.0"; a.manifest.author = "andreiday / Echo-Storm"; a.hModule = (HMODULE)1; a.enabled = true;
+    a.id = "DLSS5NR01"; a.manifest.name = "DLSS 5 Neural Rendering"; a.manifest.version = "0.7.0"; a.manifest.author = "andreiday / Echo-Storm"; a.hModule = (HMODULE)1; a.enabled = true;
     b.id = "sample-a"; b.manifest.name = "Sample addon A"; b.manifest.version = "1.0.0"; b.manifest.author = "Someone"; b.enabled = !clean; b.capabilities = clean ? 0 : LSPROXY_CAP_REQUIRES_RESTART;   // enabled, needs a restart
     c.id = "sample-b"; c.manifest.name = "Sample addon B"; c.manifest.version = "1.0.0"; c.manifest.author = "Someone else"; c.enabled = !clean; c.faulted = !clean;   // shows the ERROR chip
 
@@ -261,7 +261,7 @@ int main(int argc, char** argv) {
         LOG_INFO("Core", "%s v%s starting...", LSPROXY_PRODUCT_NAME, LSPROXY_VERSION_STRING);
         LOG_INFO("GUI", "Tray icon added");
         LOG_INFO("AddonManager", "Found 1 addons in addons");
-        LOG_INFO("AddonManager", "Loaded 'DLSS5NR01' %s", "0.6.0");
+        LOG_INFO("AddonManager", "Loaded 'DLSS5NR01' %s", "0.7.0");
         LOG_INFO("Features", "ReShade input passthrough is on");
         LOG_INFO("GUI", "Hotkey Ctrl+Shift+F12 registered");
         LOG_INFO("DLSS5NR01", "Engine started on the LSFG device");

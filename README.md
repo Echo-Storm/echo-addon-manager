@@ -19,7 +19,7 @@ addons, a live view of frame time and GPU load while a game runs, and one-click 
 
 [![build](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml/badge.svg)](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml)
 
-Status: **0.6.0**, on the way to 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
+Status: **0.7.0**, on the way to 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
 
 ## Get started
 

@@ -7,7 +7,7 @@ happens it will be the first thing in the changelog. From manager 1.0 on, everyt
 
 ## Two version numbers
 
-- The **manager's release number** (0.6.0 today; the one on the releases page and in `Lossless.dll`'s properties) says how far the project has come. Addons should not care about it.
+- The **manager's release number** (0.7.0 today; the one on the releases page and in `Lossless.dll`'s properties) says how far the project has come. Addons should not care about it.
 - The **addon API version** (1.0.0 today; `LSPROXY_API_VERSION_STRING` in [`version.h`](../manager/sdk/include/lsproxy/version.h), and what `IHost::GetHostVersion()` returns as `(major << 16) | (minor << 8) | patch`)
   says what an addon can rely on. It moves on its own. `min_host_version` in `addon.json` is compared with **this** number: an addon that needs a newer API than the running manager provides is
   not loaded, and its card says why.

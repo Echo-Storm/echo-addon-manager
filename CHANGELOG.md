@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 (2026-09-21)
 
-Bug fixes found by reading the code and the logs from real sessions, and the last items on the way to 1.0 that needed no one but the maintainer.
+Upgrading from 0.6.0: run `EchoAddonManagerSetup.exe` from the new zip and choose **Update**, or copy the new files over the old ones. Nothing to migrate. The addon API is unchanged (1.0.0).
+This release is bug fixes (found by reading the code and the logs of real sessions) and the last items on the way to 1.0 that needed no one but the maintainer: a sample addon, a written promise for the
+addon API, a questions-and-answers page, shareable model compatibility reports, and automated builds.
 
 - **Setup: Lossless Scaling running was missed when the folder was written another way.** The check compared path text exactly, so a folder given with a trailing or forward slash, a `..`, or its short (8.3) name
   was not recognised as the folder of a running Lossless Scaling (the install then failed at the first file in use, and rolled back, but without saying why). Both sides are now brought to one spelling first (`CanonicalPath`).

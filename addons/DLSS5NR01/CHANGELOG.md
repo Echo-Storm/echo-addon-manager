@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 (2026-09-21)
+
+- **A shareable compatibility report.** *Test compatibility* now also writes `compatibility_report.txt` in the addon folder (`nr_selftest.exe --report <file>`), and an **Open the compatibility report** button appears in the
+  Requirements block once one exists. The report names the graphics card, the NVIDIA driver, Windows, the model file's name, version and size, the result and a ready-made row for `docs/model-compatibility.md`; it holds no folders,
+  user name or file hash. A report left by an earlier run is deleted before a new test, so a test that crashes never shows an old report. The scenario matrix checks the report's contents.
+
 ## 0.6.0 (2026-09-21)
 
 - No functional change. The version follows the manager (0.6.0). The README and the user guide say that the manager's new Setup installs this addon (and can copy your own model file into place).
