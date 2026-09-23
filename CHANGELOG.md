@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.3 (internal, 2026-09-23)
+
+Not a public release (the manager still shows 0.7.0).
+
+- **One manager per Lossless Scaling folder.** Lossless Scaling runs one copy of itself: starting it again loads `Lossless.dll`, hands over to the running copy and exits a moment later.
+  In that moment the manager used to start completely a second time (a second tray icon, a hotkey that could not be registered, a window, the addons) and Neural Rendering reopened its log
+  for writing, which wiped the running session's log and interleaved the two (seen live on 2026-09-23). The first manager in a folder now holds a named mutex; a later copy only forwards to
+  Lossless Scaling and starts nothing. Neural Rendering also never wipes a log another process still has open: it writes `DLSS5NR01-<process id>.log` instead. The core test checks the guard
+  with a real second process (the same folder in capitals or with a trailing separator counts as the same folder).
+- First live results of the 0.7.2 motion timing, in World of Warcraft: Forever at 1440p 120 Hz: 59,904 of 60,000 frames got their own frame's motion; "ghosting seemed better".
+- `ROADMAP.md`: a screenshot button and key with a chosen folder, for the 0.8 interface pass.
+
 ## 0.7.2 (internal, 2026-09-22)
 
 Not a public release (the manager still shows 0.7.0).

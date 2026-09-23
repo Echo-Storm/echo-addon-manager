@@ -33,6 +33,12 @@ What it has to do (and what it must never do):
 - **Say the one thing people must do themselves**: provide their own `nvngx_dlssnr.dll` (never shipped, never downloaded), and offer to place it.
 - **Be honest about being unsigned**, and be a single file.
 
+## For the 0.8 interface pass
+
+- **A screenshot button and key**, with a folder of your choice. It saves the picture you actually see (after Neural Rendering, scaling and frame generation), taken where Neural
+  Rendering adds its result, so it needs no ReShade. ReShade's own screenshots show the game's frame before any of that. The before/after capture below can build on it.
+- The version shown in the manager moves from 0.7.0 to 0.8.
+
 ## Ideas for after 1.0
 
 Agreed as worth doing, in no particular order; none of them is started. They come after the hardening and optimization work toward 1.0.

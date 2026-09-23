@@ -1176,8 +1176,10 @@ static void AddonInitializeBody(IHost* host, ImGuiContext* ctx, void* allocFunc,
     wchar_t mod[MAX_PATH]; GetModuleFileNameW(self, mod, MAX_PATH); *wcsrchr(mod, L'\\') = 0; g_addonDir = mod;
     CreateDirectoryW((g_lsDir + L"\\logs").c_str(), nullptr);   // <Lossless Scaling>\\logs, shared with the proxy's log
     {   // the log is started afresh at every start: keep the previous session's as .old, so a problem seen while playing is still there after a restart
-        const std::wstring log = g_lsDir + L"\\logs\\DLSS5NR01.log";
-        MoveFileExW(log.c_str(), (log + L".old").c_str(), MOVEFILE_REPLACE_EXISTING);
+        std::wstring log = g_lsDir + L"\\logs\\DLSS5NR01.log";
+        if (!MoveFileExW(log.c_str(), (log + L".old").c_str(), MOVEFILE_REPLACE_EXISTING) && GetLastError() != ERROR_FILE_NOT_FOUND)
+            // still open in another Lossless Scaling process (a second copy starting up): write beside it instead of wiping the running session's log
+            log = g_lsDir + L"\\logs\\DLSS5NR01-" + std::to_wstring(GetCurrentProcessId()) + L".log";
         g_logFile = _wfopen(log.c_str(), L"w");
     }
     InstallCrashDiagnostics();

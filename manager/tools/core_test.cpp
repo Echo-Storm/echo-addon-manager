@@ -7,6 +7,7 @@
 #include "src/addon/addon_security.h"
 #include "src/config/config_manager.h"
 #include "src/config/settings_backup.h"
+#include "src/core/instance_guard.h"
 #include "src/event/event_system.h"
 #include "src/host/gpu_stats.h"
 #include "src/host/host_impl.h"
@@ -480,7 +481,39 @@ static void TestEvents() {
 
 static void OnEvent(uint32_t, const void*, uint32_t, void* user) { ++*(int*)user; }
 
+// Runs this test program again as a second process that tries to claim `folder`: exit code 0 = it got it, 3 = another process holds it.
+static int ClaimInChild(const std::string& folder) {
+    wchar_t exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    std::wstring cmd = L"\"" + std::wstring(exe) + L"\" claim \"" + std::wstring(folder.begin(), folder.end()) + L"\"";
+    STARTUPINFOW si = { sizeof si };
+    PROCESS_INFORMATION pi = {};
+    if (!CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) return -1;
+    WaitForSingleObject(pi.hProcess, 10000);
+    DWORD code = 99;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+    return (int)code;
+}
+
+// One manager per Lossless Scaling folder: a second copy of Lossless Scaling (it exits a moment later) must not start a second manager.
+static void TestInstanceGuard(const fs::path& T) {
+    printf("== one manager per Lossless Scaling folder\n");
+    const std::string a = (T / "lsA").string(), b = (T / "lsB").string();
+    Check("the first to start in a folder owns it", instance::Claim(std::wstring(a.begin(), a.end())));
+    Check("a second process starting in the same folder sees it taken", ClaimInChild(a) == 3);
+    std::string upper = a; for (char& c : upper) c = (char)toupper((unsigned char)c);
+    Check("...also when the folder is written in capitals or with a trailing separator", ClaimInChild(upper) == 3 && ClaimInChild(a + "/") == 3);
+    Check("a process in another folder is not affected", ClaimInChild(b) == 0);
+    instance::Release();
+    Check("once the first lets go, the folder is free again", ClaimInChild(a) == 0);
+}
+
 int main(int argc, char** argv) {
+    if (argc > 2 && !strcmp(argv[1], "claim")) {   // the second process of TestInstanceGuard
+        const std::string f = argv[2];
+        return instance::Claim(std::wstring(f.begin(), f.end())) ? 0 : 3;
+    }
     if (argc > 1 && !strcmp(argv[1], "abrupt-gpu")) {
         // The process ends with the Performance tab's sampler thread running and GpuStats::Shutdown never called, as when Lossless Scaling exits.
         // A std::thread still joinable when the singleton is destroyed calls std::terminate: the exit code would be a crash.
@@ -520,7 +553,7 @@ int main(int argc, char** argv) {
     WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false},"renamed_old":{"_enabled":false,"keep":"me"}},"global":{"security_level":0}})");
 
     setvbuf(stdout, nullptr, _IONBF, 0);
-    try { TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
+    try { TestInstanceGuard(T); TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
 
     HostImpl host;
     int loadedEvents = 0, unloadedEvents = 0;

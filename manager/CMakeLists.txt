@@ -30,6 +30,7 @@ FetchContent_MakeAvailable(minhook)
 # Source files
 set(CORE_SOURCES
     src/core/main.cpp
+    src/core/instance_guard.cpp
     src/core/shader_hook.cpp
     src/core/d3d11_hook.cpp
 )
@@ -207,7 +208,7 @@ target_include_directories(lsproxy_installtest PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 # test addon: cmake --build . --config Release --target lsproxy_coretest
 add_library(lsproxy_testaddon SHARED EXCLUDE_FROM_ALL tools/test_addon.cpp)
 target_include_directories(lsproxy_testaddon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${imgui_SOURCE_DIR})
-add_executable(lsproxy_coretest EXCLUDE_FROM_ALL tools/core_test.cpp
+add_executable(lsproxy_coretest EXCLUDE_FROM_ALL tools/core_test.cpp src/core/instance_guard.cpp
     ${ADDON_SOURCES} ${FEATURE_SOURCES} ${EVENT_SOURCES} ${HOST_SOURCES} ${CONFIG_SOURCES} ${LOG_SOURCES}
     src/gui/icon_loader.cpp src/core/d3d11_hook.cpp src/core/shader_hook.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)

@@ -1,6 +1,7 @@
 #include "proxy_exports.h"
 #include "shader_hook.h"
 #include "d3d11_hook.h"
+#include "instance_guard.h"
 #include "../addon/addon_manager.h"
 #include "../config/config_manager.h"
 #include "../event/event_system.h"
@@ -36,6 +37,7 @@ static ApplySettings_t g_origApplySettings = nullptr;
 struct Core {
     std::unique_ptr<lsproxy::HostImpl> host;
     std::unique_ptr<lsproxy::AddonManager> addonManager;
+    bool passive = false;   // another Lossless Scaling from this folder already runs a manager: this copy only forwards
 
     bool Init() {
         // Must run before GuiManager creates its window, or Windows bitmap-stretches it instead.
@@ -82,6 +84,14 @@ struct Core {
             LOG_INFO("Core", "ApplySettings hooked for addon override support");
         }
 
+        // Lossless Scaling runs one copy of itself: a second start loads this DLL, hands over to the running copy and exits. It must not start a
+        // second window, tray icon, hotkey or set of addons, nor write the settings or the addon logs the running copy is using.
+        if (!lsproxy::instance::Claim(exePath.parent_path().wstring())) {
+            passive = true;
+            LOG_INFO("Core", "Another Lossless Scaling from this folder is already running with the manager: this copy only forwards to Lossless Scaling and starts nothing");
+            return true;
+        }
+
         // Create host
         host = std::make_unique<lsproxy::HostImpl>();
 
@@ -118,6 +128,7 @@ struct Core {
     }
 
     void Shutdown() {
+        if (passive) { lsproxy::Logger::Instance().Shutdown(); return; }   // it started nothing
         LOG_INFO("Core", "Shutting down...");
 
         // Publish shutdown event
@@ -133,6 +144,7 @@ struct Core {
         }
         host.reset();
 
+        lsproxy::instance::Release();
         lsproxy::Logger::Instance().Shutdown();
     }
 };
