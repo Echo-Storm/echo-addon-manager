@@ -82,11 +82,16 @@ bool NrEngine::Init(const LUID& luid, const std::wstring& forwarderPath, const s
 }
 
 void NrEngine::Shutdown() {
-    const bool idle = !m_queue || WaitIdle();
+    EndBuild();
+    if (m_buildState.load() == kBuilt) Discard(m_built);
+    m_buildState = kIdle;
+    SafeRelease(m_buildList); SafeRelease(m_buildAlloc); SafeRelease(m_buildFence); SafeRelease(m_buildQueue);
+    if (m_buildEvent) { CloseHandle(m_buildEvent); m_buildEvent = nullptr; }
+    m_buildFenceValue = 0;
+    if (m_queue) WaitIdle();
     ReleaseScratch();
     if (m_caps) { NVSDK_NGX_D3D12_Shutdown1(m_dev); m_caps = nullptr; }
     if (m_forwarder) { FreeLibrary(m_forwarder); m_forwarder = nullptr; }
-    if (idle) { for (ID3D12Resource* r : m_uploads) r->Release(); m_uploads.clear(); }   // otherwise the GPU may still read them: leak rather than crash
     for (ID3D12PipelineState** p : { &m_psoShrink, &m_psoMotion, &m_psoDelta, &m_psoDeltaSmooth }) SafeRelease(*p);
     SafeRelease(m_rootSig); SafeRelease(m_heap); SafeRelease(m_timestamps); SafeRelease(m_timestampReadback); SafeRelease(m_list);
     for (ID3D12CommandAllocator*& a : m_alloc) SafeRelease(a);
@@ -241,32 +246,34 @@ ID3D12Resource* NrEngine::MakeTexture(uint32_t w, uint32_t h, DXGI_FORMAT fmt, D
     return texture;
 }
 
-void NrEngine::Transition(ID3D12Resource* r, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to) {
+void NrEngine::Transition(ID3D12Resource* r, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to) { Transition(m_list, r, from, to); }
+void NrEngine::Transition(ID3D12GraphicsCommandList* list, ID3D12Resource* r, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to) {
     D3D12_RESOURCE_BARRIER b{};
     b.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     b.Transition = { r, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, from, to };
-    m_list->ResourceBarrier(1, &b);
+    list->ResourceBarrier(1, &b);
 }
 
-void NrEngine::Upload(ID3D12Resource* texture, uint32_t bytesPerPixel, const void* pixels) {
+// Records the copy on `list` and leaves the texture readable; the upload buffer goes into `staging`, to be released once the GPU has read it.
+void NrEngine::Upload(ID3D12GraphicsCommandList* list, ID3D12Resource* texture, uint32_t bytesPerPixel, const void* pixels, std::vector<ID3D12Resource*>& staging) {
     const D3D12_RESOURCE_DESC desc = texture->GetDesc();
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{}; UINT rows = 0; UINT64 rowBytes = 0, total = 0;
     m_dev->GetCopyableFootprints(&desc, 0, 1, 0, &layout, &rows, &rowBytes, &total);
     D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_UPLOAD;
     D3D12_RESOURCE_DESC buffer{}; buffer.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; buffer.Width = total; buffer.Height = 1;
     buffer.DepthOrArraySize = 1; buffer.MipLevels = 1; buffer.SampleDesc.Count = 1; buffer.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    ID3D12Resource* staging = nullptr;
-    if (FAILED(m_dev->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &buffer, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&staging)))) return;
+    ID3D12Resource* upload = nullptr;
+    if (FAILED(m_dev->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &buffer, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload)))) return;
     uint8_t* mapped = nullptr;
-    staging->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
+    upload->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
     const size_t srcPitch = static_cast<size_t>(desc.Width) * bytesPerPixel;
     for (UINT y = 0; y < rows; ++y) memcpy(mapped + layout.Offset + y * layout.Footprint.RowPitch, static_cast<const uint8_t*>(pixels) + y * srcPitch, srcPitch);
-    staging->Unmap(0, nullptr);
+    upload->Unmap(0, nullptr);
     D3D12_TEXTURE_COPY_LOCATION to{}; to.pResource = texture; to.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    D3D12_TEXTURE_COPY_LOCATION from{}; from.pResource = staging; from.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; from.PlacedFootprint = layout;
-    m_list->CopyTextureRegion(&to, 0, 0, 0, &from, nullptr);
-    Transition(texture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    m_uploads.push_back(staging);
+    D3D12_TEXTURE_COPY_LOCATION from{}; from.pResource = upload; from.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; from.PlacedFootprint = layout;
+    list->CopyTextureRegion(&to, 0, 0, 0, &from, nullptr);
+    Transition(list, texture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    staging.push_back(upload);
 }
 
 bool NrEngine::WaitIdle() {
@@ -274,8 +281,6 @@ bool NrEngine::WaitIdle() {
     m_queue->Signal(m_fence, ++m_fenceValue);
     if (m_fence->GetCompletedValue() < m_fenceValue) { m_fence->SetEventOnCompletion(m_fenceValue, m_fenceEvent); WaitForSingleObject(m_fenceEvent, kIdleWaitMs); }
     if (m_fence->GetCompletedValue() < m_fenceValue) { Log("NrEngine: the GPU did not finish within %lu ms", kIdleWaitMs); return false; }
-    for (ID3D12Resource* r : m_uploads) r->Release();
-    m_uploads.clear();
     return true;
 }
 
@@ -344,7 +349,7 @@ void NrEngine::SetFlowInput(ID3D12Resource* flow, uint32_t w, uint32_t h) {
 }
 
 void NrEngine::ReleaseScratch() {
-    if (m_feature) { WaitIdle(); m_release(m_feature); m_feature = nullptr; }
+    if (m_feature) { WaitIdle(); std::lock_guard<std::mutex> lock(m_ngxMutex); m_release(m_feature); m_feature = nullptr; }
     for (ID3D12Resource** t : { &m_proxy, &m_out[0], &m_out[1], &m_depth, &m_mvec, &m_history[0], &m_history[1] }) SafeRelease(*t);
     m_historyValid = false; m_historyRead = 0;
     m_w = m_h = m_ww = m_wh = 0;
@@ -364,39 +369,124 @@ bool NrEngine::Prepare(uint32_t w, uint32_t h, DXGI_FORMAT fmt, const NrParams& 
         return std::max(s, std::min(full, 64u));
     };
     const uint32_t ww = workSize(w), wh = workSize(h);
-    if (m_feature && w == m_w && h == m_h && fmt == m_fmt && ww == m_ww && wh == m_wh) { m_params = p; return true; }   // the rest applies on the next run
+    // the frame's size and format are the runs' own: the shrink pass takes any frame to the working size there is
+    m_w = w; m_h = h; m_fmt = fmt; m_params = p;
 
-    Log("Prepare: frame %ux%u (%s) -> model input %ux%u (%.2f MP), style %u intensity %.2f", w, h,
-        fmt == DXGI_FORMAT_B8G8R8A8_UNORM ? "BGRA8" : fmt == DXGI_FORMAT_R8G8B8A8_UNORM ? "RGBA8" : "fmt?", ww, wh, ww * wh / 1e6, p.style, p.intensity);
-    if (!WaitIdle()) { Fail("the GPU did not finish the earlier work"); return false; }
-    ReleaseScratch();
-    m_w = w; m_h = h; m_fmt = fmt; m_ww = ww; m_wh = wh; m_params = p;
-    m_stats.workW = ww; m_stats.workH = wh;
+    const int state = m_buildState.load(std::memory_order_acquire);
+    if (state == kBuildFailed) { EndBuild(); m_buildState = kIdle; Fail("%s", m_buildError); return false; }
+    if (state == kBuilt) {
+        EndBuild();
+        if (m_built.ww == ww && m_built.wh == wh) TakeBuilt();
+        else { Log("NrEngine: a model for %ux%u is ready but %ux%u is wanted now: it is dropped", m_built.ww, m_built.wh, ww, wh); Discard(m_built); }
+        m_buildState = kIdle;
+    }
+    if (m_feature && ww == m_ww && wh == m_wh) return true;   // the rest applies on the next run
+    if (m_buildState.load() == kIdle && !StartBuild(ww, wh, p.Tuning())) return false;
+    return m_feature != nullptr;   // the set there is keeps running until the new one is ready
+}
 
+bool NrEngine::StartBuild(uint32_t ww, uint32_t wh, const NrTuning& tuning) {
+    if (!m_buildQueue) {
+        D3D12_COMMAND_QUEUE_DESC queue{}; queue.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+        if (FAILED(m_dev->CreateCommandQueue(&queue, IID_PPV_ARGS(&m_buildQueue))) ||
+            FAILED(m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_buildAlloc))) ||
+            FAILED(m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_buildAlloc, nullptr, IID_PPV_ARGS(&m_buildList))) ||
+            FAILED(m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_buildFence))) || !(m_buildEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr))) {
+            Fail("the queue that makes the model could not be made"); return false;
+        }
+        m_buildList->Close();
+    }
+    Log("Prepare: frame %ux%u (%s) -> model input %ux%u (%.2f MP), style %u intensity %.2f: made on a thread of its own", m_w, m_h,
+        m_fmt == DXGI_FORMAT_B8G8R8A8_UNORM ? "BGRA8" : m_fmt == DXGI_FORMAT_R8G8B8A8_UNORM ? "RGBA8" : "fmt?", ww, wh, ww * wh / 1e6, tuning.style, tuning.intensity);
+    m_buildW = ww; m_buildH = wh; m_buildTuning = tuning; m_buildError[0] = 0;
+    m_buildState = kBuilding;
+    m_buildThread = CreateThread(nullptr, 0, BuildThread, this, 0, nullptr);
+    if (!m_buildThread) { m_buildState = kIdle; Fail("the thread that makes the model could not be started"); return false; }
+    return true;
+}
+
+DWORD WINAPI NrEngine::BuildThread(void* self) { static_cast<NrEngine*>(self)->Build(); return 0; }
+
+void NrEngine::Build() {
+    LARGE_INTEGER qf, q0, q1, q2, q3; QueryPerformanceFrequency(&qf); QueryPerformanceCounter(&q0);
+    auto ms = [&](const LARGE_INTEGER& a, const LARGE_INTEGER& b) { return (b.QuadPart - a.QuadPart) * 1000.0 / qf.QuadPart; };
+    auto fail = [&](Scratch& s, const char* why) {
+        snprintf(m_buildError, sizeof m_buildError, "%s", why);
+        Discard(s);
+        m_buildState.store(kBuildFailed, std::memory_order_release);
+    };
+    Scratch s; s.ww = m_buildW; s.wh = m_buildH;
+    const uint32_t ww = s.ww, wh = s.wh;
     const auto writable = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-    m_proxy = MakeTexture(ww, wh, DXGI_FORMAT_R8G8B8A8_UNORM, writable, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    for (ID3D12Resource*& out : m_out) out = MakeTexture(ww, wh, DXGI_FORMAT_R8G8B8A8_UNORM, writable, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    for (ID3D12Resource*& hist : m_history) hist = MakeTexture(ww, wh, DXGI_FORMAT_R16G16B16A16_FLOAT, writable, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    m_depth = MakeTexture(ww, wh, DXGI_FORMAT_R32_FLOAT, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_COPY_DEST);
-    m_mvec = MakeTexture(ww, wh, DXGI_FORMAT_R16G16_FLOAT, writable, D3D12_RESOURCE_STATE_COPY_DEST);
-    if (!m_proxy || !m_out[0] || !m_out[1] || !m_history[0] || !m_history[1] || !m_depth || !m_mvec) { Fail("scratch allocation"); return false; }
+    s.proxy = MakeTexture(ww, wh, DXGI_FORMAT_R8G8B8A8_UNORM, writable, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    for (ID3D12Resource*& out : s.out) out = MakeTexture(ww, wh, DXGI_FORMAT_R8G8B8A8_UNORM, writable, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    for (ID3D12Resource*& hist : s.history) hist = MakeTexture(ww, wh, DXGI_FORMAT_R16G16B16A16_FLOAT, writable, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    s.depth = MakeTexture(ww, wh, DXGI_FORMAT_R32_FLOAT, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_COPY_DEST);
+    s.mvec = MakeTexture(ww, wh, DXGI_FORMAT_R16G16_FLOAT, writable, D3D12_RESOURCE_STATE_COPY_DEST);
+    if (!s.proxy || !s.out[0] || !s.out[1] || !s.history[0] || !s.history[1] || !s.depth || !s.mvec) { fail(s, "scratch allocation"); return; }
+    QueryPerformanceCounter(&q1);
 
     // flat depth (0.5; the model ignores it) and zero motion, uploaded once; then the feature, which records its own setup on the same list
-    m_alloc[0]->Reset();
-    m_list->Reset(m_alloc[0], nullptr);
+    std::vector<ID3D12Resource*> staging;
+    m_buildAlloc->Reset();
+    m_buildList->Reset(m_buildAlloc, nullptr);
     const std::vector<float> depth(static_cast<size_t>(ww) * wh, 0.5f);
     const std::vector<uint16_t> motion(static_cast<size_t>(ww) * wh * 2, 0);
-    Upload(m_depth, 4, depth.data());
-    Upload(m_mvec, 4, motion.data());
-    NrCreateParams create{}; create.width = ww; create.height = wh; create.preset = 0; create.scalingRatio = 1.0f; create.tuning = p.Tuning();
-    m_feature = m_create(m_list, m_caps, &create);
-    m_list->Close();
-    ID3D12CommandList* lists[] = { m_list };
-    m_queue->ExecuteCommandLists(1, lists);
-    WaitIdle();
-    if (!m_feature) { Fail("CreateFeature(18): %s", NgxResultName(m_lastResult(1))); return false; }
-    m_resetHistory = true;
-    return true;
+    Upload(m_buildList, s.depth, 4, depth.data(), staging);
+    Upload(m_buildList, s.mvec, 4, motion.data(), staging);
+    NrCreateParams create{}; create.width = ww; create.height = wh; create.preset = 0; create.scalingRatio = 1.0f; create.tuning = m_buildTuning;
+    char why[128] = {};
+    {
+        std::lock_guard<std::mutex> lock(m_ngxMutex);
+        s.feature = m_create(m_buildList, m_caps, &create);
+        if (!s.feature) snprintf(why, sizeof why, "CreateFeature(18): %s", NgxResultName(m_lastResult(1)));
+    }
+    QueryPerformanceCounter(&q2);
+    m_buildList->Close();
+    ID3D12CommandList* lists[] = { m_buildList };
+    m_buildQueue->ExecuteCommandLists(1, lists);
+    m_buildQueue->Signal(m_buildFence, ++m_buildFenceValue);
+    if (m_buildFence->GetCompletedValue() < m_buildFenceValue) { m_buildFence->SetEventOnCompletion(m_buildFenceValue, m_buildEvent); WaitForSingleObject(m_buildEvent, kIdleWaitMs); }
+    if (m_buildFence->GetCompletedValue() < m_buildFenceValue) {   // the GPU may still use all of it: leak rather than crash
+        snprintf(m_buildError, sizeof m_buildError, "the GPU did not finish setting up the model");
+        m_buildState.store(kBuildFailed, std::memory_order_release);
+        return;
+    }
+    for (ID3D12Resource* r : staging) r->Release();
+    QueryPerformanceCounter(&q3);
+    if (!s.feature) { fail(s, why); return; }
+    m_stats.lastBuildMs = ms(q0, q3);
+    Log("NrEngine: model for %ux%u made in %.1f ms off the frame path: textures %.1f, feature (CPU) %.1f, GPU setup %.1f", ww, wh, ms(q0, q3), ms(q0, q1), ms(q1, q2), ms(q2, q3));
+    m_built = s;
+    m_buildState.store(kBuilt, std::memory_order_release);
+}
+
+void NrEngine::EndBuild() {
+    if (!m_buildThread) return;
+    WaitForSingleObject(m_buildThread, INFINITE);   // it has ended, or ends within the GPU wait's limit
+    CloseHandle(m_buildThread);
+    m_buildThread = nullptr;
+}
+
+void NrEngine::Discard(Scratch& s) {
+    if (s.feature) { std::lock_guard<std::mutex> lock(m_ngxMutex); m_release(s.feature); }
+    for (ID3D12Resource** t : { &s.proxy, &s.out[0], &s.out[1], &s.depth, &s.mvec, &s.history[0], &s.history[1] }) SafeRelease(*t);
+    s = Scratch{};
+}
+
+void NrEngine::TakeBuilt() {
+    if (m_feature) {   // the runs still queued use the old set: it goes once they are done (at most the one in flight)
+        if (!WaitIdle()) { Log("NrEngine: the GPU did not finish the last run: the old model is kept"); Discard(m_built); return; }
+        Scratch old; old.feature = m_feature; old.proxy = m_proxy; old.out[0] = m_out[0]; old.out[1] = m_out[1];
+        old.history[0] = m_history[0]; old.history[1] = m_history[1]; old.depth = m_depth; old.mvec = m_mvec;
+        Discard(old);
+    }
+    m_feature = m_built.feature; m_proxy = m_built.proxy; m_out[0] = m_built.out[0]; m_out[1] = m_built.out[1];
+    m_history[0] = m_built.history[0]; m_history[1] = m_built.history[1]; m_depth = m_built.depth; m_mvec = m_built.mvec;
+    m_ww = m_built.ww; m_wh = m_built.wh;
+    m_built = Scratch{};
+    m_stats.workW = m_ww; m_stats.workH = m_wh; ++m_stats.builds;
+    m_historyValid = false; m_historyRead = 0; m_resetHistory = true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -412,6 +502,9 @@ bool NrEngine::Prepare(uint32_t w, uint32_t h, DXGI_FORMAT fmt, const NrParams& 
 bool NrEngine::Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12Fence* waitFence, uint64_t waitValue, ID3D12Fence* usedFence,
                    uint64_t usedValue, ID3D12Fence* signalFence, uint64_t signalValue, bool reset) {
     if (!m_ready || !m_feature) return false;
+    // a new feature is being made: the model cannot run meanwhile, and the frame path does not wait for it (the last result carries on)
+    std::unique_lock<std::mutex> ngx(m_ngxMutex, std::try_to_lock);
+    if (!ngx.owns_lock()) { ++m_stats.busySkips; return false; }
     const int slot = TakeSlot();
     if (slot < 0) { Log("NrEngine: the GPU is still busy with a run from %d frames ago: this frame is skipped", kSlots); return false; }
     ReadTimes(slot);

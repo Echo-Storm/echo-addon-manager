@@ -4,13 +4,16 @@
 // motion vectors, run the model (one to four passes), and write the delta (model minus proxy) into the bridge's shared result texture. The
 // engine never touches Lossless Scaling's frames: it reads a copy and writes a delta that the D3D11 side applies when a frame is presented.
 // Run() makes the queue wait for the fences the bridge names and signals another; the CPU never waits for the GPU, except to reuse a command
-// allocator that is still busy.
+// allocator that is still busy, and to let the run in flight finish before a newly made model takes over. The model is made (at the start and
+// at every new working size) on a thread and a queue of its own, so its few hundred ms never stall Lossless Scaling's render thread.
 #pragma once
 #include <windows.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <cstdint>
+#include <atomic>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 #include "forwarder/nr_api.h"
@@ -62,6 +65,8 @@ struct NrStats {
     double nrMs = 0, totalMs = 0;   // the last finished run: the model's time, and the whole run's
     double startMs = 0, doneMs = 0; // when that run started and ended on the GPU, from its submission on the CPU (queue wait and contention)
     uint64_t frames = 0, fails = 0; // runs queued, and runs whose model evaluation failed
+    uint64_t busySkips = 0;         // frames not run because a new feature was being made (the model cannot do both at once)
+    uint32_t builds = 0; double lastBuildMs = 0;   // features made, and how long the last one took (off the frame path)
     int floatSlot = -1;             // the parameter block's float setter slot, as found
     bool hasFlow = false; uint32_t flowW = 0, flowH = 0;   // the LSFG flow now bound
     uint32_t workW = 0, workH = 0;  // the model's input size
@@ -88,8 +93,12 @@ public:
     // LSFG's flow for the next runs (borrowed: the bridge drains the engine before it lets go of it); null for none.
     void SetFlowInput(ID3D12Resource* flow, uint32_t w, uint32_t h);
 
-    // Makes the feature and the scratch textures for this frame size and format and working scale; nothing to do when they are unchanged.
+    // Readies the runs for this frame size and format and these settings. A new working size (the frame's size times the working scale)
+    // needs the model's feature and the scratch textures made again, which takes a few hundred ms: that happens on a thread of its own, the
+    // runs keep the size they have meanwhile, and the new one is taken between two runs. False while there is nothing to run with yet (the
+    // first build) or after a failure.
     bool Prepare(uint32_t width, uint32_t height, DXGI_FORMAT frameFormat, const NrParams& params);
+    bool Building() const { return m_buildState.load() == kBuilding; }
 
     // One run from sharedIn (the frame copy) into sharedDelta (both opened from the bridge's handles, both in COMMON). The queue first waits
     // for waitFence >= waitValue (the copy is done) and usedFence >= usedValue (no present still reads sharedDelta), and afterwards signals
@@ -112,8 +121,23 @@ private:
     void ReleaseScratch();
     void Fail(const char* fmt, ...);
     ID3D12Resource* MakeTexture(uint32_t w, uint32_t h, DXGI_FORMAT fmt, D3D12_RESOURCE_FLAGS flags, D3D12_RESOURCE_STATES state);
-    void Upload(ID3D12Resource* texture, uint32_t bytesPerPixel, const void* pixels);   // records on the open list; leaves it readable
     void Transition(ID3D12Resource* r, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to);
+    void Transition(ID3D12GraphicsCommandList* list, ID3D12Resource* r, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to);
+    void Upload(ID3D12GraphicsCommandList* list, ID3D12Resource* texture, uint32_t bytesPerPixel, const void* pixels, std::vector<ID3D12Resource*>& staging);
+
+    // The feature and the scratch textures of one working size.
+    struct Scratch {
+        uint32_t ww = 0, wh = 0;
+        void* feature = nullptr;
+        ID3D12Resource* proxy = nullptr; ID3D12Resource* out[2] = {}; ID3D12Resource* history[2] = {}; ID3D12Resource* depth = nullptr; ID3D12Resource* mvec = nullptr;
+    };
+    enum BuildState { kIdle, kBuilding, kBuilt, kBuildFailed };
+    bool StartBuild(uint32_t ww, uint32_t wh, const NrTuning& tuning);
+    static DWORD WINAPI BuildThread(void* self);
+    void Build();                         // on the build thread
+    void EndBuild();                      // waits for the build thread to end (it has, or is about to)
+    void Discard(Scratch& s);             // a set the GPU no longer uses
+    void TakeBuilt();                     // the built set becomes the one the runs use (on the frame path, between runs)
     bool WaitIdle();                      // false when the GPU did not finish in time
     int TakeSlot();                       // the next allocator, reset for recording; -1 when the GPU still has not finished with it
     void ReadTimes(int slot);
@@ -135,7 +159,6 @@ private:
     int64_t m_slotSubmitQpc[kSlots] = {};
     int m_nextSlot = 0;
     ID3D12QueryHeap* m_timestamps = nullptr; ID3D12Resource* m_timestampReadback = nullptr; uint64_t m_timestampFreq = 1;
-    std::vector<ID3D12Resource*> m_uploads;   // upload buffers to release once the GPU has read them
 
     // the model, through the forwarder
     void* m_caps = nullptr;
@@ -145,6 +168,18 @@ private:
     PFN_nrfwd_evaluate m_evaluate = nullptr; PFN_nrfwd_release m_release = nullptr; PFN_nrfwd_last_result m_lastResult = nullptr;
     void* m_feature = nullptr;
     bool m_resetHistory = true;           // the next run tells the model to start its history afresh
+    std::mutex m_ngxMutex;                // the model's calls share one parameter block: making a feature and a run never overlap
+
+    // the build thread: its own list and queue, so the feature's GPU setup never sits in front of the runs
+    std::atomic<int> m_buildState{ kIdle };
+    HANDLE m_buildThread = nullptr;       // a plain thread: one still running at process exit is simply ended, never a std::terminate
+    uint32_t m_buildW = 0, m_buildH = 0; NrTuning m_buildTuning{};
+    Scratch m_built;                      // written by the build thread, read after m_buildState says kBuilt
+    char m_buildError[160] = {};
+    ID3D12CommandQueue* m_buildQueue = nullptr;
+    ID3D12CommandAllocator* m_buildAlloc = nullptr;
+    ID3D12GraphicsCommandList* m_buildList = nullptr;
+    ID3D12Fence* m_buildFence = nullptr; HANDLE m_buildEvent = nullptr; uint64_t m_buildFenceValue = 0;
 
     // the frame and the scratch textures, at the working size
     uint32_t m_w = 0, m_h = 0; DXGI_FORMAT m_fmt = DXGI_FORMAT_UNKNOWN; NrParams m_params{};

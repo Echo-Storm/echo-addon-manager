@@ -11,6 +11,7 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include "imgui.h"
@@ -57,9 +58,12 @@ struct FakeHost : IHost {
     }
     void ReleaseImage(void* image) override { if (image) static_cast<IUnknown*>(image)->Release(); }
     int images = 0;
+    double longestCallMs = 0;   // the longest the addon held up a dispatch (Lossless Scaling's render thread)
     void Dispatch(ID3D11DeviceContext* c, UINT x, UINT y, UINT z) {
         ++dispatches; dispatching = c;
+        const auto t0 = std::chrono::steady_clock::now();
         const bool skip = pre && pre(x, y, z, preUser);
+        longestCallMs = std::max(longestCallMs, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
         dispatching = nullptr;
         if (!skip) c->Dispatch(x, y, z);
     }
@@ -273,11 +277,15 @@ int main(int argc, char** argv) {
         ID3D11Texture2D* la = MakeTex(dev, FW, FH, DXGI_FORMAT_B8G8R8A8_UNORM, true), * lb = MakeTex(dev, FW, FH, DXGI_FORMAT_B8G8R8A8_UNORM, true);   // low-res inputs for the filler pass (old frames are gone after a real mode switch)
         ID3D11ShaderResourceView* sLa = srv(la), * sLb = srv(lb);
         sc->ResizeBuffers(2, W2, H2, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        host.longestCallMs = 0;   // from here on the model is made again for the new size: that must not hold up the render thread
         uint64_t checks2 = 0, composed2 = 0;
         for (int fr = 0; fr < 150; ++fr) {
             Fill(dc, c2, W2, H2); Fill(dc, p2c, W2, H2);
             dc->CSSetShaderResources(0, 1, &sC2); dc->CSSetUnorderedAccessViews(0, 4, uP2, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W2 * 7 / 10 / 8, H2 * 7 / 10 / 8, 1);
             ID3D11UnorderedAccessView* null4[4] = {}; dc->CSSetUnorderedAccessViews(0, 4, null4, nullptr); dc->CSSetShaderResources(0, 3, nulls);
+            // this frame's finest flow pass, which the tap waits for before it hands the frame over
+            dc->CSSetShaderResources(4, 1, &sPyr3); dc->CSSetUnorderedAccessViews(0, 1, &uFlow16, nullptr); dc->CSSetShader(csFlow16, nullptr, 0); host.Dispatch(dc, FLW / 8, FLH / 8, 1);
+            { ID3D11ShaderResourceView* n8[8] = {}; dc->CSSetShaderResources(0, 8, n8); } dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr);
             for (int k = 0; k < 3; ++k) {
                 ID3D11Texture2D* bb = nullptr; sc->GetBuffer(0, IID_PPV_ARGS(&bb));
                 if (fr > 100 && fr % 10 == 0 && k == 0) { double mean = 0; uint64_t changed = CountChanged(dev, dc, bb, W2, H2, &mean, nullptr); checks2++; if (changed > (uint64_t)W2 * H2 / 20) composed2++; }
@@ -293,6 +301,19 @@ int main(int argc, char** argv) {
         dc->Flush(); std::this_thread::sleep_for(std::chrono::milliseconds(300));
         double mean = 0; uint64_t changed = CountChanged(dev, dc, c2, W2, H2, &mean, nullptr);
         printf("[check-res2] %ux%u frame texture: %llu pixels changed (%s); presented buffers composed in %llu of %llu samples (%s)\n", W2, H2, (unsigned long long)changed, changed == 0 ? "read-only" : "WRITTEN", (unsigned long long)composed2, (unsigned long long)checks2, composed2 >= checks2 / 2 && checks2 ? "TAP FOLLOWED" : "TAP LOST");
+        printf("[check-res2] the longest the addon held up a dispatch while the model was made again: %.1f ms (%s)\n", host.longestCallMs, host.longestCallMs < 50.0 ? "NO STALL" : "STALLED");
+
+        // frame generation switched off: Lossless Scaling keeps presenting the scaled frame, but runs no LSFG pass, so the model has nothing to
+        // run on. Its last result must not stay on the screen.
+        uint64_t stale = 0;
+        for (int fr = 0; fr < 25; ++fr) {
+            ID3D11Texture2D* bb = nullptr; sc->GetBuffer(0, IID_PPV_ARGS(&bb));
+            if (fr >= 20) { double m = 0; stale += CountChanged(dev, dc, bb, W2, H2, &m, nullptr); }   // what an earlier present of this second showed
+            dc->CopyResource(bb, c2);
+            bb->Release(); sc->Present(0, 0); pump();
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        }
+        printf("[check-off] frame generation off for a second: %llu pixels changed on the last presents (%s)\n", (unsigned long long)stale, stale == 0 ? "OLD RESULT DROPPED" : "OLD RESULT STILL SHOWN");
     }
     host.PublishEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, nullptr, 0);
     for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "exitmode=abrupt")) {

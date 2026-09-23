@@ -10,6 +10,7 @@ It uses the GPU for about half a minute per scenario, so do not run it while a g
                                   [--out OUTDIR] [--only name,name] [--list]
 """
 import argparse
+import re
 import os
 import shutil
 import subprocess
@@ -97,6 +98,9 @@ def scenario_base(ctx, res, text, frame):
     res.check("the model gets this frame's own motion (fresh flow, the default)", bool(mc) and mc[0] > 0 and mc[0] >= 9 * (mc[0] + mc[1]) // 10 and mc[2] <= 2,
               'fresh %d, previous %d, dropped %d' % mc if mc else 'no motion line in the log')
     res.check('tap followed the resolution change', 'TAP FOLLOWED' in text)
+    held = re.search(r'held up a dispatch while the model was made again: ([0-9.]+ ms)', text)
+    res.check('making the model again for the new size did not hold up the render thread', 'NO STALL' in text, held.group(1) if held else 'no line in the log')
+    res.check('with frame generation off, the last result does not stay on the screen', 'OLD RESULT DROPPED' in text)
     res.check('the addon reports live metrics and a status to the host', 'LIVE METRICS OK' in text)
     d = np.abs(frame - ctx['pat']).mean()
     ctx['base'] = frame

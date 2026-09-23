@@ -73,6 +73,8 @@ IDXGISwapChain* g_otherChain = nullptr;       // the last one seen on another de
 uint64_t g_presents = 0;
 uint64_t g_presentStages[5] = {};             // diagnostics: how far presents get
 uint32_t g_watchdogHits = 0;
+uint64_t g_lastRunAtMs = 0;                   // when the model last started a run: an older result is not composed (see Compose)
+constexpr uint64_t kMaxResultAgeMs = 500;
 thread_local bool t_ownWork = false;          // our own compose pass runs on Lossless Scaling's context: its dispatch is not a pass of theirs
 
 std::atomic<uint32_t> g_marker{ 0 };          // the corner square after a hotkey, and until when
@@ -206,7 +208,7 @@ void Tap(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
 
     const NrStats& st = g_engine.Stats();
     if (started) {
-        ++g_runs; g_lastModelMs = st.nrMs; g_lastRunMs = st.totalMs;
+        ++g_runs; g_lastModelMs = st.nrMs; g_lastRunMs = st.totalMs; g_lastRunAtMs = GetTickCount64();
         g_avgModelMs = g_avgModelMs == 0 ? st.nrMs : g_avgModelMs * 0.95 + st.nrMs * 0.05;
         if (g_runs == 1) SetStatus("running");
         // auto quality: the scale it picks here is used from the next frame (changing it rebuilds the model)
@@ -386,6 +388,9 @@ void Compose(IDXGISwapChain* sc) {
     ID3D11ShaderResourceView* delta = nullptr; uint32_t dw = 0, dh = 0;
     const uint64_t deltaFrame = g_bridge.NewestDelta(&delta, &dw, &dh);
     if (!deltaFrame) return;
+    // A result the model has not replaced for a while belongs to another picture: frame generation was switched off (Lossless Scaling still
+    // presents, but the model has nothing to run on), or the game paused. Added to every frame it would stand still on the screen.
+    if (GetTickCount64() - g_lastRunAtMs > kMaxResultAgeMs) return;
     ++g_presentStages[4];
     NrParams p;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); p = g_config.p; }

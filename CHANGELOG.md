@@ -10,6 +10,17 @@ The manager and Neural Rendering now show 0.8.0.
   - Without a snapshot the same editing works on an empty box of the frame's shape. The World of Warcraft starter layout, Clear all and edge softness stay, and the exact numbers are
     still there, folded under "Exact numbers".
   - The offline test host renders the panel with a real snapshot taken through the whole chain (the present, the GPU copy, the read-back, the manager's image).
+- **Changing the model resolution no longer stalls the game.** Making the model for a new working size (a changed Model resolution, a look with
+  another one, auto quality, or a new frame size) took 180 to 225 ms, measured, on Lossless Scaling's own render thread, and everything froze
+  meanwhile. It is now made on a thread and a GPU queue of its own; the model pauses for that moment and its last result carries on, and the new
+  model takes over between two frames. The longest hold-up of the render thread during the change is now about 6 ms, and the test host checks it.
+  The panel shows how often the model was made and how long the last one took.
+- **Turning frame generation off no longer leaves the last result on the screen.** Lossless Scaling keeps presenting frames, but with no frame
+  generation the model has nothing new to run on, and its last result was added to every frame, standing still over a moving picture. A result
+  older than half a second is no longer added. Separately, when the flow passes stop but the capture goes on, frames are no longer all dropped
+  while waiting for their flow: after three frames without one they are handed over with no motion, and waiting starts again as soon as flow
+  passes return. The test host and `nr_taptest` check both. (Found while measuring the change above: the host test's resolution change had
+  been passing on the old result.)
 - **Auto quality** (Neural Rendering's panel, Quality and performance; off by default): keeps the model within a time budget you set.
   - While the model runs over the budget, it lowers the model resolution, and raises it back toward your own setting when there is room again. Your setting is the most it uses; a
     lowest resolution you choose is the least.

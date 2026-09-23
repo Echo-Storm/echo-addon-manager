@@ -131,6 +131,20 @@ int main() {
         for (int k = 42; k < 50; ++k) { const FrameResult f = RunFrame(tap, l, k, true, true); if (f.handOvers == 0) ++lost; else if (f.fresh && f.flow == l.flowFineSmall[k & 1].t) ++freshAfter; }
         Check("at most one frame is lost while the new size is learned, then every frame gets its own motion again", lost <= 1 && freshAfter >= 7, std::to_string(lost) + " lost, " + std::to_string(freshAfter) + " fresh");
 
+        printf("== frame generation switched off: the capture goes on, the flow passes stop\n");
+        int lostOff = 0, atTapOff = 0, withFlowOff = 0;
+        for (int k = 50; k < 62; ++k) {
+            const FrameResult f = RunFrame(tap, l, k, false);
+            if (f.handOvers == 0) ++lostOff; else if (f.atPass == 0) ++atTapOff;
+            if (f.flow) ++withFlowOff;
+        }
+        Check("after a few frames without flow, frames are handed over at the TAP instead of all being dropped", lostOff <= 3 && atTapOff >= 9,
+              std::to_string(lostOff) + " lost, " + std::to_string(atTapOff) + " at the TAP");
+        Check("...with no motion rather than the last flow from before", withFlowOff == 0, std::to_string(withFlowOff) + " with a flow");
+        int freshBack = 0;
+        for (int k = 62; k < 68; ++k) { const FrameResult f = RunFrame(tap, l, k); if (f.handOvers == 1 && f.fresh && f.flow == l.flowFine[k & 1].t) ++freshBack; }
+        Check("switched back on, every frame gets its own motion again (at most one frame lost)", freshBack >= 5, std::to_string(freshBack) + " of 6 fresh");
+
         printf("== presents between real frames\n");
         // X2, real frame last: generated, real per real frame
         tap.Reset();

@@ -2,7 +2,8 @@
 // again toward the person's own setting when there is room. The person's setting is the ceiling, a floor they choose is the lowest it goes, and
 // nothing that changes the look is touched.
 //
-// Every change of the working scale makes the model's feature again (a short hitch), so it changes slowly: down after 3 s over the budget (and
+// Every change of the working scale has the model's feature made again (in the background, but the model pauses for a fraction of a second
+// meanwhile), and the model's time needs a moment to settle, so it changes slowly: down after 3 s over the budget (and
 // at least 5 s after the last change), up after 10 s well under it (and 20 s after the last change), and only up when the model time it expects
 // at the higher scale still fits. Frames slower than 100 ms (a loading screen, a pause) are not judged.
 #pragma once

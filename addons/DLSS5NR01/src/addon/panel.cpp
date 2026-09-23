@@ -142,7 +142,7 @@ void DrawPanel() {
             if (names.empty()) ImGui::TextDisabled("No saved looks yet: set the sliders, then Save as new.");
             ImGui::EndCombo();
         }
-        Tip("Your saved looks: pick one to apply it. The Next preset hotkey cycles through them in the game. A look with a different Model resolution makes the model rebuild (a brief hitch).");
+        Tip("Your saved looks: pick one to apply it. The Next preset hotkey cycles through them in the game. A look with a different Model resolution has the model made again in the background, which takes a fraction of a second.");
         ImGui::SameLine();
         if (eam::ui::Button("Save", eam::ui::icons::kSave, eam::ui::ButtonKind::Primary)) {
             if (s_active >= 0) {
@@ -238,9 +238,9 @@ void DrawPanel() {
         // The model costs ~10 ms + ~7 ms per megapixel on Ampere. The working scale is the only cost lever: past the
         // frame interval the model simply skips frames and the present side carries the last delta forward.
         createChanged |= SL("Model resolution", &c.p.workingScale, 0.25f, 1.0f, "%.2f x the frame");
-        Tip("The frame is shrunk by this before the model sees it, and the model's change is stretched back up to the picture. 1.00 = the model sees the whole frame: best detail, costs the most. This is the only setting that changes the cost.\nOn an RTX 4070 Ti SUPER the model takes roughly 2.7 ms plus 1.8 ms per megapixel.\nChanging it rebuilds the model, which costs a short hitch.\nWith Auto on, this is the most it uses.");
+        Tip("The frame is shrunk by this before the model sees it, and the model's change is stretched back up to the picture. 1.00 = the model sees the whole frame: best detail, costs the most. This is the only setting that changes the cost.\nOn an RTX 4070 Ti SUPER the model takes roughly 2.7 ms plus 1.8 ms per megapixel.\nChanging it has the model made again in the background: for a fraction of a second the last result carries on, and the game does not stall.\nWith Auto on, this is the most it uses.");
         changed |= ImGui::Checkbox("Auto: keep the model within a time budget", &c.autoQuality);
-        Tip("Lowers the model resolution while the model takes longer than the budget below (a busy scene, a hot card), and raises it back toward your own setting above when there is room. It changes slowly (down after 3 s over the budget, up after 10 s well under it) because each change costs a short hitch. Nothing that changes the look is touched.");
+        Tip("Lowers the model resolution while the model takes longer than the budget below (a busy scene, a hot card), and raises it back toward your own setting above when there is room. It changes slowly (down after 3 s over the budget, up after 10 s well under it) so it judges steady numbers, not a moment's spike. Nothing that changes the look is touched.");
         if (c.autoQuality) {
             changed |= SL("Time budget", &c.autoBudgetMs, 2.0f, 15.0f, "%.1f ms");
             Tip("The model time to stay within. Half the frame time is a good start: 8 ms at 60 fps, 5 ms at 100 fps.");
@@ -264,6 +264,7 @@ void DrawPanel() {
                 float mp = (float)st.workW * (float)st.workH / 1e6f; double iv = g_bridge.IntervalMs();
                 uint64_t runs = g_bridge.Runs(), skipped = g_bridge.Skipped(), seen = runs + skipped;
                 ImGui::TextWrapped("frame %ux%u -> model input %ux%u (%.2f MP): model %.1f ms (avg %.1f), frame interval %.1f ms", g_bridge.Width(), g_bridge.Height(), st.workW, st.workH, mp, st.nrMs, g_avgModelMs, iv);
+                if (st.builds) ImGui::TextWrapped("model made %u time%s, the last in %.0f ms off the frame path; %llu frames not run meanwhile", st.builds, st.builds == 1 ? "" : "s", st.lastBuildMs, (unsigned long long)st.busySkips);
                 ImGui::TextWrapped("model keeps up with %llu of %llu frames (%.0f%%); GPU start +%.1f / done +%.1f ms after submit; tap CPU %.2f ms", (unsigned long long)runs, (unsigned long long)seen, seen ? 100.0 * runs / seen : 0.0, st.startMs, st.doneMs, g_bridge.CpuMs());
                 ImGui::TextWrapped("presents: %llu on LS's swap chain (%s), composed %llu, compose CPU %.2f ms, target %s; newest delta = frame %llu, applied at offset %.2f frames",
                     (unsigned long long)g_lsPresents, g_tap.PresentPattern(), (unsigned long long)g_composed, g_compose.CpuMs(), g_compose.TargetInfo(), (unsigned long long)g_lastDelta, g_lastOffset);

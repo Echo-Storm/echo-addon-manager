@@ -10,6 +10,7 @@ namespace {
 constexpr uint32_t kFlowFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;   // LSFG's flow levels
 constexpr uint64_t kStaleAfter = 3000;                            // dispatches (~20-30 real frames): a pass not seen for this long is out of date
 constexpr uint64_t kRechooseEvery = 600;                          // dispatches between automatic role choices
+constexpr uint32_t kGiveUpWaitingAfter = 3;                       // frames in a row without a flow pass before this frame's flow is no longer waited for
 constexpr size_t kMaxTableRows = 256;
 
 // Formats a captured frame can have (what the bridge accepts, and the HDR ones).
@@ -148,7 +149,7 @@ void FrameTap::Reset() {
     std::lock_guard<std::mutex> lk(m_mu);
     ReleaseAll();
     m_flowNewW = m_flowNewH = 0; m_flowNewArea = 0; m_flowLastW = m_flowLastH = 0;
-    m_heldSlot = -1; m_handOverNext = false; m_lastGatedTick = ~0ull;
+    m_heldSlot = -1; m_handOverNext = false; m_lastGatedTick = ~0ull; m_dropStreak = 0;
     m_presentsSinceTap = 0; m_genSincePresent = false; m_perFrame = 0; m_realFirst = false;
     snprintf(m_pattern, sizeof m_pattern, "learning");
 }
@@ -251,11 +252,20 @@ bool FrameTap::OnTap(const Bound& b, TapDecision& d) {
     const bool gate = m_tickKey ? m_lastGatedTick != m_ticks : true;
     m_gateName = m_tickKey ? "tick" : "every";
     bool runNow = false;
+    // LSFG wrote flow since the TAP before, so it is running: this frame's own flow can be waited for again. Several frames in a row without
+    // any (frame generation switched off, with the capture going on) and the frames are handed over at once, with no motion, rather than
+    // every one being dropped.
+    const bool flowSinceTap = m_flowNew != nullptr;
+    if (flowSinceTap) m_dropStreak = 0;
     if (slot >= 0 && gate) {
         m_lastGatedTick = m_ticks;
         if (ID3D11Texture2D* frame = AsTexture(b.srv[slot])) {
-            if (m_freshFlow && m_flowLastW && m_flowLastH) {   // the finest flow size is known: wait for this frame's own flow
-                if (m_held) { m_held->Release(); ++m_droppedWaiting; }   // LSFG ran no flow pass for the frame before
+            bool wait = m_freshFlow && m_flowLastW && m_flowLastH && m_dropStreak < kGiveUpWaitingAfter;   // the finest flow size is known
+            if (wait && m_held) {   // LSFG ran no flow pass for the frame before
+                Drop(m_held); ++m_droppedWaiting; ++m_dropStreak;
+                wait = m_dropStreak < kGiveUpWaitingAfter;
+            }
+            if (wait) {   // wait for this frame's own flow
                 m_held = frame; m_heldSlot = slot; m_handOverNext = false;
             } else if (!d.frame) {
                 d.frame = frame; d.frameSlot = slot; runNow = true; ++m_staleRuns;
@@ -269,7 +279,7 @@ bool FrameTap::OnTap(const Bound& b, TapDecision& d) {
     // before that is kept, rather than flipping to no motion for a frame
     if (m_flowNew) { Hold(m_flowLast, m_flowNew); m_flowLastW = m_flowNewW; m_flowLastH = m_flowNewH; Drop(m_flowNew); }
     m_flowNewArea = 0;
-    if (runNow && !d.flow && m_flowLast)
+    if (runNow && !d.flow && m_flowLast && m_dropStreak < kGiveUpWaitingAfter)
         if (ID3D11Texture2D* flow = AsTexture(m_flowLast)) { d.flow = flow; d.flowW = m_flowLastW; d.flowH = m_flowLastH; }
     return runNow;
 }

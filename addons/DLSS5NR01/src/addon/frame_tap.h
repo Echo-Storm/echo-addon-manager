@@ -125,6 +125,7 @@ private:
     bool m_freshFlow = true;
     ID3D11Texture2D* m_held = nullptr; int m_heldSlot = -1; bool m_handOverNext = false;
     uint64_t m_freshRuns = 0, m_staleRuns = 0, m_droppedWaiting = 0;
+    uint32_t m_dropStreak = 0;          // frames in a row that got no flow pass: past a few, frame generation is off and nothing is waited for
 
     // presents
     int m_presentsSinceTap = 0; bool m_genSincePresent = false; int m_perFrame = 0; bool m_realFirst = false; char m_pattern[64] = "learning";
