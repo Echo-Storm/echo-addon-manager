@@ -31,9 +31,12 @@ struct TapDecision {
     bool isTick = false, isTap = false;
     ID3D11Texture2D* frame = nullptr;   // borrowed (AddRef'd by us; caller releases)
     int frameSlot = -1;
-    // LSFG's finest optical flow, as written after the PREVIOUS real frame (AddRef'd; caller releases). RGBA16F:
-    // xy = displacement current -> previous frame, zw = the reverse; units = pixels of a texture twice this size.
+    // LSFG's finest optical flow (AddRef'd; caller releases). RGBA16F: xy = displacement current -> previous frame, zw = the
+    // reverse; units = pixels of a texture twice this size. With fresh flow on (the default) it is this frame's own (k-1 -> k),
+    // and the model runs a few dispatches after the TAP, once LSFG has issued that flow pass; otherwise it is the previous
+    // pair's (k-2 -> k-1), one frame late, and the model runs at the TAP.
     ID3D11Texture2D* flow = nullptr; uint32_t flowW = 0, flowH = 0;
+    bool freshFlow = false;             // the flow handed over is this frame's own
 };
 
 // One of LS's presents, placed between real frames. With N presents per real frame and the real frame k
@@ -52,6 +55,13 @@ public:
     void Reset();                                  // device changed: forget pointers/cache
     void SetRoles(const DispatchSig& tick, const DispatchSig& tap, Mode mode, int frameSlotPref /* -1 auto */);
     void GetRoles(DispatchSig& tick, DispatchSig& tap) const;
+    // Wait for this frame's own flow before handing the frame over (on), or hand it over at the TAP with the previous pair's flow (off).
+    void SetFreshFlow(bool on);
+    // How the handed-over frames got their motion: this frame's flow, the previous pair's, and frames dropped because LSFG ran
+    // no flow pass for them before the next frame arrived.
+    uint64_t FreshRuns() const { return m_freshRuns; }
+    uint64_t StaleRuns() const { return m_staleRuns; }
+    uint64_t DroppedWaiting() const { return m_droppedWaiting; }
     // Called for every dispatch on LS's render thread. Fills `d`; returns true if NR should run now.
     bool Observe(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z, TapDecision& d);
     // Called for every Present of LS's swap chain, on the presenting thread.
@@ -89,6 +99,10 @@ private:
     // LSFG flow tracking: the first finest-level RGBA16F UAV0 pass with a coarser level at S4 after each TAP
     ID3D11Resource* m_flowRes = nullptr; uint32_t m_flowW = 0, m_flowH = 0;           // handed out at the TAP
     ID3D11Resource* m_flowCand = nullptr; uint32_t m_flowCandW = 0, m_flowCandH = 0; uint64_t m_frameFlowArea = 0;
+    // fresh flow: the frame held from its TAP until this frame's finest flow pass has been issued (the next dispatch hands it over)
+    bool m_freshFlow = true;
+    ID3D11Texture2D* m_pending = nullptr; int m_pendingSlot = -1; bool m_handOverNext = false;
+    uint64_t m_freshRuns = 0, m_staleRuns = 0, m_droppedWaiting = 0;
 
     // present bookkeeping (under m_mu)
     int m_presentsSinceTap = 0; bool m_genSinceLastPresent = false; int m_perFrame = 0; bool m_realFirst = false; char m_pattern[64] = "learning";

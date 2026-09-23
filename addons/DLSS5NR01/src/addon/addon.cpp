@@ -50,6 +50,7 @@ struct Config {
     std::string tickSig, tapSig;
     float watchdogMs = 80.0f;
     std::string snippetPath;  // empty = <LS dir>\nvngx_dlssnr.dll
+    bool freshFlow = true;    // run the model once LSFG has this frame's own flow (off: at the TAP, with the previous pair's flow, one frame late)
     bool lsFirst = true;      // raise LS's GPU thread priority so its work pre-empts the model on the shared GPU
     bool hotkeys = true;      // Ctrl+Shift + key, polled at every present (works while the game has focus)
     int keyAB = VK_F6, keySplit = VK_F7, keySharpDn = VK_F8, keySharpUp = VK_F9, keyPreset = VK_F10;
@@ -277,6 +278,7 @@ static void LoadConfig() {
           if (!d.empty()) g_presets.push_back({ n, d }); } }
     // Startup view, for the offline test host only (the panel and the hotkeys change it, nothing saves it).
     g_compare = std::clamp(CfgGetI("compareStart", 0), 0, 2); g_splitPos = std::clamp(CfgGetF("splitStart", 0.5f), 0.05f, 0.95f);
+    c.freshFlow = CfgGetI("freshFlow", 1) != 0;
     c.tapMode = CfgGetI("tapMode", 0); c.frameSlot = CfgGetI("frameSlot", -1); c.tickSig = CfgGet("tickSig", ""); c.tapSig = CfgGet("tapSig", "");
     c.watchdogMs = CfgGetF("watchdogMs", 80.0f); c.snippetPath = CfgGet("snippetPath", "");
 }
@@ -296,6 +298,7 @@ static void SaveConfig() {
     { std::string names; std::lock_guard<std::mutex> lk(g_cfgMu);
       for (auto& pr : g_presets) { if (!names.empty()) names += '|'; names += pr.name; CfgSet(("preset." + pr.name).c_str(), pr.data); }
       CfgSet("presetNames", names); }
+    CfgSetI("freshFlow", c.freshFlow ? 1 : 0);
     CfgSetI("tapMode", c.tapMode); CfgSetI("frameSlot", c.frameSlot); CfgSet("tickSig", c.tickSig); CfgSet("tapSig", c.tapSig);
     CfgSetF("watchdogMs", c.watchdogMs); CfgSet("snippetPath", c.snippetPath);
     if (g_host) g_host->SaveConfig();
@@ -304,6 +307,7 @@ static void ApplyTapRoles() {
     Config c; { std::lock_guard<std::mutex> lk(g_cfgMu); c = g_cfg; }
     DispatchSig tick, tap; tick.Parse(c.tickSig); tap.Parse(c.tapSig);
     g_tap.SetRoles(tick, tap, c.tapMode == 1 ? FrameTap::Manual : FrameTap::Auto, c.frameSlot);
+    g_tap.SetFreshFlow(c.freshFlow);
 }
 
 // ------------------------------------------------------------------ engine lifecycle
@@ -543,6 +547,9 @@ static bool TapBody(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z
         Log("tap #%llu: model %.1f ms (avg %.1f), run %.1f ms, GPU start +%.1f done +%.1f ms after submit, tap CPU %.2f ms, interval %.1f ms, runs %llu skipped %llu, fails %llu | presents %llu (%s), composed %llu, compose CPU %.2f ms, last delta frame %llu offset %.2f",
             (unsigned long long)taps, st.nrMs, g_avgNrMs, st.totalMs, st.startMs, st.doneMs, g_bridge.CpuMs(), g_bridge.IntervalMs(), (unsigned long long)g_bridge.Runs(), (unsigned long long)g_bridge.Skipped(), (unsigned long long)st.fails,
             (unsigned long long)g_lsPresents, g_tap.PresentPattern(), (unsigned long long)g_composed, g_compose.CpuMs(), (unsigned long long)g_lastDelta, g_lastOffset);
+    if (taps == 60 || taps % 300 == 0)
+        Log("motion vectors so far: this frame's flow %llu, the previous frame's %llu, frames dropped waiting for a flow pass %llu",
+            (unsigned long long)g_tap.FreshRuns(), (unsigned long long)g_tap.StaleRuns(), (unsigned long long)g_tap.DroppedWaiting());
     if (taps % 300 == 0) {   // how the game's frame time was distributed over the last 300 frames (the line above is smoothed)
         float p50, p95, p99, worst; int n, o20, o33;
         if (g_bridge.TakeFrameTimeWindow(p50, p95, p99, worst, n, o20, o33)) {
@@ -931,6 +938,12 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         changed |= ImGui::Checkbox("Use Lossless Scaling's motion data", &c.p.useFlow);
         Tip("Feeds the motion Lossless Scaling's frame generation measures (its optical flow) to the model as motion vectors, and uses it to slide the enhancement onto the generated in-between frames. Turn it off only to test without motion.");
         { const NrStats& fs = g_engine.Stats(); ImGui::SameLine(); if (fs.hasFlow) ImGui::TextDisabled("(flow %ux%u)", fs.flowW, fs.flowH); else ImGui::TextDisabled("(no flow texture seen yet)"); }
+        if (!c.p.useFlow) ImGui::BeginDisabled();
+        if (ImGui::Checkbox("Use this frame's motion (wait for Lossless Scaling's flow)", &c.freshFlow)) { changed = true; tapChanged = true; }
+        Tip("On: the model runs a moment later in each frame, once Lossless Scaling has measured how this frame moved, so its motion vectors are current. "
+            "Off: it runs as soon as the frame is captured and gets the previous frame's motion, one frame late, which smears and ghosts when the camera turns, starts or stops. "
+            "On is the default; the switch is here to compare the two.");
+        if (!c.p.useFlow) ImGui::EndDisabled();
     }
     if (lsp::SectionHeader("Quality and performance")) {
         // The model costs ~10 ms + ~7 ms per megapixel on Ampere. The working scale is the only cost lever: past the

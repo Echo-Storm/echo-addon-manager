@@ -47,6 +47,9 @@ Agreed as worth doing, in no particular order; none of them is started. They com
 - **A before/after capture.** One key saves a matching pair of screenshots with and without Neural Rendering, for comparing looks and for bug reports.
 - **A session summary.** When a game closes: average and worst frame time, peak temperature and power, how long the limiter or the auto mode was active. Real numbers for the "tested with" list.
 - **A stuck-state watchdog.** If Lossless Scaling's frames stop arriving while a game runs, say so and offer to restart Neural Rendering's engine, instead of leaving the person to guess.
+- **A much easier HUD protection.** Today the protected areas are typed as numbers (or filled from the World of Warcraft starter layout), which is cumbersome. Better: draw and drag the
+  areas over a live snapshot of the game in the panel, see them outlined in the game while editing, find likely HUD areas automatically (parts of the picture that stay put while the scene
+  moves, which LSFG's own flow already shows), and keep a HUD layout per game with that game's look.
 - **A DLSS 4.5 addon** next to Neural Rendering, for games where DLSS 5's look is not wanted. To look into first: which DLSS 4.5 features can work from what Lossless Scaling has (the captured frames and
   LSFG's optical flow, but no depth and no game motion vectors), and what NVIDIA's public SDK licence allows.
 

@@ -58,6 +58,7 @@ void FrameTap::Describe(ID3D11Resource* r, ViewShape& s) {
 void FrameTap::Reset() {
     std::lock_guard<std::mutex> lk(m_mu); m_cache.clear(); m_lastFramePtr = nullptr; memset(m_recent, 0, sizeof m_recent); m_lastNrTick = ~0ull;
     if (m_flowRes) m_flowRes->Release(); if (m_flowCand) m_flowCand->Release(); m_flowRes = m_flowCand = nullptr; m_frameFlowArea = 0; m_flowW = m_flowH = 0;
+    if (m_pending) m_pending->Release(); m_pending = nullptr; m_pendingSlot = -1; m_handOverNext = false;
     m_presentsSinceTap = 0; m_genSinceLastPresent = false; m_perFrame = 0; m_realFirst = false; snprintf(m_pattern, sizeof m_pattern, "learning");
 }
 void FrameTap::ClearTable() { std::lock_guard<std::mutex> lk(m_mu); m_table.clear(); m_cache.clear(); }
@@ -92,6 +93,11 @@ ID3D11Resource* FrameTap::NewestFlow(uint32_t& w, uint32_t& h) {
 void FrameTap::SetRoles(const DispatchSig& tick, const DispatchSig& tap, Mode mode, int frameSlotPref) {
     std::lock_guard<std::mutex> lk(m_mu);
     m_tick = tick; m_tap = tap; m_tickKey = tick.Empty() ? 0 : tick.Hash(); m_tapKey = tap.Empty() ? 0 : tap.Hash(); m_mode = mode; m_frameSlotPref = frameSlotPref;
+}
+void FrameTap::SetFreshFlow(bool on) {
+    std::lock_guard<std::mutex> lk(m_mu);
+    m_freshFlow = on;
+    if (!on && m_pending) { m_pending->Release(); m_pending = nullptr; m_handOverNext = false; }
 }
 void FrameTap::GetRoles(DispatchSig& tick, DispatchSig& tap) const { std::lock_guard<std::mutex> lk(m_mu); tick = m_tick; tap = m_tap; }
 std::vector<DispatchEntry> FrameTap::Snapshot() const { std::lock_guard<std::mutex> lk(m_mu); std::vector<DispatchEntry> v; v.reserve(m_table.size()); for (auto& kv : m_table) v.push_back(kv.second); return v; }
@@ -146,6 +152,14 @@ bool FrameTap::Observe(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_
     bool run = false;
     {
         std::lock_guard<std::mutex> lk(m_mu);
+        // Fresh flow: the previous dispatch was this frame's first finest flow pass, so the flow is now in the command stream
+        // ahead of anything issued here. Hand over the frame held since its TAP, with that flow.
+        if (m_handOverNext && m_pending) {
+            d.frame = m_pending; d.frameSlot = m_pendingSlot; m_pending = nullptr; m_handOverNext = false;
+            if (m_flowCand) { ID3D11Texture2D* ft = nullptr; if (SUCCEEDED(m_flowCand->QueryInterface(IID_PPV_ARGS(&ft))) && ft) { d.flow = ft; d.flowW = m_flowCandW; d.flowH = m_flowCandH; d.freshFlow = true; } }
+            m_freshRuns++;
+            run = true;
+        }
         auto& e = m_table[key]; if (e.count == 0) { e.sig = sig; e.key = key; } e.cs = cs; e.count++; e.lastSeenFrame = m_frameCounter; e.lastSeen = m_dispatches;
         if (m_table.size() > 256) m_table.clear();
         if (m_mode == Auto && (m_tapKey == 0 || (m_dispatches - m_lastAutoAssign) > 600)) { AutoAssign(); m_lastAutoAssign = m_dispatches; }
@@ -167,7 +181,15 @@ bool FrameTap::Observe(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_
                 if (m_tickKey) { gate = (m_lastNrTick != m_ticks); m_gateName = "tick"; }
                 else { gate = true; m_gateName = "every"; }
                 if (gate) {
-                    ID3D11Texture2D* t = nullptr; if (SUCCEEDED(srvRes[slot]->QueryInterface(IID_PPV_ARGS(&t))) && t) { d.frame = t; d.frameSlot = slot; run = true; }
+                    ID3D11Texture2D* t = nullptr;
+                    if (SUCCEEDED(srvRes[slot]->QueryInterface(IID_PPV_ARGS(&t))) && t) {
+                        if (m_freshFlow && m_flowW && m_flowH) {   // the finest flow size is known from the last frame: wait for this frame's
+                            if (m_pending) { m_pending->Release(); m_droppedWaiting++; }   // LSFG ran no flow pass for the one before
+                            m_pending = t; m_pendingSlot = slot; m_handOverNext = false;
+                        } else if (!d.frame) {
+                            d.frame = t; d.frameSlot = slot; run = true; m_staleRuns++;
+                        } else t->Release();
+                    }
                     m_lastNrTick = m_ticks; m_lastFramePtr = srvRes[slot];
                 }
             }
@@ -179,10 +201,14 @@ bool FrameTap::Observe(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_
             // than flip to zero vectors for one frame, which the in-game log showed as an on/off toggle every frame.
             if (m_flowCand) { if (m_flowRes) m_flowRes->Release(); m_flowRes = m_flowCand; m_flowW = m_flowCandW; m_flowH = m_flowCandH; }
             m_flowCand = nullptr; m_frameFlowArea = 0;
-            if (m_flowRes && d.frame) { ID3D11Texture2D* ft = nullptr; if (SUCCEEDED(m_flowRes->QueryInterface(IID_PPV_ARGS(&ft))) && ft) { d.flow = ft; d.flowW = m_flowW; d.flowH = m_flowH; } }
+            if (m_flowRes && d.frame && !d.flow && !d.freshFlow) { ID3D11Texture2D* ft = nullptr; if (SUCCEEDED(m_flowRes->QueryInterface(IID_PPV_ARGS(&ft))) && ft) { d.flow = ft; d.flowW = m_flowW; d.flowH = m_flowH; } }
         } else if (uavRes[0] && sig.uav[0].valid && sig.uav[0].fmt == 10 /*RGBA16F*/ && srvRes[4]) {
             uint64_t area = (uint64_t)sig.uav[0].w * sig.uav[0].h;
-            if (area > m_frameFlowArea) { if (m_flowCand) m_flowCand->Release(); uavRes[0]->AddRef(); m_flowCand = uavRes[0]; m_flowCandW = sig.uav[0].w; m_flowCandH = sig.uav[0].h; m_frameFlowArea = area; }
+            if (area > m_frameFlowArea) {
+                if (m_flowCand) m_flowCand->Release(); uavRes[0]->AddRef(); m_flowCand = uavRes[0]; m_flowCandW = sig.uav[0].w; m_flowCandH = sig.uav[0].h; m_frameFlowArea = area;
+                // the first pass at (or above) last frame's finest size is this frame's main flow: the next dispatch hands the frame over
+                if (m_pending && area >= (uint64_t)m_flowW * m_flowH) m_handOverNext = true;
+            }
         } else if (uavRes[0] && sig.uav[0].valid && sig.uav[0].tex2d && IsColorFmt(sig.uav[0].fmt) && m_autoLargestW && sig.uav[0].w == m_autoLargestW && sig.uav[0].h == m_autoLargestH) {
             // A generated frame being composed: a full-size colour output fed by two full-size colour frames, or by
             // a colour frame plus a flow field. (The real frame reaches the screen through a copy or a single-input pass.)

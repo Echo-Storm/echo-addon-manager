@@ -84,8 +84,18 @@ def basic(res, rc, text):
     res.check('no crash / engine failure', 'NrEngine FAILED' not in text and 'CRASH' not in text and 'DISABLED' not in text)
 
 
+def motion_counts(text):
+    """The last 'motion vectors so far' line: (this frame's flow, the previous frame's, dropped waiting), or None."""
+    import re
+    m = re.findall(r"motion vectors so far: this frame's flow (\d+), the previous frame's (\d+), frames dropped waiting for a flow pass (\d+)", text)
+    return tuple(int(v) for v in m[-1]) if m else None
+
+
 def scenario_base(ctx, res, text, frame):
     res.check('compose applied', 'COMPOSE APPLIED' in text)
+    mc = motion_counts(text)
+    res.check("the model gets this frame's own motion (fresh flow, the default)", bool(mc) and mc[0] > 0 and mc[0] >= 9 * (mc[0] + mc[1]) // 10 and mc[2] <= 2,
+              'fresh %d, previous %d, dropped %d' % mc if mc else 'no motion line in the log')
     res.check('tap followed the resolution change', 'TAP FOLLOWED' in text)
     res.check('the addon reports live metrics and a status to the host', 'LIVE METRICS OK' in text)
     d = np.abs(frame - ctx['pat']).mean()
@@ -173,6 +183,13 @@ def scenario_none(ctx, res, text, frame):
     pass
 
 
+def scenario_flow_previous(ctx, res, text, frame):
+    mc = motion_counts(text)
+    res.check("with fresh flow off the model gets the previous frame's motion, as before", bool(mc) and mc[0] == 0 and mc[1] > 0,
+              'fresh %d, previous %d, dropped %d' % mc if mc else 'no motion line in the log')
+    res.check('...and it still changes the picture', np.abs(frame - ctx['pat']).mean() > 0.3)
+
+
 def scenario_selftest(ctx, res, text, frame):
     # the addon's own 'Test compatibility' path (started at start-up by the selfTestOnStart switch): nr_selftest.exe runs the model in its own process
     res.check('the addon ran the compatibility test and it passed with this model', 'compatibility test: passed (PASS)' in text)
@@ -191,6 +208,7 @@ SCENARIOS = [
     ('smooth_passes3', ['deltaSmooth=0.5', 'passes=3'], scenario_smooth_passes),
     ('ghost_off', ['flowsplit=1', 'ghostGuard=0'], scenario_ghost_off),
     ('ghost_on', ['flowsplit=1', 'ghostGuard=1'], scenario_ghost_on),
+    ('flow_previous', ['freshFlow=0'], scenario_flow_previous),
     ('selftest', ['selfTestOnStart=1'], scenario_selftest),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),

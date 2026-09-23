@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.2 (internal, 2026-09-22)
+
+Not a public release (the manager still shows 0.7.0).
+
+- **Neural Rendering gets this frame's own motion.** The model has no game motion vectors, so it is given Lossless Scaling's optical flow instead. It used to run the moment a frame was
+  captured, before LSFG had measured that frame's motion, so it got the previous frame's flow: right while motion stays steady, wrong whenever it changes (turning, starting, stopping,
+  strafing), where the model's own history is then pulled the wrong way, which shows as smearing, ghosting and invented detail. The frame is now held from its capture until LSFG has issued
+  that frame's finest flow pass, and handed to the model on the next dispatch, a moment later in the same frame. A frame for which LSFG runs no flow pass is dropped rather than run late.
+  A new switch, **Use this frame's motion**, under *Model* (on by default), brings back the old timing for comparison. The log reports how many frames got which motion; the scenario
+  matrix checks that the default gives this frame's motion and that the switch gives the old behaviour (new `flow_previous` scenario).
+- Neural Rendering keeps the previous session's log as `DLSS5NR01.log.old`: a problem seen while playing is still there after Lossless Scaling restarts.
+- `ROADMAP.md`: a much easier HUD protection (draw the areas over a snapshot, detect them automatically, one layout per game) joins the ideas for after 1.0.
+
 ## 0.7.1 (internal, 2026-09-22)
 
 Not a public release: the manager still shows 0.7.0 (the shown version moves at 0.8). A bug sweep of the manager itself (the code that runs inside Lossless Scaling), with a failing test written for each bug before it was fixed, and dead code removed.
