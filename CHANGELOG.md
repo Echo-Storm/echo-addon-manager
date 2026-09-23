@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.4 (internal, 2026-09-23)
+
+Not a public release (the manager still shows 0.7.0).
+
+- **Neural Rendering's frame tap rewritten as our own code.** The part that watches Lossless Scaling's compute passes, finds the capture pass, and hands the model each frame with its motion was
+  the largest piece still taken almost unchanged from the original DLSS 5 plugin. It now reads each pass's bound views once, and spells out the flow-pass and generated-frame rules. It also drops the
+  per-pass fields nothing read any more. The saved pass text in the settings is unchanged, so existing configurations keep working.
+- **Fixed: textures held after the tap went away.** The frame tap had no destructor, so the flow textures and a held frame it still owned were never released when it was destroyed (found by the new
+  test: three references left where one was expected).
+- **New offline test `nr_taptest`**, part of `tools/run_addon_tests.ps1`. It uses a real D3D11 device and textures shaped like LSFG 3's, with no model or NVIDIA SDK needed at run time. It checks:
+  - which pass is the capture;
+  - that every frame gets its own motion, and what happens when a flow pass is skipped or the flow scale changes;
+  - where each present sits between real frames;
+  - the old one-frame-late timing, with fresh flow off;
+  - that no texture reference is left behind.
+- `ROADMAP.md`: openNR noted under "watching", with what it is and is not.
+
 ## 0.7.3 (internal, 2026-09-23)
 
 Not a public release (the manager still shows 0.7.0).

@@ -60,6 +60,9 @@ Agreed as worth doing, in no particular order; none of them is started. They com
   moves, which LSFG's own flow already shows), and keep a HUD layout per game with that game's look.
 - **A DLSS 4.5 addon** next to Neural Rendering, for games where DLSS 5's look is not wanted. To look into first: which DLSS 4.5 features can work from what Lossless Scaling has (the captured frames and
   LSFG's optical flow, but no depth and no game motion vectors), and what NVIDIA's public SDK licence allows.
+- **Watching: openNR** (github.com/clshortfuse/openNR). It rebuilds a DLSS NR compatibility DLL from a person's own `nvngx_dlssnr.dll`, so it runs the same model, not a better one.
+  It is early, with no quality or performance claims yet. Nothing to build here: if it ever produces a working DLL, the person points Neural Rendering at it and runs **Test compatibility**.
+  We never ship, host or link NVIDIA's files, or files made from them.
 
 ## Not planned for 1.0
 

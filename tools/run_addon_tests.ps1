@@ -49,7 +49,8 @@ $out.TrimEnd() -split "`r?`n" | Where-Object { $_ -match '^\s*(PASS|FAIL)|PASSED
 if ($LASTEXITCODE -ne 0) { $script:fail++ }
 # Neural Rendering's requirements check: only when that addon has been configured (it needs the NVIDIA SDK to configure, though not to run this test)
 if (Test-Path "$root\addons\DLSS5NR01\build\CMakeCache.txt") {
-    Build "$root\addons\DLSS5NR01\build" @('nr_reqtest')
+    Build "$root\addons\DLSS5NR01\build" @('nr_reqtest', 'nr_taptest')
     Run 'Neural Rendering requirements check' "$root\addons\DLSS5NR01\build\Release\nr_reqtest.exe" @()
+    Run 'Neural Rendering frame tap (capture pass, motion hand-over, presents)' "$root\addons\DLSS5NR01\build\Release\nr_taptest.exe" @()
 }
 if ($fail) { Write-Host "$fail test program(s) failed"; exit 1 } else { Write-Host 'all addon tests passed' }

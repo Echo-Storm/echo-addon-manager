@@ -77,6 +77,11 @@ target_include_directories(nr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager
 target_link_libraries(nr_hosttest PRIVATE d3d11 dxgi d3dcompiler)
 add_dependencies(nr_hosttest DLSS5NR01)
 
+# ---- offline test of the frame tap (which pass is the capture, the motion hand-over, presents); a D3D11 device, no model, no SDK at run time ----
+add_executable(nr_taptest tools/tap_test.cpp src/addon/frame_tap.cpp)
+target_include_directories(nr_taptest PRIVATE src)
+target_link_libraries(nr_taptest PRIVATE d3d11)
+
 # ---- offline test of the requirements checker (no model, no NVIDIA SDK needed at run time) ----
 add_executable(nr_reqtest tools/requirements_test.cpp src/addon/requirements.cpp)
 target_include_directories(nr_reqtest PRIVATE src)
