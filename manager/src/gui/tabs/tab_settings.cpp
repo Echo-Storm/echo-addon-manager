@@ -12,7 +12,6 @@
 #include "../widgets/toast.h"
 #include "../widgets/tooltip.h"
 #include "../gui_manager.h"
-#include "../window/dock.h"
 #include "imgui.h"
 #include "eam/widgets.h"
 #include <windows.h>
@@ -168,15 +167,6 @@ void RenderTabSettings(AddonManager* manager) {
     bool openOnStart = config.GlobalGetOr<bool>("ui", "open_on_start", true);
     if (ImGui::Checkbox("Open this window when Lossless Scaling starts", &openOnStart)) { config.GlobalSet("ui", "open_on_start", openOnStart); config.Save(); }
     widgets::Tip("Off = the manager starts hidden in the notification area (tray). Your addons load and run either way. Closing this window with the X only hides it.");
-    {
-        int side = static_cast<int>(window::dock::SideFromConfig());
-        const char* sides[] = { "Off", "On its left", "On its right" };
-        ImGui::SetNextItemWidth(S(320));
-        if (ImGui::Combo("Dock beside Lossless Scaling", &side, sides, 3)) window::dock::SetSide(static_cast<window::dock::Side>(side));
-        widgets::Tip("Keeps this window against one side of Lossless Scaling's window, as tall as it: it follows when Lossless Scaling's window is moved, resized, "
-                     "minimised or brought forward. Drag this window away to undock it; resizing it keeps it docked. When there is no room on that side, it goes on the other.");
-        if (window::dock::SideFromConfig() != window::dock::Side::Off) { ImGui::SameLine(); ImGui::TextDisabled(window::dock::Docked() ? "(docked)" : "(waiting for Lossless Scaling's window)"); }
-    }
     bool hotkeyOn = config.GlobalGetOr<bool>("ui", "hotkey_enabled", true);
     if (ImGui::Checkbox("Open / close hotkey: Ctrl+Shift +", &hotkeyOn)) { config.GlobalSet("ui", "hotkey_enabled", hotkeyOn); config.Save(); GuiManager::ApplyHotkey(); }
     widgets::Tip("Works anywhere in Windows, including while a game has focus. If another program already uses the combination, the note below says so; pick another key.");

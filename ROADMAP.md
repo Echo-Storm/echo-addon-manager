@@ -36,7 +36,6 @@ What it has to do (and what it must never do):
 ## Done in the 0.8 interface pass
 
 - Screenshots of the picture as it is shown, with a key and a folder of your choice (Neural Rendering's panel).
-- Docking the manager beside Lossless Scaling's window.
 - The version shown moved to 0.8.
 
 ## Ideas for after 1.0

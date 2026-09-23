@@ -4,15 +4,6 @@
 
 The manager and Neural Rendering now show 0.8.0.
 
-- **Dock beside Lossless Scaling** (Settings > Interface: off, on its left, on its right). The manager's window sits against that side of Lossless Scaling's window, as tall as it, and goes where
-  it goes:
-  - it follows when Lossless Scaling's window is moved or resized;
-  - they are minimised and restored together;
-  - when Lossless Scaling comes forward, the manager comes with it.
-
-  Resizing the manager changes its width and it stays docked; dragging it away undocks it (a notice says how to dock again). When there is no room on the chosen side of that screen, it
-  goes on the other side. The visible edges meet exactly: the invisible resize borders Windows adds are allowed for. Lossless Scaling's window is looked for once a second until it exists,
-  since it is made after the manager starts. The GUI test checks the placement: flush and as tall, the other side when there is no room, staying on the screen, never wider than it.
 - **Screenshots** (Neural Rendering's panel, Screenshots; and Ctrl+Shift+F11 in the game, which can be changed):
   - The picture is taken as it is shown, with Neural Rendering's result, the scaling and frame generation in it. It is taken where the result is added to the presented frame, so it needs no
     ReShade.
@@ -21,10 +12,9 @@ The manager and Neural Rendering now show 0.8.0.
   - It handles 8-bit, 10-bit and half-float frames (HDR highlights are cut, not tone-mapped).
   - The in-game corner marker is not shown for it, so it cannot end up in the picture.
   - `nr_settingstest` checks the pixel conversion.
-  - The first build of the dock did not move the window at display scalings other than 100% (seen live). Lossless Scaling's own manifest can stop the manager's process-wide per-monitor
-    DPI request from taking effect, and then the work area and window rectangles came in scaled pixels while DWM's frame bounds are physical. The dock now works in physical pixels
-    whatever the process is. The GUI test docks the real manager window to a stand-in "Lossless Scaling" window and checks the placement, the follow, and minimising and restoring together.
-- **The manager's window is per-monitor DPI aware in any case** (its window thread asks for it): sharp text at every display scaling, where Windows could otherwise stretch it.
+- **The manager's window is per-monitor DPI aware in any case.** Its window thread asks for it itself, because Lossless Scaling's own manifest can stop the manager's process-wide request from
+  taking effect. The text is now sharp at every display scaling, where Windows could otherwise stretch it. The GUI test runs per-monitor aware too.
+- A dock beside Lossless Scaling's window was tried in this pass and taken out again: following another program's window from the outside felt too jerky to keep.
 - **Notices appear at the bottom right**, above the status bar, instead of over the tabs, and long ones wrap.
 - The Settings tab's boxes line up at one width.
 

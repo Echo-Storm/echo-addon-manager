@@ -22,7 +22,6 @@
 
 #if __has_include("src/gui/window/placement.h")
 #define HAVE_WINDOW_MODULES 1
-#include "src/gui/window/dock.h"
 #include "src/gui/window/dpi.h"
 #include "src/gui/window/hotkey.h"
 #include "src/gui/window/placement.h"
@@ -65,54 +64,6 @@ static bool WinVisibleNow() { HWND h = Find(); return h && IsWindowVisible(h); }
 static bool WinHiddenNow() { HWND h = Find(); return h && !IsWindowVisible(h); }
 
 #ifdef HAVE_WINDOW_MODULES
-// Docking with a stand-in for Lossless Scaling's window: a window of this process titled "Lossless Scaling", shown without taking focus.
-static HWND g_standIn = nullptr, g_dockManager = nullptr;
-static RECT Frame(HWND w) {
-    RECT r{};
-    using GetAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, PVOID, DWORD);
-    static const auto getAttribute = reinterpret_cast<GetAttributeFn>(GetProcAddress(LoadLibraryW(L"dwmapi.dll"), "DwmGetWindowAttribute"));
-    if (!getAttribute || FAILED(getAttribute(w, 9, &r, sizeof r))) GetWindowRect(w, &r);
-    return r;
-}
-static bool DockedLeft() {
-    const RECT ls = Frame(g_standIn), me = Frame(g_dockManager);
-    return std::abs(me.right - ls.left) <= 1 && std::abs(me.top - ls.top) <= 1 && std::abs(me.bottom - ls.bottom) <= 1;
-}
-static bool ManagerDown() { return IsIconic(g_dockManager) != 0; }
-static bool ManagerUp() { return !IsIconic(g_dockManager) && IsWindowVisible(g_dockManager); }
-static std::string Rects() {
-    const RECT ls = Frame(g_standIn), me = Frame(g_dockManager);
-    char text[160];
-    snprintf(text, sizeof text, "stand-in %ld,%ld-%ld,%ld  manager %ld,%ld-%ld,%ld", ls.left, ls.top, ls.right, ls.bottom, me.left, me.top, me.right, me.bottom);
-    return text;
-}
-static void DockChecks(HWND manager) {
-    using namespace eam::window;
-    WNDCLASSW wc{}; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"StandInForLosslessScaling";
-    RegisterClassW(&wc);
-    g_dockManager = manager;
-    // placed with room for the manager on its left, whatever the screen
-    MONITORINFO monitor{ sizeof monitor };
-    GetMonitorInfoW(MonitorFromWindow(manager, MONITOR_DEFAULTTOPRIMARY), &monitor);
-    const RECT work = monitor.rcWork, me = Frame(manager);
-    const int x = work.left + (me.right - me.left) + 40, width = (work.right - x) - 40, height = (work.bottom - work.top) * 2 / 3;
-    if (width < 300) { printf("(dock: the screen is too small for the docking checks; skipped)\n"); return; }
-    g_standIn = CreateWindowW(wc.lpszClassName, L"Lossless Scaling", WS_OVERLAPPEDWINDOW, x, work.top + 40, width, height, nullptr, nullptr, wc.hInstance, nullptr);
-    ShowWindow(g_standIn, SW_SHOWNOACTIVATE);
-    dock::SetSide(dock::Side::Left);
-    Check("dock: the manager goes against the left of Lossless Scaling's window, as tall as it", WaitFor(DockedLeft, 3000), Rects());
-    SetWindowPos(g_standIn, nullptr, x + 10, work.top + 60, width - 10, height + 20, SWP_NOZORDER | SWP_NOACTIVATE);
-    Check("dock: it follows when that window is moved and resized", WaitFor(DockedLeft, 3000), Rects());
-    ShowWindow(g_standIn, SW_SHOWMINNOACTIVE);
-    Check("dock: it is minimised with it", WaitFor(ManagerDown, 3000));
-    ShowWindow(g_standIn, SW_SHOWNOACTIVATE);
-    Check("dock: ...and restored with it, back in place", WaitFor(ManagerUp, 3000) && WaitFor(DockedLeft, 3000), Rects());
-    if (g_failed) for (const auto& e : Logger::Instance().GetEntries(LogLevel::Trace)) if (e.source == "Dock") printf("   log: %s\n", e.message.c_str());
-    dock::SetSide(dock::Side::Off);
-    DestroyWindow(g_standIn);
-    g_standIn = nullptr;
-}
-
 static void PureChecks() {
     using namespace eam::window;
     const OnScreenFn yes = [](const RECT&) { return true; };
@@ -147,22 +98,6 @@ static void PureChecks() {
     Check("scale: the interface size is kept between 75 % and 200 %", ClampScalePercent(50) == 75 && ClampScalePercent(75) == 75 && ClampScalePercent(130) == 130 &&
           ClampScalePercent(200) == 200 && ClampScalePercent(400) == 200);
 
-    {   // docking beside Lossless Scaling's window (visible frames, on a 1920x1040 work area)
-        using namespace window::dock;
-        const RECT work{ 0, 0, 1920, 1040 }, ls{ 960, 100, 1920, 900 }, me{ 50, 50, 650, 700 };
-        const RECT left = Beside(ls, me, Side::Left, work);
-        Check("dock: on the left, flush against it, as tall as it, as wide as the manager", left.right == 960 && left.left == 360 && left.top == 100 && left.bottom == 900);
-        const RECT noRoom = Beside(ls, me, Side::Right, work);
-        Check("dock: no room on the right, so it goes on the left", noRoom.right == 960 && noRoom.left == 360);
-        const RECT centred{ 700, 0, 1200, 1040 };
-        const RECT right = Beside(centred, me, Side::Right, work);
-        Check("dock: on the right when there is room", right.left == 1200 && right.right == 1800 && right.bottom == 1040);
-        const RECT wide{ 100, 0, 1820, 1040 };
-        const RECT squeezed = Beside(wide, me, Side::Left, work);
-        Check("dock: no room on either side: it stays on the screen, overlapping", squeezed.left >= 0 && squeezed.right <= 1920 && squeezed.right - squeezed.left == 600);
-        const RECT huge{ 0, 0, 3000, 900 };
-        Check("dock: never wider than the screen", Beside(ls, huge, Side::Left, work).right - Beside(ls, huge, Side::Left, work).left == 1920);
-    }
 
     const std::string base = StatusCounts(3, 1);
     Check("status: counts", base.find("   |   3 addons, 1 on") != std::string::npos && base.rfind(EAM_PRODUCT_NAME " " EAM_VERSION_STRING, 0) == 0, base);
@@ -279,9 +214,6 @@ int wmain(int argc, wchar_t** argv) {
     Check("frames that throw while drawing are survived, and said so in the log", WindowThere() && WinVisibleNow() && logged);
     Sleep(300);
     Check("...and the window draws normally afterwards", WindowThere() && WinVisibleNow());
-#ifdef HAVE_WINDOW_MODULES
-    if (!place) { Logger::Instance().SetMinLevel(LogLevel::Trace); DockChecks(hwnd); }
-#endif
     SendMessageW(hwnd, WM_SIZE, SIZE_MINIMIZED, 0);
     Sleep(100);
     SendMessageW(hwnd, WM_HOTKEY, kHotkeyMsgId, 0);

@@ -100,7 +100,6 @@ set(GUI_SOURCES
     src/gui/window/hotkey.cpp
     src/gui/window/main_frame.cpp
     src/gui/window/placement.cpp
-    src/gui/window/dock.cpp
     src/gui/window/status_text.cpp
     src/gui/window/tray.cpp
     src/gui/window/window_device.cpp
@@ -175,7 +174,6 @@ add_executable(eam_uipreview EXCLUDE_FROM_ALL
     src/features/reshade_input.cpp
     src/features/windowed_mode.cpp
     src/core/hook_util.cpp
-    src/gui/window/dock.cpp
     src/features/windowed_dxgi.cpp
     src/gui/tabs/tab_performance.cpp
     src/gui/tabs/tab_settings.cpp

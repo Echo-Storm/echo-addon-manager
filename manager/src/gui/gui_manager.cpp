@@ -5,7 +5,6 @@
 #include "tabs/tab_addons.h"
 #include "widgets/toast.h"
 #include "window/chrome.h"
-#include "window/dock.h"
 #include "window/dpi.h"
 #include "window/hotkey.h"
 #include "window/main_frame.h"
@@ -70,7 +69,6 @@ void ShowManager(bool show) {
         ShowWindow(g.hwnd, IsIconic(g.hwnd) ? SW_RESTORE : SW_SHOW);
         SetForegroundWindow(g.hwnd);
         g.hidden = false;
-        window::dock::Refresh();
     } else {
         ShowWindow(g.hwnd, SW_HIDE);
         g.hidden = true;
@@ -134,12 +132,6 @@ LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (!g.minimized) g.device.Resize(LOWORD(lParam), HIWORD(lParam));
         return 0;
 
-    case WM_ENTERSIZEMOVE:
-    case WM_MOVING:
-    case WM_EXITSIZEMOVE:
-        window::dock::OnManagerMessage(hwnd, msg, wParam, lParam);
-        break;
-
     case WM_DROPFILES: {   // an addon (folder, .zip or .dll) dropped on the window: ask before installing it
         HDROP drop = reinterpret_cast<HDROP>(wParam);
         wchar_t path[2048];
@@ -189,7 +181,6 @@ LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             EnsureTrayIcon(hwnd);
             return 0;
         }
-        if (wParam == window::dock::kTimer) { window::dock::OnTimer(); return 0; }
         if (wParam == kUpdateTimer) {
             update::Tick();
             const std::string notice = update::TakeNotice();
@@ -243,7 +234,7 @@ void GuiManager::StartGuiThread(AddonManager* manager, std::function<void()> bef
 
 DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
     // This thread's windows are per-monitor DPI aware whatever the process is (Lossless Scaling's manifest can keep Core::Init's process-wide
-    // request from taking effect): sharp text at any display scaling, and window positions in physical pixels (the dock depends on that).
+    // request from taking effect): sharp text at any display scaling, and window positions in physical pixels.
     using SetContextFn = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
     if (const auto set = reinterpret_cast<SetContextFn>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext")))
         set(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -302,8 +293,6 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
         g.hidden = true;   // starts in the tray; the icon and the hotkey open it
         LOG_INFO("GUI", "Manager window starts hidden (Settings > Manager window)");
     }
-
-    window::dock::Start(hwnd);
 
     // Addon icons need the window's D3D11 device.
     SetIconDevice(g.device.Device());
@@ -377,7 +366,6 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
 
     KillTimer(hwnd, kUpdateTimer);
     KillTimer(hwnd, kTrayTimer);
-    window::dock::Stop();
     GpuStats::Instance().Shutdown();
     PersistPlacement();
     window::hotkey::Remove(hwnd);
