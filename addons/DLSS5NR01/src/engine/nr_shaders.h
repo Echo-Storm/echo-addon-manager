@@ -1,87 +1,81 @@
-// Model-side shaders, compiled at runtime with D3DCompile (cs_5_0). One root signature, three PSOs.
-//   t0..t3  SRVs      u0,u1 UAVs      b0 root constants (12 dwords)      s0 static linear-clamp sampler
-//
-// Per model run:  CSDown (frame -> proxy)  ->  CSFlowToMvec (LSFG flow -> mvec)  ->  [model]  ->
-//                 CSDelta (model - proxy -> the shared work-res delta)
-// The delta is applied to LS's presented frames on the D3D11 side (addon/compose11.cpp).
+// The engine's own compute passes around the model, compiled when the engine starts (cs_5_0). They share one root signature: t0..t3, u0..u1,
+// twelve root constants in b0 and a linear clamp sampler in s0 (nr_engine.cpp). Per run: CSDown (the frame to the proxy), CSFlowToMvec (LSFG's
+// flow to the model's motion vectors), the model, then CSDelta or CSDeltaSmooth (model minus proxy, into the shared delta). The delta is put
+// on the presented frames by the D3D11 side (compose11.cpp).
 #pragma once
 
 static const char* kNrModelHlsl = R"HLSL(
-SamplerState sLin : register(s0);
-Texture2D<float4>   tOrig  : register(t0);   // full-res frame
-Texture2D<float4>   tProxy : register(t1);   // work-res proxy: the frame as the model saw it
-Texture2D<float4>   tNr    : register(t2);   // CSDelta: model output
-Texture2D<float4>   tAux   : register(t3);   // CSFlowToMvec: LSFG flow (RGBA16F)
-RWTexture2D<float4> uOut   : register(u0);
-RWTexture2D<float2> uMv    : register(u1);   // CSFlowToMvec only
+SamplerState sLinear : register(s0);
+Texture2D<float4>   tFrame  : register(t0);   // CSDown: the frame, full size
+Texture2D<float4>   tProxy  : register(t1);   // CSDelta: the frame as the model saw it
+Texture2D<float4>   tModel  : register(t2);   // CSDelta: the model's output
+Texture2D<float4>   tFlow   : register(t3);   // CSFlowToMvec: LSFG's flow (RGBA16F)
+RWTexture2D<float4> uOut    : register(u0);
+RWTexture2D<float2> uMotion : register(u1);   // CSFlowToMvec only
 
-cbuffer CB : register(b0) {
-    uint2 dstSize;    // size of the texture being written
-    uint2 srcSize;    // size of the texture being read
-    uint  flags;      // bit0: a flow texture is bound
-    float flowScale;  // CSFlowToMvec: work-res pixels per flow unit
-    float smoothAmt;  // (used by kNrSmoothHlsl only)
+cbuffer Constants : register(b0) {
+    uint2 outSize;    // the texture written
+    uint2 inSize;     // the texture read
+    uint  flags;      // 1: a flow texture is bound
+    float flowScale;  // CSFlowToMvec: working-size pixels per flow unit
+    float smoothAmount;
     uint  pad0; uint4 pad1;
 };
 
-// Frame -> proxy. Four bilinear taps spread over the work texel's footprint: a plain bilinear fetch aliases past
-// a 2x reduction, and aliasing in the model's input becomes noise in its output.
+// The frame shrunk to the working size. Four bilinear reads spread over each output pixel's footprint: one read aliases once the frame is more
+// than twice the size, and aliasing in the model's input comes out of it as noise.
 [numthreads(8, 8, 1)]
 void CSDown(uint3 id : SV_DispatchThreadID) {
-    if (id.x >= dstSize.x || id.y >= dstSize.y) return;
-    float2 step = 1.0 / float2(dstSize);
-    float2 uv = (float2(id.xy) + 0.5) * step;
-    float2 q = step * 0.25;
-    float4 c = tOrig.SampleLevel(sLin, uv + float2(-q.x, -q.y), 0) + tOrig.SampleLevel(sLin, uv + float2( q.x, -q.y), 0) +
-               tOrig.SampleLevel(sLin, uv + float2(-q.x,  q.y), 0) + tOrig.SampleLevel(sLin, uv + float2( q.x,  q.y), 0);
-    uOut[id.xy] = c * 0.25;
+    if (id.x >= outSize.x || id.y >= outSize.y) return;
+    const float2 texel = 1.0 / float2(outSize);
+    const float2 uv = (float2(id.xy) + 0.5) * texel;
+    const float2 q = texel * 0.25;
+    uOut[id.xy] = 0.25 * (tFrame.SampleLevel(sLinear, uv + float2(-q.x, -q.y), 0) + tFrame.SampleLevel(sLinear, uv + float2(q.x, -q.y), 0) +
+                          tFrame.SampleLevel(sLinear, uv + float2(-q.x, q.y), 0) + tFrame.SampleLevel(sLinear, uv + float2(q.x, q.y), 0));
 }
 
-// LSFG flow (xy = current -> previous frame) -> work-res motion vectors in work-res pixels. Zeros without flow.
+// LSFG's flow (xy: current -> previous frame) as motion vectors in working-size pixels; zero without flow.
 [numthreads(8, 8, 1)]
 void CSFlowToMvec(uint3 id : SV_DispatchThreadID) {
-    if (id.x >= dstSize.x || id.y >= dstSize.y) return;
-    float2 uv = (float2(id.xy) + 0.5) / float2(dstSize);
-    uMv[id.xy] = (flags & 1u) ? tAux.SampleLevel(sLin, uv, 0).xy * flowScale : float2(0, 0);
+    if (id.x >= outSize.x || id.y >= outSize.y) return;
+    const float2 uv = (float2(id.xy) + 0.5) / float2(outSize);
+    uMotion[id.xy] = (flags & 1u) ? tFlow.SampleLevel(sLinear, uv, 0).xy * flowScale : float2(0, 0);
 }
 
-// Work-res delta = model - proxy (signed, RGBA16F).
+// The delta: the model's output minus its input, signed (RGBA16F).
 [numthreads(8, 8, 1)]
 void CSDelta(uint3 id : SV_DispatchThreadID) {
-    if (id.x >= dstSize.x || id.y >= dstSize.y) return;
-    uOut[id.xy] = float4(tNr[id.xy].rgb - tProxy[id.xy].rgb, 0);
+    if (id.x >= outSize.x || id.y >= outSize.y) return;
+    uOut[id.xy] = float4(tModel[id.xy].rgb - tProxy[id.xy].rgb, 0);
 }
 )HLSL";
 
-// Delta with temporal smoothing: the new delta (model - proxy) is blended with the previous smoothed delta, sampled
-// where this pixel was one frame ago (the work-res motion vectors, current -> previous), and written both to the shared
-// delta and to the history buffer. t0 = previous delta, t1 = proxy, t2 = model output, t3 = motion vectors.
-// flags bit1: the history is valid (not right after a reset or a rebuild).
+// The delta with smoothing: the new delta is blended with the last one, read where this pixel's content was a frame ago (the motion vectors
+// point current -> previous), and written both to the shared delta and to the history for the next run. flags 2: the history is usable (not
+// right after a reset or a new feature).
 static const char* kNrSmoothHlsl = R"HLSL(
-SamplerState sLin : register(s0);
-Texture2D<float4>   tPrev  : register(t0);
-Texture2D<float4>   tProxy : register(t1);
-Texture2D<float4>   tNr    : register(t2);
-Texture2D<float4>   tMv    : register(t3);
-RWTexture2D<float4> uOut   : register(u0);   // the shared delta
-RWTexture2D<float4> uHist  : register(u1);   // the new history
+SamplerState sLinear : register(s0);
+Texture2D<float4>   tHistory : register(t0);   // the last smoothed delta
+Texture2D<float4>   tProxy   : register(t1);
+Texture2D<float4>   tModel   : register(t2);
+Texture2D<float4>   tMotion  : register(t3);
+RWTexture2D<float4> uOut     : register(u0);   // the shared delta
+RWTexture2D<float4> uHistory : register(u1);   // the history for the next run
 
-cbuffer CB : register(b0) {
-    uint2 dstSize; uint2 srcSize;
-    uint  flags; float flowScale; float smoothAmt; uint pad0; uint4 pad1;
+cbuffer Constants : register(b0) {
+    uint2 outSize; uint2 inSize;
+    uint  flags; float flowScale; float smoothAmount; uint pad0; uint4 pad1;
 };
 
 [numthreads(8, 8, 1)]
 void CSDeltaSmooth(uint3 id : SV_DispatchThreadID) {
-    if (id.x >= dstSize.x || id.y >= dstSize.y) return;
-    float3 d = tNr[id.xy].rgb - tProxy[id.xy].rgb;
+    if (id.x >= outSize.x || id.y >= outSize.y) return;
+    float3 delta = tModel[id.xy].rgb - tProxy[id.xy].rgb;
     if (flags & 2u) {
-        const float2 mv = tMv[id.xy].xy;
-        const float2 puv = (float2(id.xy) + 0.5 + mv) / float2(dstSize);
-        const float3 pd = tPrev.SampleLevel(sLin, puv, 0).rgb;
-        d = lerp(d, pd, saturate(smoothAmt));
+        const float2 before = (float2(id.xy) + 0.5 + tMotion[id.xy].xy) / float2(outSize);
+        delta = lerp(delta, tHistory.SampleLevel(sLinear, before, 0).rgb, saturate(smoothAmount));
     }
-    uOut[id.xy] = float4(d, 0);
-    uHist[id.xy] = float4(d, 0);
+    uOut[id.xy] = float4(delta, 0);
+    uHistory[id.xy] = float4(delta, 0);
 }
 )HLSL";

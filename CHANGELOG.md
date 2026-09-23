@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.7.9 (internal, 2026-09-23)
+
+Not a public release (the manager still shows 0.7.0).
+
+**Neural Rendering rewritten as our own code.** The part of it that still matches the original DLSS 5 plugin fell from 55% at the start of this work (41% before this batch) to 11%, and
+what remains is mostly declarations whose names are the settings, and common idioms. The manager is at 11% too. The MIT notices of both projects stay where they are, beside ours. The
+addon's author on its card is now Echo-Storm, and andreiday is thanked in NOTICE.md and the README.
+
+- **The engine** (the model's own D3D12 device and queue) and **the forwarder** (the one module that may call the model file) are rewritten. The run is the same pass for pass: the same
+  descriptors, barriers, flow scale and model passes, and every model scenario gives the same results. Also:
+  - **Fixed: a GPU hang could crash Lossless Scaling.** If the GPU had not finished with a command allocator after two seconds, the engine reset it anyway, taking commands from under the
+    GPU. That frame is now skipped instead; since 0.7.5 the bridge handles a run that was not queued.
+  - **Fixed: upload buffers could be freed while the GPU still read them,** when waiting for the GPU timed out. They are now kept until it has finished.
+  - Each of the engine's passes has its own descriptors. Before, two passes shared a slot, and two descriptors were made at every run but never used.
+- **The present-time compose is rewritten**, and its shader is split into named steps: HUD areas, ghost guard, sharpening, tone, tonal ranges, colour, grain. The results are identical. The
+  scratch texture a swap chain buffer needs when it cannot be written directly is now made only for such a buffer.
+- **The model-side shaders are rewritten**, with identical maths.
+- **`addon.cpp` is split into its parts:**
+  - `runtime.cpp`: the frame path.
+  - `panel.cpp`: the settings panel.
+  - `tasks.cpp`: the requirements scan, the compatibility test and the file dialog.
+  - `settings.cpp`: the settings and saved looks.
+  - `log.cpp`: the log and the crash reports.
+  - `state.h`: what they share, with which lock guards what.
+- **The settings are table-driven.** Every setting of a look (its key, default and range) is written once. Before, the ranges were written three times (loading, applying a look, the panel)
+  and could drift apart. Saved settings and looks load as before. A new offline test, `nr_settingstest`, checks looks as text and back, the ranges, the HUD areas, names, and the settings file
+  through a stand-in host.
+- **Fixed: a data race in the panel.** The reason Neural Rendering switched itself off was read on the window thread without the lock the render thread writes it under.
+- Dead state removed: six variables that were written but never read.
+- **`nr_harness` is retired.** It was the research tool that ran the model on a still image, and the self-test and the test host cover what it checked. It is in the history at tag v0.7.8, and
+  `docs/dlssnr-knobs.md` keeps its findings.
+
+The manager:
+
+- **Fixed: an addon's settings panel that crashed was drawn again at every frame**, crashing each time and leaving the window's drawing half done. It is now switched off for the session after
+  the first crash, as a panel that passes a bad CRT argument already was. The core test checks it with a test addon whose panel crashes.
+- The About tab and the README's credits now describe what came from LosslessProxy (the idea, the addon interface, the ReShade and Windowed features) instead of the old code share.
+- **README: LosslessProxy's addons load here.** The interface has only grown at the end, the exports and the older `AddonInit` name are accepted, and the events and capability bits are the
+  same. The caution: an addon with a settings panel should be rebuilt against this SDK, because LosslessProxy did not pin its Dear ImGui.
+- **Tests run in parallel.** `tools\run_addon_tests.ps1` builds everything once, then runs the suites that can overlap (core, sample, update, installer and the Neural Rendering model
+  scenarios) all at once, and the window tests one after another beside them. It prints one line per test program. A full run takes about 7 minutes, down from 10; a change-based one about
+  1.5. `-Only` with `-All` now means those suites at full depth.
+
 ## 0.7.8 (internal, 2026-09-23)
 
 Not a public release (the manager still shows 0.7.0).

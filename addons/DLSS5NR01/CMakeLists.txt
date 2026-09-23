@@ -25,12 +25,6 @@ target_include_directories(nr_forwarder PRIVATE src)
 target_link_libraries(nr_forwarder PRIVATE d3d12)
 set_target_properties(nr_forwarder PROPERTIES OUTPUT_NAME "nvngx.dll_dlss5nr01" PREFIX "" SUFFIX ".dll")
 
-# ---- standalone harness (proof / measurement) ----
-add_executable(nr_harness src/harness/nr_harness.cpp)
-target_include_directories(nr_harness PRIVATE src ${NGX_DIR}/include)
-target_link_libraries(nr_harness PRIVATE ${NGX_LIB} d3d12 dxgi user32 gdi32 advapi32 shlwapi ole32 windowscodecs)
-add_dependencies(nr_harness nr_forwarder)
-
 # ---- the compatibility self-test: does this model file work on this graphics card? Started by the addon in its own process ----
 add_executable(nr_selftest src/selftest/nr_selftest.cpp)
 target_include_directories(nr_selftest PRIVATE src ${NGX_DIR}/include)
@@ -44,7 +38,8 @@ add_dependencies(nr_selftest nr_forwarder)
 
 # ---- the addon ----
 add_library(DLSS5NR01 SHARED
-    src/addon/addon.cpp src/addon/bridge.cpp src/addon/frame_tap.cpp
+    src/addon/addon.cpp src/addon/runtime.cpp src/addon/panel.cpp src/addon/tasks.cpp src/addon/settings.cpp src/addon/log.cpp
+    src/addon/bridge.cpp src/addon/frame_tap.cpp
     src/addon/present_hook.cpp src/addon/compose11.cpp src/addon/requirements.cpp
     src/engine/nr_engine.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -72,6 +67,10 @@ add_dependencies(nr_hosttest DLSS5NR01)
 add_executable(nr_taptest tools/tap_test.cpp src/addon/frame_tap.cpp)
 target_include_directories(nr_taptest PRIVATE src)
 target_link_libraries(nr_taptest PRIVATE d3d11)
+
+# ---- offline test of the settings and looks (the table, looks as text and back, the settings file through a stand-in host)
+add_executable(nr_settingstest tools/settings_test.cpp src/addon/settings.cpp)
+target_include_directories(nr_settingstest PRIVATE src ${CMAKE_SOURCE_DIR}/../../manager/sdk/include)
 
 # ---- offline test of the requirements checker (no model, no NVIDIA SDK needed at run time) ----
 add_executable(nr_reqtest tools/requirements_test.cpp src/addon/requirements.cpp)

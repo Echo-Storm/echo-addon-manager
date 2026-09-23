@@ -266,7 +266,7 @@ def selftest_exe_checks(nr_dir, snippet):
 def panel_sections_closed_check():
     """Every collapsible section of the Neural Rendering panel must start closed: eam::ui::SectionHeader is called without its default-open argument."""
     import re
-    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'addons', 'DLSS5NR01', 'src', 'addon', 'addon.cpp')
+    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'addons', 'DLSS5NR01', 'src', 'addon', 'panel.cpp')
     text = open(src, encoding='utf-8', errors='replace').read()
     headers = re.findall(r'eam::ui::SectionHeader\(([^;{]*?)\)\)\s*\{', text)
     opens = [h for h in headers if re.search(r',\s*true\s*$', h.strip())]

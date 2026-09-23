@@ -213,6 +213,5 @@ ImGui and a synthetic LSFG dispatch pattern on a real flip swap chain, presentin
 generated, real like LSFG X3. It checks that the tap leaves LS's frame untouched, that the compose
 lands on presented frames, and that a resolution switch is followed.
 
-`nr_harness` (`src/harness/nr_harness.cpp`) runs the model without Lossless Scaling on an
-image at 1080p, 1440p and 4K, GPU-timed, and drives every parameter the snippet reads. Its
-findings are in [dlssnr-knobs.md](dlssnr-knobs.md).
+What the model reads, and what each setting does, was measured with a still-image harness
+(retired in 0.7.9, in the history at tag v0.7.8); the findings are in [dlssnr-knobs.md](dlssnr-knobs.md).

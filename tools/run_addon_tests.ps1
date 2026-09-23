@@ -50,8 +50,9 @@ $suites = [ordered]@{
                    Build = @('installer', 'setup_core', 'setup_cli', 'pack_payload', 'EchoAddonManagerSetup');
                    Script = "$root\installer\tests\setup_exe_test.ps1" }
     nr        = @{ When = '^addons/DLSS5NR01/(src|tools|CMakeLists)|^manager/sdk/|^tools/run_hosttest_matrix';
-                   Build = @('nr', 'nr_reqtest', 'nr_taptest', 'DLSS5NR01', 'nr_hosttest', 'nr_selftest');
+                   Build = @('nr', 'nr_reqtest', 'nr_taptest', 'nr_settingstest', 'DLSS5NR01', 'nr_hosttest', 'nr_selftest');
                    Runs = @(@('Neural Rendering requirements check', "$nrBuild\Release\nr_reqtest.exe", @()),
+                            @('Neural Rendering settings and looks', "$nrBuild\Release\nr_settingstest.exe", @()),
                             @('Neural Rendering frame tap', "$nrBuild\Release\nr_taptest.exe", @()));
                    Matrix = $true }
 }
@@ -61,8 +62,8 @@ if ($List) { foreach ($n in $suites.Keys) { Write-Host ("{0,-10} when {1}" -f $n
 
 # which suites
 $chosen = @()
-if ($All) { $chosen = @($suites.Keys) }
-elseif ($Only.Count) { $chosen = @($Only | ForEach-Object { $_ -split ',' } | Where-Object { $_ }) }
+if ($Only.Count) { $chosen = @($Only | ForEach-Object { $_ -split ',' } | Where-Object { $_ }) }   # with -All: these suites at full depth
+elseif ($All) { $chosen = @($suites.Keys) }
 else {
     $changed = @(git -C $root diff --name-only HEAD) + @(git -C $root ls-files --others --exclude-standard) | Where-Object { $_ -and $_ -notmatch '\.md$' }
     foreach ($n in $suites.Keys) { if ($changed | Where-Object { $_ -match $suites[$n].When }) { $chosen += $n } }
@@ -71,45 +72,80 @@ else {
 foreach ($n in $chosen) { if (-not $suites.Contains($n)) { Write-Host "No suite called '$n' (-List shows them)."; exit 2 } }
 Write-Host ("suites: {0}" -f ($chosen -join ', '))
 
-$fail = 0
-function Run($name, $exe, $testArgs) {
-    Write-Host "== $name"
-    if (-not (Test-Path $exe)) { Write-Host "  FAIL  not built: $exe"; $script:fail++; return }
-    $out = & $exe @testArgs 2>&1 | Out-String
-    $out.TrimEnd() -split "`r?`n" | Where-Object { $_ -cmatch '^\s*FAIL\b|FAILED' } | ForEach-Object { Write-Host "  $_" }
-    if ($LASTEXITCODE -ne 0) { $script:fail++; Write-Host "  FAILED (exit $LASTEXITCODE)" }
-}
-function Build([string]$which, [string[]]$targets) {
-    $dir = $buildDirs[$which]
-    if ($which -eq 'nr' -and -not (Test-Path "$dir\CMakeCache.txt")) { Write-Host '  (Neural Rendering is not configured here: it needs the NVIDIA SDK; skipped)'; return $false }
-    if ($which -eq 'installer' -and -not (Test-Path "$dir\CMakeCache.txt")) { & cmake -S "$root\installer" -B $dir -G 'Visual Studio 17 2022' -A x64 2>&1 | Select-String -Pattern 'error' | ForEach-Object { Write-Host $_.Line } }
-    & cmake --build $dir --config Release --target @targets 2>&1 | Select-String -Pattern ' error ' | ForEach-Object { Write-Host $_.Line }
-    return $true
-}
-
 $total = [Diagnostics.Stopwatch]::StartNew()
+
+# 1. Build: one build per build folder with every target the chosen suites need, MSBuild using all cores.
+$targetsByDir = [ordered]@{}
 foreach ($n in $chosen) {
-    $s = $suites[$n]; $clock = [Diagnostics.Stopwatch]::StartNew()
-    Write-Host "#### $n"
-    if (-not (Build $s.Build[0] @($s.Build | Select-Object -Skip 1))) { continue }
-    foreach ($r in @($s.Runs)) { if ($r) { Run $r[0] $r[1] $r[2] } }
-    if ($s.Script) {
-        Write-Host '== Setup exe end to end'
-        $out = & powershell -NoProfile -File $s.Script -Root $root 2>&1 | Out-String
-        $out.TrimEnd() -split "`r?`n" | Where-Object { $_ -cmatch '^\s*FAIL\b|FAILED' } | ForEach-Object { Write-Host "  $_" }
-        if ($LASTEXITCODE -ne 0) { $fail++; Write-Host "  FAILED (exit $LASTEXITCODE)" }
-    }
+    $b = $suites[$n].Build
+    if (-not $targetsByDir.Contains($b[0])) { $targetsByDir[$b[0]] = @() }
+    $targetsByDir[$b[0]] += @($b | Select-Object -Skip 1)
+}
+$skipped = @{}
+foreach ($which in $targetsByDir.Keys) {
+    $dir = $buildDirs[$which]
+    if ($which -eq 'nr' -and -not (Test-Path "$dir\CMakeCache.txt")) { Write-Host '(Neural Rendering is not configured here: it needs the NVIDIA SDK; its suite is skipped)'; $skipped[$which] = $true; continue }
+    if ($which -eq 'installer' -and -not (Test-Path "$dir\CMakeCache.txt")) { & cmake -S "$root\installer" -B $dir -G 'Visual Studio 17 2022' -A x64 2>&1 | Select-String -Pattern 'error' | ForEach-Object { Write-Host $_.Line } }
+    [string[]]$targets = @($targetsByDir[$which] | Select-Object -Unique)
+    & cmake --build $dir --config Release --parallel --target @targets 2>&1 | Select-String -Pattern ' error ' | ForEach-Object { Write-Host $_.Line }
+}
+Write-Host ("built in {0:0} s" -f $total.Elapsed.TotalSeconds)
+
+# 2. What to run. The window tests (gui, features, setupexe) open windows and use the hotkey, so they run one after another; everything else
+#    (including the model scenarios on the GPU) runs beside them, all at once.
+$serialSuites = @('gui', 'features', 'setupexe')
+$runs = @()
+foreach ($n in $chosen) {
+    $s = $suites[$n]
+    if ($skipped[$s.Build[0]]) { continue }
+    $serial = $serialSuites -contains $n
+    foreach ($r in @($s.Runs)) { if ($r) { $runs += [pscustomobject]@{ Name = $r[0]; Exe = $r[1]; Args = @($r[2]); Serial = $serial; Filter = '^\s*FAIL\b|FAILED' } } }
+    if ($s.Script) { $runs += [pscustomobject]@{ Name = 'Setup exe end to end'; Exe = 'powershell'; Args = @('-NoProfile', '-File', $s.Script, '-Root', $root); Serial = $true; Filter = '^\s*FAIL\b|FAILED' } }
     if ($s.Matrix) {
-        if (-not $env:LS_DIR) { Write-Host '  (model scenarios skipped: set LS_DIR to a Lossless Scaling folder with nvngx_dlssnr.dll)' }
+        if (-not $env:LS_DIR) { Write-Host '(model scenarios skipped: set LS_DIR to a Lossless Scaling folder with nvngx_dlssnr.dll)' }
         else {
-            [string[]]$matrixArgs = @("$root\tools\run_hosttest_matrix.py") + $(if ($All) { @() } else { @('--quick') })
-            Write-Host ('== Neural Rendering model scenarios ({0})' -f $(if ($All) { 'all' } else { 'quick set' }))
-            $out = & python $matrixArgs 2>&1 | Out-String
-            $out.TrimEnd() -split "`r?`n" | Where-Object { $_ -cmatch '^\s*FAIL\b|SCENARIO|rror' } | ForEach-Object { Write-Host "  $_" }
-            if ($LASTEXITCODE -ne 0) { $fail++; Write-Host "  FAILED (exit $LASTEXITCODE)" }
+            $matrixArgs = @("$root\tools\run_hosttest_matrix.py") + $(if ($All) { @() } else { @('--quick') })
+            $runs += [pscustomobject]@{ Name = ('Neural Rendering model scenarios ({0})' -f $(if ($All) { 'all' } else { 'quick set' })); Exe = 'python'; Args = $matrixArgs; Serial = $false; Filter = '^\s*FAIL\b|SCENARIOS? FAILED|rror' }
         }
     }
-    Write-Host ("   {0}: {1:0} s" -f $n, $clock.Elapsed.TotalSeconds)
+}
+
+$outDir = Join-Path $env:TEMP ("eam_tests_{0}" -f $PID)
+New-Item -ItemType Directory -Force $outDir | Out-Null
+function Start-Run($r, $i) {
+    $r | Add-Member -NotePropertyName Out -NotePropertyValue (Join-Path $outDir "$i.txt") -Force
+    if ($r.Exe -notin @('python', 'powershell') -and -not (Test-Path $r.Exe)) { $r | Add-Member -NotePropertyName Missing -NotePropertyValue $true -Force; return }
+    $argText = ($r.Args | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
+    $start = @{ FilePath = $r.Exe; NoNewWindow = $true; PassThru = $true; RedirectStandardOutput = $r.Out; RedirectStandardError = "$($r.Out).err" }
+    if ($argText) { $start.ArgumentList = $argText }
+    $p = Start-Process @start
+    $null = $p.Handle   # keeps the exit code readable after the process ends
+    $r | Add-Member -NotePropertyName Process -NotePropertyValue $p -Force
+}
+function Finish-Run($r) {
+    if ($r.Process) { $r.Process.WaitForExit() }
+}
+
+$i = 0
+foreach ($r in ($runs | Where-Object { -not $_.Serial })) { Start-Run $r ($i++) }
+foreach ($r in ($runs | Where-Object { $_.Serial })) { Start-Run $r ($i++); Finish-Run $r }
+foreach ($r in $runs) { Finish-Run $r }
+
+# 3. One line per test program, and the failing checks of any that failed.
+$fail = 0
+foreach ($r in $runs) {
+    if ($r.Missing) { Write-Host ("  FAIL  {0}: not built ({1})" -f $r.Name, $r.Exe); $fail++; continue }
+    $code = $r.Process.ExitCode
+    $seconds = ($r.Process.ExitTime - $r.Process.StartTime).TotalSeconds
+    Write-Host ("  {0,-4}  {1}  ({2:0} s)" -f $(if ($code -eq 0) { 'ok' } else { 'FAIL' }), $r.Name, $seconds)
+    if ($code -ne 0) {
+        $fail++
+        $text = @(Get-Content $r.Out -ErrorAction SilentlyContinue) + @(Get-Content "$($r.Out).err" -ErrorAction SilentlyContinue)
+        $text | Where-Object { $_ -cmatch $r.Filter } | Select-Object -First 20 | ForEach-Object { Write-Host "        $_" }
+        Write-Host "        (exit $code; full output in $($r.Out))"
+    }
 }
 Write-Host ("{0:0} s in all" -f $total.Elapsed.TotalSeconds)
-if ($fail) { Write-Host "$fail test program(s) failed"; exit 1 } else { Write-Host 'all addon tests passed' }
+if ($fail) { Write-Host "$fail test program(s) failed"; exit 1 }
+Remove-Item -LiteralPath $outDir -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host 'all addon tests passed'

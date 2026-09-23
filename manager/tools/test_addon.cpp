@@ -57,7 +57,7 @@ EAM_EXPORT uint32_t GetAddonCapabilities() {
     return EAM_CAP_HAS_SETTINGS | (Mode() == "restart" ? EAM_CAP_REQUIRES_RESTART : 0);
 }
 
-EAM_EXPORT void AddonRenderSettings() { Note("settings"); }
+EAM_EXPORT void AddonRenderSettings() { Note("settings"); if (Mode() == "crash_panel") Fault(); }
 
 EAM_EXPORT bool AddonInterceptResource(const wchar_t* name, const wchar_t*, const void** outData, uint32_t* outSize) {
     if (name && std::wstring(name) == L"test.shader") {

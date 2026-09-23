@@ -1,0 +1,53 @@
+// The addon's settings, and its saved looks.
+//
+// Every setting of the look (the model's knobs, the picture's, the HUD areas) is described once, in a table in settings.cpp: its key in the
+// settings file, its default and its range. Loading, saving, and turning a look into text and back all go through that table, so a range is
+// written in one place. A look is kept as "key=value;key=value" text under "preset.<name>", with the names joined by '|' in "presetNames"
+// (the settings file has no way to list keys); its HUD areas are "l,t,r,b/l,t,r,b".
+#pragma once
+#include "engine/nr_engine.h"
+#include <string>
+#include <utility>
+#include <vector>
+#include <windows.h>
+
+struct IHost;
+
+namespace nr {
+
+struct Config {
+    bool enabled = true;
+    NrParams p;                          // the look, and the few model settings that are not part of a look
+    bool freshFlow = true;               // run the model once LSFG has this frame's own motion (off: at capture, with the frame before's)
+    bool lsFirst = true;                 // give Lossless Scaling's GPU work priority over the model's
+    bool hotkeys = true;                 // Ctrl+Shift + an F key, read at every present
+    int keyAB = VK_F6, keySplit = VK_F7, keySharpDn = VK_F8, keySharpUp = VK_F9, keyPreset = VK_F10;
+    bool gameAuto = true;                // switch to a program's look when it takes focus
+    std::vector<std::pair<std::string, std::string>> games;   // lower-case exe name, look name
+    int tapMode = 0;                     // 0 automatic, 1 by hand
+    int frameSlot = -1;                  // -1 automatic (the highest large texture slot)
+    std::string tickSig, tapSig;         // the passes chosen by hand
+    float watchdogMs = 80.0f;
+    std::string snippetPath;             // empty: nvngx_dlssnr.dll in the Lossless Scaling folder
+};
+
+struct Look { std::string name, data; };
+
+// A look as text, and back. ApplyLook changes only the settings the text names (so a look saved by an older version applies what it has)
+// and keeps each within its range; false when the text names none.
+std::string LookToText(const NrParams& p);
+bool ApplyLook(const std::string& text, NrParams& p);
+std::string HudToText(const NrParams& p);
+void HudFromText(const std::string& text, NrParams& p);
+// A name that fits the stores: no '|', ';' or '=', no trailing spaces, at most 40 characters.
+std::string CleanName(std::string name);
+
+// The settings file, through the host.
+struct Loaded { Config config; std::vector<Look> looks; int compareStart = 0; float splitStart = 0.5f; };
+Loaded LoadSettings(IHost* host, const char* addonId);
+void SaveSettings(IHost* host, const char* addonId, const Config& config, const std::vector<Look>& looks);
+// The saved text for a look or a program is cleared when it is deleted (the list no longer names it, the text would linger).
+void ForgetLook(IHost* host, const char* addonId, const std::string& name);
+void ForgetGame(IHost* host, const char* addonId, const std::string& exe);
+
+} // namespace nr

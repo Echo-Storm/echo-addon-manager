@@ -1,0 +1,94 @@
+// Offline test of the addon's settings (settings.cpp): looks as text and back, their ranges, the HUD areas, names, and the settings file
+// through a stand-in host. No graphics card, no model.
+#include "addon/settings.h"
+#include <eam/addon_sdk.h>
+#include <cmath>
+#include <cstdio>
+#include <map>
+#include <string>
+
+static int g_failed = 0;
+static void Check(const char* what, bool ok, const std::string& detail = "") {
+    printf("%s  %s%s%s\n", ok ? "PASS" : "FAIL", what, detail.empty() ? "" : "  (", detail.empty() ? "" : (detail + ")").c_str());
+    if (!ok) ++g_failed;
+}
+
+// The settings file as the manager keeps it: text under a key.
+struct StandInHost : IHost {
+    std::map<std::string, std::string> values; int saves = 0;
+    void Log(EamLogLevel, const char*) override {}
+    const char* GetConfig(const char*, const char* key, const char* dflt) override { auto it = values.find(key); return it == values.end() ? dflt : it->second.c_str(); }
+    void SetConfig(const char*, const char* key, const char* value) override { values[key] = value; }
+    void SaveConfig() override { ++saves; }
+    uint32_t GetHostVersion() override { return EAM_API_VERSION_INT; }
+    void SubscribeEvent(uint32_t, EamEventCallback, void*) override {}
+    void UnsubscribeEvent(uint32_t, EamEventCallback) override {}
+    void PublishEvent(uint32_t, const void*, uint32_t) override {}
+    void* GetD3D11Device() override { return nullptr; }
+    void* GetD3D11DeviceContext() override { return nullptr; }
+    void SetPreDispatchCallback(EamPreDispatchCallback, void*) override {}
+    void SetPostDispatchCallback(EamPostDispatchCallback, void*) override {}
+    void* GetCurrentComputeShader() override { return nullptr; }
+    uint32_t GetDispatchCount() override { return 0; }
+    void SetStatus(const char*, const char*, int) override {}
+    void PublishMetric(const char*, const char*, double, const char*) override {}
+    void* GetDispatchingContext() override { return nullptr; }
+};
+
+static bool Same(float a, float b) { return std::fabs(a - b) < 1e-5f; }
+
+int main() {
+    using namespace nr;
+    printf("== looks as text\n");
+    NrParams a;
+    a.style = 2; a.intensity = 0.7f; a.localStructure = -1.5f; a.passes = 3; a.useFlow = false; a.workingScale = 0.6f; a.sharpen = 0.1f;
+    a.shadows = -0.4f; a.grain = 0.25f; a.grainSize = 2; a.deltaSmooth = 0.3f; a.ghostGuard = 0.8f; a.hudCount = 2;
+    a.hud[0][0] = 0.1f; a.hud[0][1] = 0.2f; a.hud[0][2] = 0.3f; a.hud[0][3] = 0.4f; a.hud[1][0] = 0.5f; a.hud[1][1] = 0.6f; a.hud[1][2] = 0.9f; a.hud[1][3] = 1.0f;
+    NrParams b;
+    Check("a look written as text reads back as the same look", ApplyLook(LookToText(a), b) && LookToText(b) == LookToText(a), LookToText(b));
+    Check("...every setting of it", b.style == 2 && Same(b.intensity, 0.7f) && Same(b.localStructure, -1.5f) && b.passes == 3 && !b.useFlow && Same(b.workingScale, 0.6f) &&
+          Same(b.shadows, -0.4f) && Same(b.grainSize, 2) && Same(b.deltaSmooth, 0.3f) && Same(b.ghostGuard, 0.8f) && b.hudCount == 2 && Same(b.hud[1][2], 0.9f));
+    NrParams c;
+    ApplyLook("sharpen=0.5", c);
+    Check("a look that names only some settings changes only those", Same(c.sharpen, 0.5f) && Same(c.intensity, NrParams().intensity) && c.passes == NrParams().passes);
+    NrParams d;
+    ApplyLook("passes=9;workingScale=0.05;saturation=7;grainSize=0;deltaSmooth=1;style=5;brightness=-3", d);
+    Check("values out of range are kept to their range", d.passes == 4 && Same(d.workingScale, 0.25f) && Same(d.saturation, 2.0f) && Same(d.grainSize, 1.0f) &&
+          Same(d.deltaSmooth, 0.95f) && d.style == 2 && Same(d.brightness, -0.3f));
+    NrParams e;
+    Check("text that names no known setting is not a look", !ApplyLook("colour=5;;=;nothing", e) && LookToText(e) == LookToText(NrParams()));
+    Check("the settings that are not part of a look stay out of it", LookToText(a).find("debugView") == std::string::npos && LookToText(a).find("flowUnit") == std::string::npos);
+
+    printf("== HUD areas\n");
+    NrParams h;
+    HudFromText("0,0,0.5,0.5/0.2,0.2,0.2,0.9/-1,-1,2,2/junk/0.6,0.6,1,1/0.1,0.1,0.2,0.2/0.3,0.3,0.4,0.4/0.5,0.5,0.6,0.6/0.7,0.7,0.8,0.8", h);
+    Check("areas are read, one with no width is left out, and at most six are kept", h.hudCount == 6 && Same(h.hud[1][0], 0.0f) && Same(h.hud[1][2], 1.0f), std::to_string(h.hudCount));
+    Check("...and one reaching past the screen is pulled inside it", Same(h.hud[1][3], 1.0f));
+
+    printf("== names\n");
+    Check("a name loses the characters the stores use, trailing spaces, and anything past 40 characters",
+          CleanName("a|b;c=d  ") == "a-b-c-d" && CleanName(std::string(60, 'x')).size() == 40);
+
+    printf("== the settings file\n");
+    StandInHost host;
+    Loaded fresh = LoadSettings(&host, "DLSS5NR01");
+    Check("with nothing saved, every setting is its default", LookToText(fresh.config.p) == LookToText(NrParams()) && fresh.config.enabled && fresh.config.freshFlow &&
+          fresh.config.keyAB == VK_F6 && fresh.looks.empty());
+    Config config; config.p = a; config.enabled = false; config.keySplit = VK_F11; config.games = { { "wowb.exe", "Night" } };
+    config.tapMode = 1; config.tapSig = "1,2,3"; config.snippetPath = "D:\\model.dll"; config.watchdogMs = 55;
+    SaveSettings(&host, "DLSS5NR01", config, { { "Night", LookToText(a) }, { "Day", "sharpen=0.2" } });
+    Check("saving writes the file once", host.saves == 1);
+    Loaded back = LoadSettings(&host, "DLSS5NR01");
+    Check("what was saved loads back", LookToText(back.config.p) == LookToText(a) && !back.config.enabled && back.config.keySplit == VK_F11 && back.config.tapMode == 1 &&
+          back.config.tapSig == "1,2,3" && back.config.snippetPath == "D:\\model.dll" && Same(back.config.watchdogMs, 55));
+    Check("...with the looks, in order, and the programs", back.looks.size() == 2 && back.looks[0].name == "Night" && back.looks[1].data == "sharpen=0.2" &&
+          back.config.games.size() == 1 && back.config.games[0].second == "Night");
+    host.values["saturation"] = "9"; host.values["passes"] = "-4"; host.values["debugView"] = "12";
+    Loaded wild = LoadSettings(&host, "DLSS5NR01");
+    Check("values edited out of range in the file are kept to their range", Same(wild.config.p.saturation, 2.0f) && wild.config.p.passes == 1 && wild.config.p.debugView == 5);
+    ForgetLook(&host, "DLSS5NR01", "Night");
+    Check("a deleted look's text is cleared", host.values["preset.Night"].empty());
+
+    printf("\n%s\n", g_failed ? "SETTINGS TEST FAILED" : "SETTINGS TEST PASSED");
+    return g_failed ? 1 : 0;
+}

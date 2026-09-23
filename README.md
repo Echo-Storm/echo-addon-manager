@@ -190,14 +190,22 @@ The installer is its own small CMake project in [`installer/`](installer/).
 
 ## Writing an addon
 
+**Addons written for LosslessProxy work here too.** The addon interface began as LosslessProxy's and has only grown at the end: an addon built for LosslessProxy 0.3.0
+exports the same functions (including the older `AddonInit` name), gets the same `IHost` with its calls in the same places, and receives the same events and capability bits, so the DLL
+loads unchanged; drop its folder into `addons\`. One caution: addons draw their settings with the manager's Dear ImGui, and LosslessProxy built against whatever
+the docking branch was at the time, while this manager pins one commit. An addon with a settings panel should be rebuilt against this SDK (`manager/sdk/include/eam`, renamed
+from `lsproxy`; see the changelog for 0.7.5) before its panel is trusted; if the panel faults anyway, the manager switches that panel off instead of going down with it.
+The promise for the interface, and a test that holds today's host to the 1.0 layout, are in [docs/api-compatibility.md](docs/api-compatibility.md).
+
 Start from the [sample addon](examples/SampleAddon): a small, commented, tested addon with settings, a panel in the manager's look, a status line and a metric. Then see [docs/addon-authors.md](docs/addon-authors.md) for the exports, the host interface, live status and metrics, the shared look and the rules that are easy to trip over, and [docs/api-compatibility.md](docs/api-compatibility.md) for what stays stable.
 
 ## Credits
 
-Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta**, and we are grateful for it. Just under a third
-of the manager's code (mainly the proxy DLL and the DirectX 11 and shader hooks) is still theirs, and the ReShade and Windowed features started there as
-addons; the rest, including how addons are found, checked and loaded, the settings file, the event system, the window and the live status and metrics,
-was written or rewritten since (`tools/measure_original_share.py` measures it). Neural Rendering is by **andreiday**, extended here. The full list, with licences, is in [NOTICE.md](NOTICE.md). Lossless Scaling belongs to its author; this project is unofficial.
+Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta**, and we are grateful for it: its idea of a proxy
+`Lossless.dll` with addons, its addon interface (which is why its addons still load here) and the ReShade and Windowed features, which started there as addons.
+The manager's code has since been rewritten; about a tenth of its lines still match the original's, mostly declarations and common idioms (`tools/measure_original_share.py`
+measures it). Neural Rendering began as **andreiday**'s DLSS 5 plugin for LosslessProxy and has been rewritten and extended here; about a tenth of its lines still
+match theirs, mostly declarations and common idioms. The full list, with licences, is in [NOTICE.md](NOTICE.md). Lossless Scaling belongs to its author; this project is unofficial.
 
 If it is useful to you, you can [support it on Ko-fi](https://ko-fi.com/xechostormx).
 

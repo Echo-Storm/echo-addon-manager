@@ -16,7 +16,7 @@ namespace guarded {
 uint32_t Capabilities(HMODULE module);   // 0 when the DLL has no GetAddonCapabilities, or it faults
 bool Initialize(const AddonExports& fn, IHost* host, ImGuiContext* ctx, void* alloc, void* release, void* userData);   // false = it faulted
 void Shutdown(const AddonExports& fn);
-void RenderSettings(const AddonExports& fn);
+bool RenderSettings(const AddonExports& fn);   // false when the panel faulted
 bool Intercept(const AddonExports& fn, const wchar_t* name, const wchar_t* type, const void** data, uint32_t* size);
 const char* Text(const char* (*getter)());   // nullptr when the getter is missing or faults
 

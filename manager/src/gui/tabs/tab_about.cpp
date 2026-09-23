@@ -90,11 +90,9 @@ void RenderTabAbout() {
 
     ImGui::Dummy(ImVec2(0, S(14)));
     eam::ui::SectionLabel("Thanks");
-    ImGui::TextWrapped("This began as LosslessProxy by FrankBarretta (MIT), and we are grateful for it. Just under a third of this program's code "
-                       "is still theirs: mainly the part that loads into Lossless Scaling and hooks DirectX 11 and its shaders, plus the "
-                       "ReShade and Windowed features, which began as addons of theirs and are built in now. Everything else was written or rewritten since: how "
-                       "addons are found, checked, loaded and switched, the settings file, the event system, the window, tabs, "
-                       "Performance, backup, install and remove, the tray and the shared look.");
+    ImGui::TextWrapped("This began as LosslessProxy by FrankBarretta (MIT), and we are grateful for it: the idea of a proxy Lossless.dll with "
+                       "addons, the addon interface (which is why LosslessProxy's addons still load here), and the ReShade and Windowed features, "
+                       "which began as addons of theirs and are built in now. The code has since been rewritten.");
     ImGui::Dummy(ImVec2(0, S(4)));
     if (eam::ui::Button("The original project", eam::ui::icons::kExternal, eam::ui::ButtonKind::Flat)) OpenUrl("https://github.com/FrankBarretta/LosslessProxy");
     ImGui::Dummy(ImVec2(0, S(10)));

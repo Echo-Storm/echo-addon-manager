@@ -780,6 +780,12 @@ int main(int argc, char** argv) {
         Check("a loaded addon's settings panel is drawn", Calls(alpha, "settings") == 1);
         mgr.RenderAddonSettings(IndexOf(mgr, "beta"));
         Check("an unloaded addon's settings panel is not", Calls(beta, "settings") == 0);
+        WriteFile(alpha / "mode.txt", "crash_panel");   // read at every call: its panel now crashes
+        mgr.RenderAddonSettings(IndexOf(mgr, "alpha"));
+        mgr.RenderAddonSettings(IndexOf(mgr, "alpha"));
+        Check("a settings panel that crashes is survived, and switched off after the first time", Calls(alpha, "settings") == 2 && Find(mgr, "alpha")->settingsFaulted &&
+              Find(mgr, "alpha")->errorMessage.find("crashed") != std::string::npos, Find(mgr, "alpha")->errorMessage);
+        fs::remove(alpha / "mode.txt");
         for (int i = 0; i < (int)mgr.GetAddons().size(); ++i) mgr.ToggleAddon(i, false);
         Check("switched-off addons are not asked for resources", !mgr.InterceptResource(L"test.shader", L"TEXT", &data, &size));
         mgr.ToggleAddon(IndexOf(mgr, "alpha"), true);

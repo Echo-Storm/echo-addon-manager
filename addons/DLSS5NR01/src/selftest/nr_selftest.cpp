@@ -6,7 +6,7 @@
 // --report writes a short text file to share (card, driver, Windows, the model file's name, version and size, the result, and a line for the table in
 // docs/model-compatibility.md): no folders, no user name, no hash. It is written whatever the result is.
 //
-// It follows the same path as the engine (and nr_harness, the research tool): a Direct3D 12 device on the NVIDIA card, the driver's NGX core, the
+// It follows the same path as the engine: a Direct3D 12 device on the NVIDIA card, the driver's NGX core, the
 // helper DLL (nvngx.dll_dlss5nr01.dll beside this program) which is the only caller the model accepts, the model's own initialisation, creating
 // feature 18 at a small size, and evaluating it on a synthetic picture. It passes when the model created its feature and changed the picture.
 //

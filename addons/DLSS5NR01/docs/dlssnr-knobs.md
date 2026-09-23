@@ -1,6 +1,6 @@
 # What the DLSSNR model actually listens to
 
-Measured 2026-09-03 with `nr_harness.exe` (build/Release) against the 310.8 snippet on an RTX 3090,
+Measured 2026-09-03 with `nr_harness.exe` (a research tool, retired in 0.7.9; in the history at tag v0.7.8) against the 310.8 snippet on an RTX 3090,
 2560x1440 RGBA8, `--style 0 --intensity 1 --strength 1` as the baseline. "vs in" is the mean absolute
 pixel difference from the input frame (0..255), "vs base" the difference from the baseline output.
 Bit-identical means max difference 0 over the whole frame.

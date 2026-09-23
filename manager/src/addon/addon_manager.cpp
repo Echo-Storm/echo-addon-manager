@@ -339,14 +339,14 @@ void AddonManager::RenderAddonSettings(int index) {
     AddonInfo& addon = m_addons[index];
     if (!addon.IsLoaded() || !addon.exports.renderSettings || addon.settingsFaulted) return;
 
+    // The panel is drawn every frame: one that faults, or passes a bad argument to a CRT function (after which what it does is undefined), would
+    // do it again sixty times a second, each time leaving the window's drawing half done. It is switched off for the session after the first.
     const uint32_t invalidBefore = InvalidParameterCount();
-    guarded::RenderSettings(addon.exports);
-    // A bad argument to a CRT function makes that call fail and leaves whatever the addon does next undefined, and the panel is drawn
-    // every frame, so it is switched off for the session after the first such event.
-    if (InvalidParameterCount() != invalidBefore) {
+    const bool drawn = guarded::RenderSettings(addon.exports);
+    if (!drawn || InvalidParameterCount() != invalidBefore) {
         addon.settingsFaulted = true;
-        addon.errorMessage = "Its settings panel hit an invalid parameter and was turned off (see Logs)";
-        LOG_ERROR("AddonManager", "Settings panel of '%s' hit an invalid CRT parameter; not drawing it again this session", addon.id.c_str());
+        addon.errorMessage = drawn ? "Its settings panel hit an invalid parameter and was turned off (see Logs)" : "Its settings panel crashed and was turned off (see Logs)";
+        LOG_ERROR("AddonManager", "Settings panel of '%s' %s; not drawing it again this session", addon.id.c_str(), drawn ? "hit an invalid CRT parameter" : "faulted");
     }
 }
 

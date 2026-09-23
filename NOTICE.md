@@ -14,7 +14,7 @@ new. The original copyright and licence are in [LICENSE](LICENSE), which must st
 |------|--------|---------|
 | `manager/` | Echo-Storm, on FrankBarretta's LosslessProxy | MIT, [LICENSE](LICENSE) |
 | `manager/src/features` (ReShade passthrough, Windowed mode) | FrankBarretta's addons, reworked and built in by Echo-Storm | MIT, [LICENSE](LICENSE) |
-| `addons/DLSS5NR01` | andreiday, extended by Echo-Storm | MIT, its `LICENSE` |
+| `addons/DLSS5NR01` | Echo-Storm; it began as andreiday's DLSS 5 plugin for LosslessProxy, with thanks | MIT, its `LICENSE` |
 | `tools/` | Echo-Storm | MIT |
 
 ## Third-party code that is built in or fetched at build time

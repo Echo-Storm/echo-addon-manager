@@ -40,10 +40,11 @@ void Shutdown(const AddonExports& fn) {
     __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-void RenderSettings(const AddonExports& fn) {
-    if (!fn.renderSettings) return;
+bool RenderSettings(const AddonExports& fn) {
+    if (!fn.renderSettings) return true;
     __try { fn.renderSettings(); }
-    __except (EXCEPTION_EXECUTE_HANDLER) {}
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    return true;
 }
 
 bool Intercept(const AddonExports& fn, const wchar_t* name, const wchar_t* type, const void** data, uint32_t* size) {

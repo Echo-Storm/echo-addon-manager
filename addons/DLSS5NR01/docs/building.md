@@ -33,7 +33,6 @@ Outputs in `build\Release`:
 | `DLSS5NR01.dll` | the Echo Addon Manager addon |
 | `nvngx.dll_dlss5nr01.dll` | the forwarder, the only module that calls the DLSSNR snippet |
 | `nr_hosttest.exe` | offline test host for the addon |
-| `nr_harness.exe` | standalone model harness |
 
 Install by copying the two DLLs and `addon.json` into
 `<Lossless Scaling>\addons\DLSS5NR01\` while Lossless Scaling is closed.
@@ -55,16 +54,10 @@ swap chain on the display GPU in LSFG's X3 order. It prints the addon's log and 
 `key=value` pairs override addon settings (for example `workingScale=0.5`). The second argument
 is ignored and only kept for old scripts. It writes `present_gen.bmp` beside the exe.
 
-## Harness
+## Harness (retired)
 
-```
-build\Release\nr_harness.exe image.png [--only 1440p] [--iters N] [--style S] [--intensity I] ...
-```
-
-Runs the model on an image without Lossless Scaling, GPU-timed, and writes `in_<size>.png` /
-`out_<size>.png` beside the exe. The full option list and what each knob measurably does are in
-[dlssnr-knobs.md](dlssnr-knobs.md). `--trace` logs every parameter the snippet reads; `--perfscan`
-queries the snippet's scaling-ratio callback for every performance mode.
+`nr_harness`, the research tool that ran the model on a still image, was retired in 0.7.9: the self-test (`nr_selftest.exe`) and the test host cover what it checked.
+It is in the history at tag v0.7.8 for new knob measurements ([dlssnr-knobs.md](dlssnr-knobs.md) lists what it found).
 
 ## Release package
 
