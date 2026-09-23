@@ -242,6 +242,11 @@ void GuiManager::StartGuiThread(AddonManager* manager, std::function<void()> bef
 }
 
 DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
+    // This thread's windows are per-monitor DPI aware whatever the process is (Lossless Scaling's manifest can keep Core::Init's process-wide
+    // request from taking effect): sharp text at any display scaling, and window positions in physical pixels (the dock depends on that).
+    using SetContextFn = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    if (const auto set = reinterpret_cast<SetContextFn>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext")))
+        set(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     auto& cfg = ConfigManager::Instance();
     if (g.beforeAddons) g.beforeAddons();
 

@@ -47,8 +47,19 @@ HWND FindLossless() {
     return found;
 }
 
+// Every rectangle here in physical pixels: DWM's frame bounds always are, and the rest (window rectangles, the work area, SetWindowPos) are
+// only while the calling thread is per-monitor DPI aware. The process may not be (Lossless Scaling's own manifest decides), and at any display
+// scaling but 100% the two would not match.
+struct PhysicalPixels {
+    using SetContextFn = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    SetContextFn set = reinterpret_cast<SetContextFn>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"));
+    DPI_AWARENESS_CONTEXT before = set ? set(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) : nullptr;
+    ~PhysicalPixels() { if (set && before) set(before); }
+};
+
 void Place() {
     if (!g_manager || !g_ls || g_side == Side::Off || !IsWindowVisible(g_manager) || IsIconic(g_ls) || IsIconic(g_manager)) return;
+    const PhysicalPixels physical;
     if (IsZoomed(g_manager)) ShowWindow(g_manager, SW_RESTORE);
     MONITORINFO monitor{ sizeof monitor };
     GetMonitorInfoW(MonitorFromWindow(g_ls, MONITOR_DEFAULTTONEAREST), &monitor);
@@ -56,8 +67,12 @@ void Place() {
     RECT window{}, frame = VisibleFrame(g_manager);
     GetWindowRect(g_manager, &window);
     const RECT border{ frame.left - window.left, frame.top - window.top, window.right - frame.right, window.bottom - frame.bottom };
-    SetWindowPos(g_manager, nullptr, want.left - border.left, want.top - border.top, (want.right - want.left) + border.left + border.right,
+    const BOOL moved = SetWindowPos(g_manager, nullptr, want.left - border.left, want.top - border.top, (want.right - want.left) + border.left + border.right,
                  (want.bottom - want.top) + border.top + border.bottom, SWP_NOZORDER | SWP_NOACTIVATE);
+    const RECT ls = VisibleFrame(g_ls), after = VisibleFrame(g_manager);
+    LOG_DEBUG("Dock", "ls %ld,%ld-%ld,%ld work %ld,%ld-%ld,%ld want %ld,%ld-%ld,%ld border %ld,%ld,%ld,%ld moved %d -> %ld,%ld-%ld,%ld", ls.left, ls.top, ls.right, ls.bottom,
+              monitor.rcWork.left, monitor.rcWork.top, monitor.rcWork.right, monitor.rcWork.bottom, want.left, want.top, want.right, want.bottom,
+              border.left, border.top, border.right, border.bottom, moved, after.left, after.top, after.right, after.bottom);
 }
 
 void Attach(HWND ls) {
@@ -68,6 +83,7 @@ void Attach(HWND ls) {
 
 void CALLBACK OnEvent(HWINEVENTHOOK, DWORD event, HWND w, LONG object, LONG child, DWORD, DWORD) {
     if (g_side == Side::Off || !g_ls || w != g_ls || object != OBJID_WINDOW || child != CHILDID_SELF) return;
+    if (event != EVENT_OBJECT_LOCATIONCHANGE) LOG_DEBUG("Dock", "event 0x%04lx (manager %s)", event, IsIconic(g_manager) ? "minimised" : "shown");
     switch (event) {
     case EVENT_OBJECT_LOCATIONCHANGE:
         Place();

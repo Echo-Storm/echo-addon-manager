@@ -21,6 +21,10 @@ The manager and Neural Rendering now show 0.8.0.
   - It handles 8-bit, 10-bit and half-float frames (HDR highlights are cut, not tone-mapped).
   - The in-game corner marker is not shown for it, so it cannot end up in the picture.
   - `nr_settingstest` checks the pixel conversion.
+  - The first build of the dock did not move the window at display scalings other than 100% (seen live). Lossless Scaling's own manifest can stop the manager's process-wide per-monitor
+    DPI request from taking effect, and then the work area and window rectangles came in scaled pixels while DWM's frame bounds are physical. The dock now works in physical pixels
+    whatever the process is. The GUI test docks the real manager window to a stand-in "Lossless Scaling" window and checks the placement, the follow, and minimising and restoring together.
+- **The manager's window is per-monitor DPI aware in any case** (its window thread asks for it): sharp text at every display scaling, where Windows could otherwise stretch it.
 - **Notices appear at the bottom right**, above the status bar, instead of over the tabs, and long ones wrap.
 - The Settings tab's boxes line up at one width.
 
