@@ -44,6 +44,8 @@ Agreed as worth doing, in no particular order; none of them is started. They com
   time and GPU headroom it already measures. It never touches the look (the style and picture sliders). Room to grow: per-game budgets, a quality floor it never goes under, pausing during loading screens,
   and a short history of what it changed and why.
 - **Per-game profiles, applied automatically.** Neural Rendering already notices which game runs; the manager's own settings and the limiter could follow the same way.
+- **A display mode per game.** Many TVs run 120 Hz only below 4K (1440p 120 Hz against 4K 60 Hz). A per-game choice (for example "World of Warcraft: Forever: 2560×1440 at 120 Hz")
+  that the manager switches to when the game starts scaling and puts back when it ends, with Lossless Scaling's frame generation target to match.
 - **A before/after capture.** One key saves a matching pair of screenshots with and without Neural Rendering, for comparing looks and for bug reports.
 - **A session summary.** When a game closes: average and worst frame time, peak temperature and power, how long the limiter or the auto mode was active. Real numbers for the "tested with" list.
 - **A stuck-state watchdog.** If Lossless Scaling's frames stop arriving while a game runs, say so and offer to restart Neural Rendering's engine, instead of leaving the person to guess.
