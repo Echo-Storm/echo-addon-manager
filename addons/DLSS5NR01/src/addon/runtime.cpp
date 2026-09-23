@@ -11,6 +11,7 @@
 #include "addon/state.h"
 #include "addon/log.h"
 #include "addon/present_hook.h"
+#include "addon/screenshot.h"
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -85,6 +86,7 @@ void ReleaseDecision(TapDecision& d) {
 }
 
 void ForgetDevice() {   // under g_frameMutex
+    screenshot::Forget();
     g_bridge.Shutdown(); g_compose.Shutdown(); g_tap.Reset();
     g_seen.clear(); g_tapDevice = nullptr; g_lsChain = nullptr; g_otherChain = nullptr;
 }
@@ -145,6 +147,7 @@ void LogProgress(const NrStats& st) {
 }
 
 void OnPresent(IDXGISwapChain* sc);
+void Compose(IDXGISwapChain* sc);
 
 // The engine runs on the card Lossless Scaling's frames come from. Lossless Scaling makes devices on every card and may run a pass on more than
 // one for a moment, so it moves only after frames have kept coming from another card for a while.
@@ -272,17 +275,19 @@ void ApplyLookNow(const std::string& name, const std::string& data, const char* 
 }
 
 void ReadHotkeys() {
-    bool on; int keys[5];
+    bool on; int keys[6];
     { std::lock_guard<std::mutex> lock(g_settingsMutex);   // only what is needed: a copy of the whole Config would allocate at every present
-      on = g_config.hotkeys; keys[0] = g_config.keyAB; keys[1] = g_config.keySplit; keys[2] = g_config.keySharpDn; keys[3] = g_config.keySharpUp; keys[4] = g_config.keyPreset; }
-    static bool wasDown[5] = {};
+      on = g_config.hotkeys; keys[0] = g_config.keyAB; keys[1] = g_config.keySplit; keys[2] = g_config.keySharpDn; keys[3] = g_config.keySharpUp; keys[4] = g_config.keyPreset;
+      keys[5] = g_config.keyShot; }
+    static bool wasDown[6] = {};
     static int lookCursor = -1;
     const bool modifiers = on && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 6; ++i) {
         const bool down = modifiers && keys[i] > 0 && (GetAsyncKeyState(keys[i]) & 0x8000);
         if (down && !wasDown[i]) {
             if (i == 0) { g_compare = g_compare == 2 ? 0 : 2; ShowMarker(g_compare == 2 ? 2 : 1); Log("hotkey: %s", g_compare == 2 ? "original only" : "enhanced"); }
             else if (i == 1) { g_compare = g_compare == 1 ? 0 : 1; ShowMarker(g_compare == 1 ? 3 : 1); Log("hotkey: %s", g_compare == 1 ? "split view" : "enhanced"); }
+            else if (i == 5) { screenshot::Request(); Log("hotkey: screenshot"); }   // no corner square: it would be in the picture
             else if (i == 4) {
                 Look next;
                 { std::lock_guard<std::mutex> lock(g_settingsMutex); if (!g_looks.empty()) { lookCursor = (lookCursor + 1) % static_cast<int>(g_looks.size()); next = g_looks[lookCursor]; } }
@@ -355,6 +360,14 @@ void Present(IDXGISwapChain* sc) {
     ++g_lsPresents;
     ReadHotkeys();
     if ((g_lsPresents & 31u) == 0) FollowFocus();
+    Compose(sc);
+    std::string game;
+    { std::lock_guard<std::mutex> lock(g_textMutex); game = g_focusExe; }
+    screenshot::OnPresent(g_bridge.Context(), sc, game);   // after the compose: the picture as it is shown
+}
+
+// The newest finished delta onto the frame about to be shown (Lossless Scaling's swap chain, under g_frameMutex).
+void Compose(IDXGISwapChain* sc) {
     const PresentInfo shown = g_tap.NotePresent();
     ++g_presentStages[2];
     if (shown.target < 0) return;

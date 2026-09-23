@@ -21,7 +21,8 @@ struct Config {
     bool freshFlow = true;               // run the model once LSFG has this frame's own motion (off: at capture, with the frame before's)
     bool lsFirst = true;                 // give Lossless Scaling's GPU work priority over the model's
     bool hotkeys = true;                 // Ctrl+Shift + an F key, read at every present
-    int keyAB = VK_F6, keySplit = VK_F7, keySharpDn = VK_F8, keySharpUp = VK_F9, keyPreset = VK_F10;
+    int keyAB = VK_F6, keySplit = VK_F7, keySharpDn = VK_F8, keySharpUp = VK_F9, keyPreset = VK_F10, keyShot = VK_F11;
+    std::string screenshotFolder;        // empty: Pictures\Lossless Scaling
     bool gameAuto = true;                // switch to a program's look when it takes focus
     std::vector<std::pair<std::string, std::string>> games;   // lower-case exe name, look name
     int tapMode = 0;                     // 0 automatic, 1 by hand

@@ -1,4 +1,6 @@
 #include "toast.h"
+#include "status_bar.h"
+#include <algorithm>
 #include "../gui_scale.h"
 #include "eam/widgets.h"
 #include <deque>
@@ -54,7 +56,12 @@ void ToastRender() {
     const ImVec2 screen = ImGui::GetIO().DisplaySize;
     ImDrawList* draw = ImGui::GetForegroundDrawList();
 
-    float top = S(10.0f);
+    // Bottom right, the newest lowest, just above the status bar: clear of the tabs and of the page's own controls at the top. Long messages
+    // wrap rather than run past the window's edge.
+    float bottom = screen.y - StatusBarHeight() - S(10.0f);
+    const float wrap = std::min(screen.x * 0.7f, S(520.0f));
+    ImFont* const font = ImGui::GetFont();
+    const float fontSize = ImGui::GetFontSize();
     int shown = 0;
     for (int i = (int)g_toasts.size() - 1; i >= 0 && shown < kMostShown; --i) {
         Toast& t = g_toasts[i];
@@ -64,17 +71,17 @@ void ToastRender() {
         const float alpha = Opacity(t);
         const Colours c = ColoursFor(t.type, alpha);
 
-        const ImVec2 text = ImGui::CalcTextSize(t.text.c_str());
+        const ImVec2 text = ImGui::CalcTextSize(t.text.c_str(), nullptr, false, wrap);
         const float pad = S(12.0f);
         const float w = text.x + pad * 2;
         const float h = text.y + pad * 2;
-        const ImVec2 min(screen.x - w - S(15.0f), top), max(min.x + w, min.y + h);
+        const ImVec2 min(screen.x - w - S(15.0f), bottom - h), max(min.x + w, bottom);
 
         draw->AddRectFilled(min, max, ImGui::GetColorU32(c.fill), S(4.0f));
         draw->AddRect(min, max, ImGui::GetColorU32(c.edge), S(4.0f));
-        draw->AddText(ImVec2(min.x + pad, min.y + pad), ImGui::GetColorU32(ImVec4(1, 1, 1, alpha)), t.text.c_str());
+        draw->AddText(font, fontSize, ImVec2(min.x + pad, min.y + pad), ImGui::GetColorU32(ImVec4(1, 1, 1, alpha)), t.text.c_str(), nullptr, wrap);
 
-        top += h + S(5.0f);
+        bottom -= h + S(5.0f);
         ++shown;
     }
 

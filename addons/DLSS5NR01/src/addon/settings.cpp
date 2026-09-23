@@ -148,7 +148,8 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.freshFlow = flag("freshFlow", true);
     c.hotkeys = flag("hotkeys", true);
     c.keyAB = integer("keyAB", VK_F6); c.keySplit = integer("keySplit", VK_F7); c.keySharpDn = integer("keySharpDn", VK_F8);
-    c.keySharpUp = integer("keySharpUp", VK_F9); c.keyPreset = integer("keyPreset", VK_F10);
+    c.keySharpUp = integer("keySharpUp", VK_F9); c.keyPreset = integer("keyPreset", VK_F10); c.keyShot = integer("keyShot", VK_F11);
+    c.screenshotFolder = text("screenshotFolder");
     c.gameAuto = flag("gameAuto", true);
     for (const std::string& exe : SplitList(text("gameList"))) {
         const std::string look = text("game." + exe);
@@ -179,7 +180,8 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
 
     putFlag("enabled", c.enabled); putFlag("lsFirst", c.lsFirst); putFlag("freshFlow", c.freshFlow); putFlag("hotkeys", c.hotkeys);
     put("keyAB", std::to_string(c.keyAB)); put("keySplit", std::to_string(c.keySplit)); put("keySharpDn", std::to_string(c.keySharpDn));
-    put("keySharpUp", std::to_string(c.keySharpUp)); put("keyPreset", std::to_string(c.keyPreset));
+    put("keySharpUp", std::to_string(c.keySharpUp)); put("keyPreset", std::to_string(c.keyPreset)); put("keyShot", std::to_string(c.keyShot));
+    put("screenshotFolder", c.screenshotFolder);
     putFlag("gameAuto", c.gameAuto);
     std::vector<std::string> exes;
     for (const auto& [exe, look] : c.games) { exes.push_back(exe); put("game." + exe, look); }

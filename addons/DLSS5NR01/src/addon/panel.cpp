@@ -2,6 +2,7 @@
 // back (Commit) when something changed. The sections start closed; the person opens what they need.
 #include "addon/state.h"
 #include "addon/present_hook.h"
+#include "addon/screenshot.h"
 #include "imgui.h"
 #include <eam/widgets.h>
 #include <windows.h>
@@ -333,10 +334,34 @@ void DrawPanel() {
             if (ImGui::Combo(label, &idx, names, 12)) { *vk = VK_F1 + idx; changed = true; }
         };
         fkey("Before / after", &c.keyAB); fkey("Split view", &c.keySplit); fkey("Sharpen -", &c.keySharpDn); fkey("Sharpen +", &c.keySharpUp); fkey("Next preset", &c.keyPreset);
+        fkey("Screenshot", &c.keyShot);
         auto fname = [](int vk) { static char b[8][8]; static int n = 0; char* o = b[n++ & 7]; snprintf(o, 8, "F%d", vk - VK_F1 + 1); return (const char*)o; };
-        Note("Now: Ctrl+Shift+%s before/after  |  %s split  |  %s / %s sharpen - / +  |  %s next preset  (%s)",
-            fname(c.keyAB), fname(c.keySplit), fname(c.keySharpDn), fname(c.keySharpUp), fname(c.keyPreset), c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
+        Note("Now: Ctrl+Shift+%s before/after  |  %s split  |  %s / %s sharpen - / +  |  %s next preset  |  %s screenshot  (%s)",
+            fname(c.keyAB), fname(c.keySplit), fname(c.keySharpDn), fname(c.keySharpUp), fname(c.keyPreset), fname(c.keyShot), c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
         Note("A small square appears in the screen's top-left corner for a moment: green enhanced, red original, amber split, blue sharpen changed, purple preset.");
+    }
+    if (eam::ui::SectionHeader("Screenshots")) {
+        Note("Saves the picture as you see it, with Neural Rendering, the scaling and frame generation in it, as a PNG. It is taken at the next frame Lossless Scaling shows, so the game must be running and scaled.");
+        const bool busy = screenshot::Busy();
+        if (busy) ImGui::BeginDisabled();
+        if (eam::ui::Button(busy ? "Taking it..." : "Take a screenshot", eam::ui::icons::kCheck, eam::ui::ButtonKind::Primary)) screenshot::Request();
+        if (busy) ImGui::EndDisabled();
+        Tip("In the game, Ctrl+Shift + the Screenshot key (see Compare and hotkeys) does the same.");
+        const std::wstring folder = screenshot::Folder();
+        const int size = WideCharToMultiByte(CP_UTF8, 0, folder.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string folderText(size > 0 ? size - 1 : 0, '\0');
+        if (size > 1) WideCharToMultiByte(CP_UTF8, 0, folder.c_str(), -1, folderText.data(), size, nullptr, nullptr);
+        ImGui::TextWrapped("Folder: %s", folderText.c_str());
+        const bool choosing = screenshot::Choosing();
+        if (choosing) ImGui::BeginDisabled();
+        if (ImGui::SmallButton(choosing ? "Waiting for the folder dialog..." : "Choose folder...")) screenshot::ChooseFolder();
+        if (choosing) ImGui::EndDisabled();
+        Tip("Where the screenshots go. The first time, a folder called Lossless Scaling in your Pictures folder.");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Open folder")) { CreateDirectoryW(folder.c_str(), nullptr); ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }
+        if (!c.screenshotFolder.empty()) { ImGui::SameLine(); if (ImGui::SmallButton("Use Pictures again")) { c.screenshotFolder.clear(); changed = true; } }
+        bool ok; const std::string result = screenshot::LastResult(ok);
+        if (!result.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", result.c_str()); ImGui::PopStyleColor(); }
     }
     if (eam::ui::SectionHeader("Games (a look per program)")) {
         std::string cur; { std::lock_guard<std::mutex> lk(g_textMutex); cur = g_focusExe; }

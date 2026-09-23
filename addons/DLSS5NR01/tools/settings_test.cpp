@@ -1,6 +1,7 @@
 // Offline test of the addon's settings (settings.cpp): looks as text and back, their ranges, the HUD areas, names, and the settings file
 // through a stand-in host. No graphics card, no model.
 #include "addon/settings.h"
+#include "addon/screenshot.h"
 #include <eam/addon_sdk.h>
 #include <cmath>
 #include <cstdio>
@@ -88,6 +89,20 @@ int main() {
     Check("values edited out of range in the file are kept to their range", Same(wild.config.p.saturation, 2.0f) && wild.config.p.passes == 1 && wild.config.p.debugView == 5);
     ForgetLook(&host, "DLSS5NR01", "Night");
     Check("a deleted look's text is cleared", host.values["preset.Night"].empty());
+
+    printf("== screenshot pixels\n");
+    {
+        unsigned char out[8];
+        const unsigned char bgra[8] = { 10, 20, 30, 0, 40, 50, 60, 7 };
+        Check("BGRA8 is kept as it is, with full alpha", screenshot::ToBgra8(DXGI_FORMAT_B8G8R8A8_UNORM, bgra, 2, out) && out[0] == 10 && out[2] == 30 && out[3] == 255 && out[6] == 60 && out[7] == 255);
+        const unsigned char rgba[4] = { 10, 20, 30, 0 };
+        Check("RGBA8 has red and blue swapped", screenshot::ToBgra8(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, rgba, 1, out) && out[0] == 30 && out[1] == 20 && out[2] == 10 && out[3] == 255);
+        const uint32_t tenBit = 1023u | (512u << 10) | (0u << 20);   // red full, green half, blue none
+        Check("10-bit colour comes down to 8 bits", screenshot::ToBgra8(DXGI_FORMAT_R10G10B10A2_UNORM, &tenBit, 1, out) && out[2] == 255 && out[1] == 128 && out[0] == 0);
+        const uint16_t half[4] = { 0x3C00, 0x3800, 0x4000, 0x3C00 };   // 1.0, 0.5, 2.0 (cut to 1), 1.0
+        Check("half-float colour is kept to 0..1", screenshot::ToBgra8(DXGI_FORMAT_R16G16B16A16_FLOAT, half, 1, out) && out[2] == 255 && out[1] == 128 && out[0] == 255);
+        Check("a format it cannot convert is refused", !screenshot::ToBgra8(DXGI_FORMAT_R32_FLOAT, half, 1, out));
+    }
 
     printf("\n%s\n", g_failed ? "SETTINGS TEST FAILED" : "SETTINGS TEST PASSED");
     return g_failed ? 1 : 0;

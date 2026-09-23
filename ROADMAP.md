@@ -3,7 +3,7 @@
 What 1.0 should mean: someone who has never seen this project can **install it, keep it up to date, understand what it does and does not do, and get help**, without
 editing files by hand, and the promises it makes (the addon API, the settings file, safety) are stable. This page is honest about where each part stands.
 
-Status on 2026-09-21, at version 0.7.0 (the current work is on `main`).
+Status on 2026-09-23, at version 0.8.0 (the current work is on `main`).
 
 | # | For 1.0 | State | Notes |
 |---|---------|-------|-------|
@@ -12,7 +12,7 @@ Status on 2026-09-21, at version 0.7.0 (the current work is on `main`).
 | 3 | **A frozen, documented addon API** | **Done** on `main` | The API is at 1.0.0, documented (`docs/addon-authors.md`), with a written compatibility promise (`docs/api-compatibility.md`: what will and will not change before 2.0) and a sample addon (`examples/SampleAddon`) that builds against the SDK and is tested against the real manager. |
 | 4 | **Every shipped feature checked in real use** | **Needs you** | Neural Rendering, the window, the tray and hotkey, and the exit path are checked live. Not yet: ReShade passthrough (hotkey and auto-click) and Windowed mode (the virtual display after a restart) have only passed offline tests. A short live try settles both. |
 | 5 | **More than one game** | **Needs you** | Everything was developed and tested with World of Warcraft: Forever (the beta). A few other games, each with a line in the docs, would make the "tested with" note honest for more than one title. |
-| 6 | **Signed files** | **Needs you** | Unsigned files make antivirus and SmartScreen nervous (`nr_selftest.exe` and the installer most of all). Free signing for open-source projects exists (SignPath); it needs the maintainer to apply. Optional, but it removes the biggest source of friction. |
+| 6 | **Signed files** | Not before 1.0 | Decided: the files stay unsigned until after 1.0. SmartScreen's warning and the way past it are explained in the README. |
 | 7 | **Help when something goes wrong** | **Done** on `main` | A troubleshooting table in the README, a questions-and-answers page (`docs/faq.md`), the diagnostics zip and the log. More entries will come from real questions. |
 | 8 | **Crash safety** | Done | Exit-path tests, isolated addon calls, the compatibility test in its own process, atomic settings writes. |
 | 9 | **Model compatibility data** | **Done** on `main`, needs data | The self-test writes a shareable report (`--report`, and an *Open the compatibility report* button) and `docs/model-compatibility.md` is the table. It has one row (the maintainer's card); more come from other people's reports. |
@@ -33,11 +33,11 @@ What it has to do (and what it must never do):
 - **Say the one thing people must do themselves**: provide their own `nvngx_dlssnr.dll` (never shipped, never downloaded), and offer to place it.
 - **Be honest about being unsigned**, and be a single file.
 
-## For the 0.8 interface pass
+## Done in the 0.8 interface pass
 
-- **A screenshot button and key**, with a folder of your choice. It saves the picture you actually see (after Neural Rendering, scaling and frame generation), taken where Neural
-  Rendering adds its result, so it needs no ReShade. ReShade's own screenshots show the game's frame before any of that. The before/after capture below can build on it.
-- The version shown in the manager moves from 0.7.0 to 0.8.
+- Screenshots of the picture as it is shown, with a key and a folder of your choice (Neural Rendering's panel).
+- Docking the manager beside Lossless Scaling's window.
+- The version shown moved to 0.8.
 
 ## Ideas for after 1.0
 

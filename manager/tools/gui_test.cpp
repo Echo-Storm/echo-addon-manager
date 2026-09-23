@@ -21,6 +21,7 @@
 
 #if __has_include("src/gui/window/placement.h")
 #define HAVE_WINDOW_MODULES 1
+#include "src/gui/window/dock.h"
 #include "src/gui/window/dpi.h"
 #include "src/gui/window/hotkey.h"
 #include "src/gui/window/placement.h"
@@ -96,6 +97,23 @@ static void PureChecks() {
 
     Check("scale: the interface size is kept between 75 % and 200 %", ClampScalePercent(50) == 75 && ClampScalePercent(75) == 75 && ClampScalePercent(130) == 130 &&
           ClampScalePercent(200) == 200 && ClampScalePercent(400) == 200);
+
+    {   // docking beside Lossless Scaling's window (visible frames, on a 1920x1040 work area)
+        using namespace window::dock;
+        const RECT work{ 0, 0, 1920, 1040 }, ls{ 960, 100, 1920, 900 }, me{ 50, 50, 650, 700 };
+        const RECT left = Beside(ls, me, Side::Left, work);
+        Check("dock: on the left, flush against it, as tall as it, as wide as the manager", left.right == 960 && left.left == 360 && left.top == 100 && left.bottom == 900);
+        const RECT noRoom = Beside(ls, me, Side::Right, work);
+        Check("dock: no room on the right, so it goes on the left", noRoom.right == 960 && noRoom.left == 360);
+        const RECT centred{ 700, 0, 1200, 1040 };
+        const RECT right = Beside(centred, me, Side::Right, work);
+        Check("dock: on the right when there is room", right.left == 1200 && right.right == 1800 && right.bottom == 1040);
+        const RECT wide{ 100, 0, 1820, 1040 };
+        const RECT squeezed = Beside(wide, me, Side::Left, work);
+        Check("dock: no room on either side: it stays on the screen, overlapping", squeezed.left >= 0 && squeezed.right <= 1920 && squeezed.right - squeezed.left == 600);
+        const RECT huge{ 0, 0, 3000, 900 };
+        Check("dock: never wider than the screen", Beside(ls, huge, Side::Left, work).right - Beside(ls, huge, Side::Left, work).left == 1920);
+    }
 
     const std::string base = StatusCounts(3, 1);
     Check("status: counts", base.find("   |   3 addons, 1 on") != std::string::npos && base.rfind(EAM_PRODUCT_NAME " " EAM_VERSION_STRING, 0) == 0, base);
