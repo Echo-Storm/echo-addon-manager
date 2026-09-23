@@ -140,12 +140,8 @@ HRESULT WINAPI CreateDXGIFactory1Hook(REFIID riid, void** factory) {
         LOG_DEBUG("Windowed", "Factory wrapped (IDXGIFactory6)");
         return hr;
     }
-    IDXGIFactory2* factory2 = nullptr;
-    if (SUCCEEDED(real->QueryInterface(__uuidof(IDXGIFactory2), (void**)&factory2))) {
-        *factory = new ProxyDXGIFactory((IDXGIFactory6*)factory2);
-        real->Release();
-        LOG_WARN("Windowed", "Factory wrapped (IDXGIFactory2 fallback)");
-    }
+    // Every supported Windows has IDXGIFactory6. Wrapping an older factory as if it were one would call methods it does not have: leave it as it is.
+    LOG_WARN("Windowed", "This Windows has no IDXGIFactory6; the factory is left unwrapped and Windowed mode does not apply");
     return hr;
 }
 

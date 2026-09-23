@@ -126,9 +126,17 @@ void ClickAndRepress(bool turningOn) {
     wait(200);
 }
 
+// The manager's own window is in this process too, but it is no ReShade overlay. Restyling it from here would send messages to the manager's
+// thread, which may be the very thread waiting in Stop() for this watcher to end: leave it (and its children) alone.
+bool IsManagerWindow(HWND hwnd) {
+    wchar_t cls[64] = {};
+    GetClassNameW(hwnd, cls, 64);
+    return wcscmp(cls, L"EchoAddonManagerClass") == 0;
+}
+
 void ProcessOwnWindows() {
     EnumWindows([](HWND top, LPARAM) -> BOOL {
-        if (BelongsToUs(top) && IsWindowVisible(top)) {
+        if (BelongsToUs(top) && IsWindowVisible(top) && !IsManagerWindow(top)) {
             ProcessWindow(top);
             EnumChildWindows(top, [](HWND child, LPARAM) -> BOOL { ProcessWindow(child); return TRUE; }, 0);
         }

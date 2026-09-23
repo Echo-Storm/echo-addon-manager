@@ -45,10 +45,11 @@ struct WindowThread {
     std::thread t;
     std::atomic<HWND> hwnd{ nullptr };
     std::atomic<DWORD> tid{ 0 };
+    const wchar_t* cls = L"STATIC";
     void Start() {
         t = std::thread([this] {
             tid = GetCurrentThreadId();
-            HWND h = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC", L"features test", WS_POPUP, -32000, -32000, 200, 100, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+            HWND h = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, cls, L"features test", WS_POPUP, -32000, -32000, 200, 100, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
             ShowWindow(h, SW_SHOWNOACTIVATE);
             hwnd = h;
             MSG m;
@@ -71,6 +72,17 @@ static void ReShadeOnce(bool layerOnTop) {
     HWND hwnd = wt.hwnd;
     Check("test window is visible (off-screen, not activated)", IsWindowVisible(hwnd) != 0);
     const WNDPROC original = (WNDPROC)GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
+    // The manager's own window is in the same process but is no ReShade overlay: it must be left alone (restyling it from the watcher sends messages to
+    // the manager's thread, which may be the very thread waiting for the watcher to stop)
+    WNDCLASSEXW wc = { sizeof wc };
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = L"EchoAddonManagerClass";
+    RegisterClassExW(&wc);
+    WindowThread own;
+    own.cls = L"EchoAddonManagerClass";
+    own.Start();
+    const WNDPROC ownOriginal = (WNDPROC)GetWindowLongPtrW(own.hwnd, GWLP_WNDPROC);
 
     features::SetOn(idx, true);   // starts the watcher
     features::reshade::ForcePassthroughForTest(true);
@@ -81,6 +93,8 @@ static void ReShadeOnce(bool layerOnTop) {
     const WNDPROC hooked = (WNDPROC)GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
     Check("passthrough on: the window was subclassed", hooked != original);
     Check("passthrough on: the status says so", features::Status(idx) == "Passthrough ON");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    Check("passthrough on: the manager's own window is left alone", (WNDPROC)GetWindowLongPtrW(own.hwnd, GWLP_WNDPROC) == ownOriginal);
 
     if (layerOnTop) { g_below = hooked; g_topHits = 0; SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)TopProc); }
 
@@ -100,6 +114,7 @@ static void ReShadeOnce(bool layerOnTop) {
         Check("messages still work through the chain", g_topHits.load() > 0 && r == 0);
     }
     wt.Stop();
+    own.Stop();
     features::reshade::RestoreAll();
 }
 

@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.7.1 (internal, 2026-09-22)
 
-A bug sweep of the manager itself (the code that runs inside Lossless Scaling), with a failing test written for each bug before it was fixed, and dead code removed.
+Not a public release: the manager still shows 0.7.0 (the shown version moves at 0.8). A bug sweep of the manager itself (the code that runs inside Lossless Scaling), with a failing test written for each bug before it was fixed, and dead code removed.
 
 - **Loading settings from a file no longer gets undone by the restart it asks for.** The running addons still hold their old settings, and Neural Rendering writes all of its settings back when it
   shuts down, so the restart put the old saved looks, per-game looks and sliders back over the imported ones. After an import, every later write (by an addon or by the manager) now waits for the restart,
@@ -17,6 +17,13 @@ A bug sweep of the manager itself (the code that runs inside Lossless Scaling), 
 - **One bad frame no longer takes the manager window, and Lossless Scaling, down.** An error while drawing or while handling a click (a file that could not be written, a folder that vanished) is caught,
   the half-drawn frame is unwound with Dear ImGui's error recovery, and the window carries on with a note in the log and a toast.
 - Two settings imports in the same second no longer overwrite each other's copy of the previous settings.
+- **ReShade passthrough could freeze the manager window when switched off.** Its watcher restyled every window of the process, the manager's own included; switching passthrough off makes
+  the manager's thread wait for the watcher, and a restyle in flight at that moment waits for the manager's thread. The manager's window is now left alone (it is no ReShade overlay).
+- **Windowed mode no longer wraps an older DXGI factory as a newer one.** Where `IDXGIFactory6` is missing it used to pass an `IDXGIFactory2` off as one, which would call methods that object does not
+  have; it now leaves the factory unwrapped and says so in the log (every supported Windows has `IDXGIFactory6`).
+- Neural Rendering no longer copies its whole settings (strings and the per-game list included) at every presented frame just to read the five hotkeys.
+- `ROADMAP.md` has an "Ideas for after 1.0" list: a multi-condition GPU limiter, an auto mode for Neural Rendering, per-game profiles, a before/after capture, a session summary, a stuck-state watchdog
+  and a DLSS 4.5 addon.
 - **Dead code removed:** the "LS1 logic" memory patches inherited from the original project (19 hard-coded addresses for an old Lossless Scaling build, which could never be applied because the hooks are
   installed before any addon's capabilities are known; the capability bit stays in the SDK as reserved, with no effect), two DirectX 11 vtable hooks that only passed calls through
   (`CSSetShaderResources`, `CSSetUnorderedAccessViews`: one less patch in Lossless Scaling and one less hop per call), an unused `ReloadAddons`, and a per-dispatch counter in Neural Rendering that was

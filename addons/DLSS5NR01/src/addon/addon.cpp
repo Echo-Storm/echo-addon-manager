@@ -620,10 +620,11 @@ static void ShowMarker(uint32_t id) { g_marker = id; g_markerUntil = GetTickCoun
 // Ctrl+Shift + F-key. GetAsyncKeyState is global, so these work while the game has focus; the modifier pair keeps
 // them off the game's own bindings. Edge-triggered: one action per press.
 static void PollHotkeys() {
-    Config c; { std::lock_guard<std::mutex> lk(g_cfgMu); c = g_cfg; }
+    // Runs at every present: only the six fields it needs are read (a copy of the whole Config allocates its strings and game list each frame)
+    bool hotkeys; int keys[5];
+    { std::lock_guard<std::mutex> lk(g_cfgMu); hotkeys = g_cfg.hotkeys; keys[0] = g_cfg.keyAB; keys[1] = g_cfg.keySplit; keys[2] = g_cfg.keySharpDn; keys[3] = g_cfg.keySharpUp; keys[4] = g_cfg.keyPreset; }
     static bool prev[5] = {};
-    const bool mods = c.hotkeys && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
-    const int keys[5] = { c.keyAB, c.keySplit, c.keySharpDn, c.keySharpUp, c.keyPreset };
+    const bool mods = hotkeys && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
     for (int i = 0; i < 5; ++i) {
         const bool down = mods && keys[i] > 0 && (GetAsyncKeyState(keys[i]) & 0x8000);
         if (down && !prev[i]) {

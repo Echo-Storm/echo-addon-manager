@@ -33,6 +33,23 @@ What it has to do (and what it must never do):
 - **Say the one thing people must do themselves**: provide their own `nvngx_dlssnr.dll` (never shipped, never downloaded), and offer to place it.
 - **Be honest about being unsigned**, and be a single file.
 
+## Ideas for after 1.0
+
+Agreed as worth doing, in no particular order; none of them is started. They come after the hardening and optimization work toward 1.0.
+
+- **A limiter in the Performance tab.** Limits that keep the GPU under a ceiling: load (%), temperature (°C), power (W) or graphics memory, and more than one at once ("under 80 °C *or* under 90 %",
+  whichever is hit first). When one is reached the manager lowers the cost of what it controls (Neural Rendering's working scale and passes first) until the reading is back under it, and says which limit is
+  active ("limiting: 83 °C"), so it never looks like unexplained stutter. Steps down and back up slowly, with a pause after each step, so it does not swing back and forth.
+- **An auto mode for DLSS 5 Neural Rendering.** A budget ("the model may use 4 ms a frame", or "keep 20 % of the GPU free") that the addon keeps to by adjusting working scale and passes, from the model
+  time and GPU headroom it already measures. It never touches the look (the style and picture sliders). Room to grow: per-game budgets, a quality floor it never goes under, pausing during loading screens,
+  and a short history of what it changed and why.
+- **Per-game profiles, applied automatically.** Neural Rendering already notices which game runs; the manager's own settings and the limiter could follow the same way.
+- **A before/after capture.** One key saves a matching pair of screenshots with and without Neural Rendering, for comparing looks and for bug reports.
+- **A session summary.** When a game closes: average and worst frame time, peak temperature and power, how long the limiter or the auto mode was active. Real numbers for the "tested with" list.
+- **A stuck-state watchdog.** If Lossless Scaling's frames stop arriving while a game runs, say so and offer to restart Neural Rendering's engine, instead of leaving the person to guess.
+- **A DLSS 4.5 addon** next to Neural Rendering, for games where DLSS 5's look is not wanted. To look into first: which DLSS 4.5 features can work from what Lossless Scaling has (the captured frames and
+  LSFG's optical flow, but no depth and no game motion vectors), and what NVIDIA's public SDK licence allows.
+
 ## Not planned for 1.0
 
 Downloading or bundling the DLSS 5 model file, in any form. Automatic installation of updates. Support for anything other than Windows and Lossless Scaling.
