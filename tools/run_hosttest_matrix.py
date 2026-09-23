@@ -215,6 +215,11 @@ SCENARIOS = [
 ]
 
 
+# The everyday set (--quick): the frame reaching the model with its own motion, the older timing, and an exit with no AddonShutdown. The rest
+# (looks, HUD, grain, smoothing, the self-test, the panel shot) run with no option, before a release.
+QUICK = {'base', 'flow_previous', 'exit_abrupt'}
+
+
 def selftest_exe_checks(nr_dir, snippet):
     """Runs nr_selftest.exe directly: the real model must pass (exit 0), and each way of being unusable must end with its own code, never a crash."""
     exe = os.path.join(nr_dir, 'nr_selftest.exe')
@@ -278,13 +283,14 @@ def main():
     ap.add_argument('--out', default=os.path.join(os.environ.get('TEMP', '.'), 'hosttest_matrix'))
     ap.add_argument('--only', default='')
     ap.add_argument('--list', action='store_true')
+    ap.add_argument('--quick', action='store_true', help='only the everyday set: ' + ', '.join(sorted(QUICK)))
     a = ap.parse_args()
     if a.list:
         for n, k, _ in SCENARIOS:
             print(n, ' '.join(k))
         return 0
     os.makedirs(a.out, exist_ok=True)
-    only = set(x for x in a.only.split(',') if x)
+    only = set(x for x in a.only.split(',') if x) | (QUICK if a.quick else set())
     ctx = {'pat': pattern()}
     failed = 0
     for name, keys, checker in SCENARIOS:

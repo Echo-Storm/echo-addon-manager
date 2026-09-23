@@ -19,7 +19,6 @@
 #include "engine/nr_engine.h"
 #include "addon/bridge.h"
 #include "addon/frame_tap.h"
-#include "addon/dispatch_hook.h"
 #include "addon/present_hook.h"
 #include "addon/compose11.h"
 #include "addon/requirements.h"
@@ -151,7 +150,7 @@ static std::string g_gameExe;                       // under g_statusMu: the pro
 static std::string g_gameSeen;                      // present thread only: the exe the per-game switch last acted on
 static std::atomic<uint32_t> g_marker{ 0 }; static std::atomic<uint64_t> g_markerUntil{ 0 };   // corner square after a hotkey
 static std::atomic<bool> g_watchdogKill{ false }; static std::atomic<uint64_t> g_rearmAtMs{ 0 }; static std::atomic<int> g_rearms{ 0 };
-static uint64_t g_otherDispatches = 0; static int g_hookCount = 0; static std::string g_tapDevInfo = "none yet";
+static uint64_t g_otherDispatches = 0; static std::string g_tapDevInfo = "none yet";
 // present side
 static uint64_t g_presents = 0, g_lsPresents = 0, g_composed = 0; static IDXGISwapChain* g_lastSwap = nullptr; static bool g_lastSwapIsLs = false; static IDXGISwapChain* g_lastSwapOther = nullptr;  // g_lastSwap: LS's chain; g_lastSwapOther: the last one seen on another device
 static uint64_t g_lastDelta = 0; static double g_lastOffset = 0; static double g_lastTarget = 0;
@@ -610,6 +609,12 @@ static void MaybeRearm() {
     if (!g_killed || !g_watchdogKill || GetTickCount64() < g_rearmAtMs || g_rearms >= 3) return;
     g_rearms++; g_watchdogKill = false; g_watchdogHits = 0; g_killed = false;
     Log("watchdog: re-armed (%d of 3)", (int)g_rearms);
+}
+static bool OnDispatch(ID3D11DeviceContext* ctx, UINT x, UINT y, UINT z);
+// Lossless Scaling's compute passes, from the manager's pre-dispatch callback (API 1.1 says which of its contexts each one runs on).
+static bool OnHostDispatch(uint32_t x, uint32_t y, uint32_t z, void*) {
+    IHost* const host = g_host;
+    return host && OnDispatch(static_cast<ID3D11DeviceContext*>(host->GetDispatchingContext()), x, y, z);
 }
 static bool OnDispatch(ID3D11DeviceContext* ctx, UINT x, UINT y, UINT z) {
     MaybeRearm();
@@ -1136,7 +1141,7 @@ EAM_EXPORT void AddonRenderSettings() {
     ImGui::Text("frame: %s   NR %.1f ms (avg %.1f)  run %.1f ms   runs %llu   fails %llu", frameInfo.c_str(), g_lastNrMs, g_avgNrMs, g_lastTotalMs, (unsigned long long)g_nrRuns, (unsigned long long)g_engine.Stats().fails);
     ImGui::Text("dispatches %llu  ticks %llu  taps %llu  gate:%s  float-slot %d", (unsigned long long)g_tap.Dispatches(), (unsigned long long)g_tap.Ticks(), (unsigned long long)g_tap.Taps(), g_tap.GateName(), g_engine.Stats().floatSlot);
     { std::string tdi; { std::lock_guard<std::mutex> lk(g_statusMu); tdi = g_tapDevInfo; }
-      ImGui::Text("d3d11 hook: %d entry points   other-adapter dispatches: %llu   tapped device: %s", g_hookCount, (unsigned long long)g_otherDispatches, tdi.c_str()); }
+      ImGui::Text("passes seen: %llu   other-adapter passes: %llu   tapped device: %s", (unsigned long long)g_tap.Dispatches(), (unsigned long long)g_otherDispatches, tdi.c_str()); }
     }
     if (eam::ui::SectionHeader("Advanced")) {
         int dv = (int)c.p.debugView; const char* views[] = { "Result", "Original", "Delta x4", "Frame role (green real, red generated)", "LSFG flow", "Ghost guard (white = full effect)" };
@@ -1189,10 +1194,10 @@ static void AddonInitializeBody(IHost* host, ImGuiContext* ctx, void* allocFunc,
     host->SubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent, nullptr);
     host->SubscribeEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent, nullptr);
     Log("DLSS5NR01 initialised (host version 0x%x), addon dir %ls", host->GetHostVersion(), g_addonDir.c_str());
-    // Own inline hook on d3d11.dll instead of the host's vtable patch (see dispatch_hook.h for why). The Present hook
-    // needs a device to find dxgi's entry points; it is installed at the first tap.
-    g_hookCount = DispatchHook::Install(OnDispatch, [](const char* m) { Log("%s", m); });
-    if (g_hookCount <= 0) Kill("could not hook d3d11 Dispatch");
+    // Lossless Scaling's compute passes come from the manager. The Present hook needs a device to find dxgi's entry points; it is installed
+    // at the first tap.
+    if (host->GetHostVersion() >= 0x010100) host->SetPreDispatchCallback(OnHostDispatch, nullptr);
+    else Kill("needs Echo Addon Manager with addon API 1.1 or newer (for its dispatch callback)");
     // No manual DEVICE_READY replay here: the host's last device pointer may already be destroyed
     // (LS creates and drops devices constantly); we only touch devices inside the event or from a live context.
 }
@@ -1214,8 +1219,8 @@ EAM_EXPORT void AddonInitialize(IHost* host, ImGuiContext* ctx, void* allocFunc,
 EAM_EXPORT void AddonShutdown() {
     Log("shutting down");
     g_killed = true;
+    if (g_host) g_host->SetPreDispatchCallback(nullptr, nullptr);
     PresentHook::Uninstall();
-    DispatchHook::Uninstall();
     if (g_host) { g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent); g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent); }
     for (int i = 0; i < 3000 && g_engineStarting; ++i) Sleep(10);   // let a model load that is in progress finish (as the join used to)
     for (int i = 0; i < 300 && g_reqBusy; ++i) Sleep(10);   // a requirements scan takes milliseconds; an open file dialog is left (the process is ending)
@@ -1225,7 +1230,7 @@ EAM_EXPORT void AddonShutdown() {
     g_host = nullptr;
 }
 
-EAM_EXPORT uint32_t GetAddonCapabilities() { return EAM_CAP_HAS_SETTINGS | EAM_CAP_D3D11_DEVICE_ACCESS; }
+EAM_EXPORT uint32_t GetAddonCapabilities() { return EAM_CAP_HAS_SETTINGS | EAM_CAP_D3D11_DEVICE_ACCESS | EAM_CAP_DISPATCH_HOOK; }
 EAM_EXPORT const char* GetAddonName() { return "DLSS 5 Neural Rendering"; }
 EAM_EXPORT const char* GetAddonVersion() { return "0.7.0"; }
 EAM_EXPORT const char* GetAddonAuthor() { return "andreiday"; }

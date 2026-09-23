@@ -115,14 +115,14 @@ not lost; none of them is promised.
 ## Building
 
 Visual Studio 2022 Build Tools, CMake 3.20+, and the NVIDIA DLSS SDK dropped into `external/ngx`
-(see `external/ngx/README.md`). ImGui and MinHook are fetched by CMake. From the repository root,
+(see `external/ngx/README.md`). Dear ImGui is fetched by CMake. From the repository root,
 `powershell -File tools\build_all.ps1 -Only nr` builds it and `tools\package.ps1` zips a release. Details, the offline test host
 and the measurement harness are in [docs/building.md](docs/building.md).
 
 ## License and credits
 
 MIT (see `LICENSE`). Third parties: the addon SDK headers of Echo Addon Manager (MIT, `../../manager/sdk`),
-Dear ImGui (MIT), MinHook (BSD-2). The NVIDIA DLSS SDK and the DLSSNR snippet are NVIDIA's and
+Dear ImGui (MIT). The NVIDIA DLSS SDK and the DLSSNR snippet are NVIDIA's and
 are not part of this repository.
 
 DLSSNR is an NVIDIA technology. This addon runs NVIDIA's model on hardware and in a way NVIDIA did

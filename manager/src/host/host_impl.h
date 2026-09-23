@@ -35,6 +35,7 @@ public:
     void SetPostDispatchCallback(EamPostDispatchCallback callback, void* userData) override;
     void* GetCurrentComputeShader() override;
     uint32_t GetDispatchCount() override;
+    void* GetDispatchingContext() override;
 
     void SetStatus(const char* addonId, const char* text, int level) override;
     void PublishMetric(const char* addonId, const char* key, double value, const char* unit) override;
@@ -50,7 +51,7 @@ public:
 
 private:
     template <class Callback>
-    struct Hook { Callback callback; void* owner; };
+    struct Hook { Callback callback; void* owner; void* module; };   // an owner is the addon (its module) together with its userData
 
     // GetConfig returns a pointer into one of these. The newest kReturnBufferCount stay alive, so a pointer stays valid for that many
     // later calls; nothing is freed on a timer, because another thread may still be reading an older one.

@@ -10,6 +10,7 @@
 #include "src/core/d3d11_hook.h"
 #include "src/core/instance_guard.h"
 #include "src/core/shader_hook.h"
+#include "abi_v1_0.h"
 #include "src/event/event_system.h"
 #include "src/host/gpu_stats.h"
 #include "src/host/host_impl.h"
@@ -20,6 +21,7 @@
 #include <windows.h>
 #include <d3d11_4.h>
 #include <d3dcompiler.h>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -513,6 +515,48 @@ static void TestInstanceGuard(const fs::path& T) {
     Check("once the first lets go, the folder is free again", ClaimInChild(a) == 0);
 }
 
+// ---- an addon built against API 1.0 (manager 0.7.0), calling today's host through the declarations it was built with
+
+static int g_frozenEvents = 0;
+static void FrozenEvent(uint32_t id, const void* data, uint32_t size, void* user) { if (id == 0x10077 && size == 4 && *(const int*)data == 42 && user == &g_frozenEvents) ++g_frozenEvents; }
+static bool FrozenPre(uint32_t, uint32_t, uint32_t, void*) { return false; }
+
+static void TestFrozenAbi() {
+    printf("== an addon built against API 1.0 still reaches the right calls\n");
+    static_assert(sizeof(EamAddonEventData) == sizeof(abi_v1_0::AddonEventData) && offsetof(EamAddonEventData, addonVersion) == offsetof(abi_v1_0::AddonEventData, addonVersion), "event payload layout changed");
+    static_assert(sizeof(EamShaderEventData) == sizeof(abi_v1_0::ShaderEventData) && offsetof(EamShaderEventData, dataSize) == offsetof(abi_v1_0::ShaderEventData, dataSize), "event payload layout changed");
+    static_assert(EAM_EVENT_ADDON_LOADED == abi_v1_0::ADDON_LOADED && EAM_EVENT_ADDON_UNLOADED == abi_v1_0::ADDON_UNLOADED && EAM_EVENT_SETTINGS_CHANGED == abi_v1_0::SETTINGS_CHANGED &&
+                  EAM_EVENT_SHADER_INTERCEPTED == abi_v1_0::SHADER_INTERCEPTED && EAM_EVENT_HOST_SHUTDOWN == abi_v1_0::HOST_SHUTDOWN && EAM_EVENT_SETTINGS_APPLIED == abi_v1_0::SETTINGS_APPLIED &&
+                  EAM_EVENT_D3D11_DEVICE_READY == abi_v1_0::D3D11_DEVICE_READY && EAM_EVENT_D3D11_DEVICE_CHANGED == abi_v1_0::D3D11_DEVICE_CHANGED && EAM_EVENT_CUSTOM == abi_v1_0::CUSTOM, "event ids changed");
+    HostImpl h;
+    abi_v1_0::IHost* const old = reinterpret_cast<abi_v1_0::IHost*>(static_cast<IHost*>(&h));   // what the addon was handed
+    Check("GetHostVersion", old->GetHostVersion() == EAM_API_VERSION_INT);
+    old->SetConfig("frozen", "key", "value");
+    Check("SetConfig and GetConfig", std::string(old->GetConfig("frozen", "key", "")) == "value" && std::string(old->GetConfig("frozen", "absent", "dflt")) == "dflt");
+    old->SubscribeEvent(0x10077, FrozenEvent, &g_frozenEvents);
+    const int payload = 42;
+    old->PublishEvent(0x10077, &payload, sizeof payload);
+    old->UnsubscribeEvent(0x10077, FrozenEvent);
+    old->PublishEvent(0x10077, &payload, sizeof payload);
+    Check("SubscribeEvent, PublishEvent and UnsubscribeEvent", g_frozenEvents == 1);
+    h.SetD3D11Device(reinterpret_cast<void*>(0x1000), reinterpret_cast<void*>(0x2000));
+    Check("GetD3D11Device and GetD3D11DeviceContext", old->GetD3D11Device() == reinterpret_cast<void*>(0x1000) && old->GetD3D11DeviceContext() == reinterpret_cast<void*>(0x2000));
+    const size_t hooks = h.DispatchHookCount();
+    old->SetPreDispatchCallback(FrozenPre, nullptr);
+    old->SetPostDispatchCallback(nullptr, nullptr);
+    Check("SetPreDispatchCallback and SetPostDispatchCallback", h.DispatchHookCount() == hooks + 1);
+    old->SetPreDispatchCallback(nullptr, nullptr);
+    Check("GetCurrentComputeShader and GetDispatchCount answer", old->GetCurrentComputeShader() == nullptr && old->GetDispatchCount() == D3D11Hook::GetDispatchCount());
+    old->SetStatus("frozen", "status from a 1.0 addon", 1);
+    Check("SetStatus", Metrics::Instance().GetStatus("frozen").text == "status from a 1.0 addon");
+    old->PublishMetric("frozen", "abi", 7.0, "x");
+    const auto series = Metrics::Instance().Get("frozen", "abi", 60.0);
+    Check("PublishMetric", !series.samples.empty() && series.samples.back().v == 7.0f);
+    old->Log(abi_v1_0::INFO, "a line from a 1.0 addon");
+    old->SaveConfig();
+    Check("Log and SaveConfig return", true);
+}
+
 // ---- the resource hook, on this program's own imports of kernel32's resource functions
 
 static void TestResourceHook() {
@@ -559,9 +603,11 @@ static void TestDispatchHook() {
     D3D11Hook::Initialize(&h);   // no Lossless_original.dll here: only the host is taken
     Check("the Dispatch implementations are hooked", D3D11Hook::InstallDispatchHooks() > 0);
     ID3D11Device* dev = nullptr; ID3D11DeviceContext* ctx = nullptr; ID3D11Device* other = nullptr; ID3D11DeviceContext* otherCtx = nullptr;
+    ID3D11Device* second = nullptr; ID3D11DeviceContext* secondCtx = nullptr;
     D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &dev, nullptr, &ctx);
     D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &other, nullptr, &otherCtx);
-    if (!ctx || !otherCtx) { Check("WARP devices for the test", false); return; }
+    D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &second, nullptr, &secondCtx);
+    if (!ctx || !otherCtx || !secondCtx) { Check("WARP devices for the test", false); return; }
     ID3DBlob* code = nullptr; ID3D11ComputeShader* cs = nullptr;
     const char src[] = "RWTexture2D<float> o : register(u0); [numthreads(1,1,1)] void main(uint3 i : SV_DispatchThreadID) { }";
     if (SUCCEEDED(D3DCompile(src, sizeof src - 1, nullptr, nullptr, nullptr, "main", "cs_5_0", 0, 0, &code, nullptr))) {
@@ -585,16 +631,20 @@ static void TestDispatchHook() {
     otherCtx->Dispatch(1, 1, 1);
     Check("a Dispatch on another device's context does not run them", seen.pre == 3);
     Check("the dispatch count is Lossless Scaling's dispatches only", D3D11Hook::GetDispatchCount() == 3, std::to_string(D3D11Hook::GetDispatchCount()));
+    D3D11Hook::Attach(second, secondCtx);   // Lossless Scaling makes a second device when scaling starts; its passes run on the first
+    ctx->Dispatch(1, 1, 1); secondCtx->Dispatch(1, 1, 1);
+    Check("with a second device made, both its contexts are watched (the passes run on the first)", seen.pre == 5 && seen.post == 5, std::to_string(seen.pre));
+    Check("...and the host's device is the newest", h.GetD3D11Device() == second);
     seen.skip = true;
     ctx->Dispatch(1, 1, 1);
-    Check("a pre-dispatch callback that asks to skip: no post-dispatch callback", seen.pre == 4 && seen.post == 3);
+    Check("a pre-dispatch callback that asks to skip: no post-dispatch callback", seen.pre == 6 && seen.post == 5);
     seen.skip = false;
     D3D11Hook::Shutdown();
     ctx->Dispatch(1, 1, 1);
-    Check("after shutdown no callback runs, and dispatching still works", seen.pre == 4);
+    Check("after shutdown no callback runs, and dispatching still works", seen.pre == 6);
     h.SetPreDispatchCallback(nullptr, &seen); h.SetPostDispatchCallback(nullptr, &seen);
     if (cs) cs->Release();
-    otherCtx->Release(); other->Release(); ctx->Release(); dev->Release();
+    secondCtx->Release(); second->Release(); otherCtx->Release(); other->Release(); ctx->Release(); dev->Release();
 }
 
 int main(int argc, char** argv) {
@@ -641,7 +691,7 @@ int main(int argc, char** argv) {
     WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false},"renamed_old":{"_enabled":false,"keep":"me"}},"global":{"security_level":0}})");
 
     setvbuf(stdout, nullptr, _IONBF, 0);
-    try { TestInstanceGuard(T); TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); TestResourceHook(); TestDispatchHook(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
+    try { TestInstanceGuard(T); TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); TestFrozenAbi(); TestResourceHook(); TestDispatchHook(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
 
     HostImpl host;
     int loadedEvents = 0, unloadedEvents = 0;
@@ -794,6 +844,10 @@ int main(int argc, char** argv) {
         h2.PublishEvent(0x7E57, nullptr, 0);
         h2.InvokePreDispatch(1, 1, 1);
         Check("its callbacks are called while it is loaded", subs >= 1 && Calls(leaky, "event") == 1 && Calls(leaky, "dispatch") == 1 && h2.DispatchHookCount() == 1);
+        h2.SetPreDispatchCallback(PreLetsThrough, reinterpret_cast<void*>(0x7E57));   // the same userData as the addon's, from another module
+        Check("another addon's callback with the same userData is kept beside it, not in its place", h2.DispatchHookCount() == 2);
+        h2.SetPreDispatchCallback(nullptr, reinterpret_cast<void*>(0x7E57));
+        Check("...and removing it removes only that one", h2.DispatchHookCount() == 1);
         m2.ToggleAddon(IndexOf(m2, "leaky"), false);
         Check("switching it off removes the callbacks it left registered", EventBus::Instance().SubscriberCount(0x7E57) == subs - 1 && h2.DispatchHookCount() == 0,
               std::to_string(EventBus::Instance().SubscriberCount(0x7E57)) + " subscribers, " + std::to_string(h2.DispatchHookCount()) + " dispatch hooks");

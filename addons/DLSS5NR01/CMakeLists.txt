@@ -17,16 +17,7 @@ include(FetchContent)
 FetchContent_Declare(imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
     GIT_TAG        367b2c24f399988ddafc0bb4628da0106bcc09be)
-FetchContent_Declare(minhook
-    GIT_REPOSITORY https://github.com/TsudaKageyu/minhook.git
-    GIT_TAG        v1.3.4
-    SOURCE_SUBDIR  cmake-not-used)   # sources only: minhook_static below is built with this addon's static runtime, not minhook's own CMake project
-FetchContent_MakeAvailable(imgui minhook)   # Dear ImGui has no CMake project of its own: this only fetches it
-
-add_library(minhook_static STATIC
-    ${minhook_SOURCE_DIR}/src/buffer.c ${minhook_SOURCE_DIR}/src/hook.c
-    ${minhook_SOURCE_DIR}/src/trampoline.c ${minhook_SOURCE_DIR}/src/hde/hde64.c)
-target_include_directories(minhook_static PUBLIC ${minhook_SOURCE_DIR}/include)
+FetchContent_MakeAvailable(imgui)   # Dear ImGui has no CMake project of its own: this only fetches it
 
 # ---- forwarder: the only module allowed to call the DLSSNR snippet directly ----
 add_library(nr_forwarder SHARED src/forwarder/nr_forwarder.cpp)
@@ -53,13 +44,13 @@ add_dependencies(nr_selftest nr_forwarder)
 
 # ---- the addon ----
 add_library(DLSS5NR01 SHARED
-    src/addon/addon.cpp src/addon/bridge.cpp src/addon/frame_tap.cpp src/addon/dispatch_hook.cpp
+    src/addon/addon.cpp src/addon/bridge.cpp src/addon/frame_tap.cpp
     src/addon/present_hook.cpp src/addon/compose11.cpp src/addon/requirements.cpp
     src/engine/nr_engine.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(DLSS5NR01 PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
-target_link_libraries(DLSS5NR01 PRIVATE minhook_static ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32 shell32 comdlg32)
+target_link_libraries(DLSS5NR01 PRIVATE ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32 shell32 comdlg32)
 set_target_properties(DLSS5NR01 PROPERTIES PREFIX "" OUTPUT_NAME "DLSS5NR01")
 # Keep a PDB and a linker map next to the Release DLL so the offsets in a crash backtrace can be resolved.
 if(MSVC)

@@ -11,7 +11,7 @@
   NVIDIA's own public repository (pinned to one commit and checked by SHA-256); it runs only when
   you say you accept NVIDIA's licence.
 - Internet access at configure time: CMake fetches Dear ImGui (the docking branch commit that
-  matches the layout compiled into the manager) and MinHook.
+  matches the layout compiled into the manager).
 
 ## Build
 

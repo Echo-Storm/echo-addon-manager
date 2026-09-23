@@ -1,5 +1,5 @@
 // Offline host for DLSS5NR01.dll: fake IHost + headless ImGui frames + a synthetic "LSFG" dispatch
-// pattern and a real swap chain on the display GPU. Exercises init, panel rendering, the inline Dispatch hook,
+// pattern and a real swap chain on the display GPU. Exercises init, panel rendering, the dispatch callback (called here as the manager does),
 // FrameTap auto-assignment, the read-only tap, the D3D11<->D3D12 bridge, NR itself, the Present hook and the
 // present-time compose (generated frames first, the real frame last, like LSFG X3).
 #include <windows.h>
@@ -30,16 +30,25 @@ struct FakeHost : IHost {
     const char* GetConfig(const char*, const char* k, const char* d) override { auto it = cfg.find(k); return it == cfg.end() ? d : it->second.c_str(); }
     void SetConfig(const char*, const char* k, const char* v) override { cfg[k] = v; }
     void SaveConfig() override {}
-    uint32_t GetHostVersion() override { return 0x10000; }   // API 1.0: the live status / metrics calls exist
+    uint32_t GetHostVersion() override { return 0x10100; }   // API 1.1: the dispatching context is known
     void SubscribeEvent(uint32_t id, EamEventCallback cb, void* ud) override { subs.push_back({ id, cb, ud }); }
     void UnsubscribeEvent(uint32_t id, EamEventCallback cb) override { for (size_t i = 0; i < subs.size();) if (subs[i].id == id && subs[i].cb == cb) subs.erase(subs.begin() + i); else ++i; }
     void PublishEvent(uint32_t id, const void* d, uint32_t n) override { auto copy = subs; for (auto& s : copy) if (s.id == id) s.cb(id, d, n, s.ud); }
     void* GetD3D11Device() override { return dev; }
     void* GetD3D11DeviceContext() override { return ctx; }
-    void SetPreDispatchCallback(EamPreDispatchCallback, void*) override {}
+    // Dispatch callbacks, as the manager runs them: around each of "Lossless Scaling's" passes (the test's), with the context known inside.
+    EamPreDispatchCallback pre = nullptr; void* preUser = nullptr; ID3D11DeviceContext* dispatching = nullptr; uint32_t dispatches = 0;
+    void SetPreDispatchCallback(EamPreDispatchCallback cb, void* ud) override { pre = cb; preUser = ud; }
     void SetPostDispatchCallback(EamPostDispatchCallback, void*) override {}
     void* GetCurrentComputeShader() override { return nullptr; }
-    uint32_t GetDispatchCount() override { return 0; }
+    uint32_t GetDispatchCount() override { return dispatches; }
+    void* GetDispatchingContext() override { return dispatching; }
+    void Dispatch(ID3D11DeviceContext* c, UINT x, UINT y, UINT z) {
+        ++dispatches; dispatching = c;
+        const bool skip = pre && pre(x, y, z, preUser);
+        dispatching = nullptr;
+        if (!skip) c->Dispatch(x, y, z);
+    }
     // live status and metrics, recorded so the run can check that the addon reports them
     std::map<std::string, int> metricCount; std::map<std::string, double> metricLast; std::string status; int statusLevel = -1; int statusCalls = 0;
     void SetStatus(const char*, const char* text, int level) override { status = text; statusLevel = level; ++statusCalls; }
@@ -198,7 +207,7 @@ int main(int argc, char** argv) {
         if (presents >= 2 && presents % 7 == 0) checkBackbuffer(presents == 63 ? (real ? "present_real.bmp" : "present_gen.bmp") : nullptr);
         if (real) dc->CopyResource(bb, cur);
         else {
-            ID3D11ShaderResourceView* s3[3] = { sPrev, sCur, sFlow16 }; dc->CSSetShaderResources(0, 3, s3); dc->CSSetUnorderedAccessViews(0, 1, &uOut, nullptr); dc->CSSetShader(csGen, nullptr, 0); dc->Dispatch(W / 8, H / 8, 1);
+            ID3D11ShaderResourceView* s3[3] = { sPrev, sCur, sFlow16 }; dc->CSSetShaderResources(0, 3, s3); dc->CSSetUnorderedAccessViews(0, 1, &uOut, nullptr); dc->CSSetShader(csGen, nullptr, 0); host.Dispatch(dc, W / 8, H / 8, 1);
             dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls);
             dc->CopyResource(bb, out);
         }
@@ -211,13 +220,13 @@ int main(int argc, char** argv) {
     for (int fr = 0; fr < 90; ++fr) {
         Fill(dc, prev, W, H); Fill(dc, cur, W, H);   // fresh capture every real frame, like LS
         // per real frame: pyramid pass on the new frame (the TAP)
-        dc->CSSetShaderResources(0, 1, &sCur); dc->CSSetUnorderedAccessViews(0, 4, uPyr, nullptr); dc->CSSetShader(csPyr, nullptr, 0); dc->Dispatch(W * 7 / 10 / 8, H * 7 / 10 / 8, 1);
+        dc->CSSetShaderResources(0, 1, &sCur); dc->CSSetUnorderedAccessViews(0, 4, uPyr, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W * 7 / 10 / 8, H * 7 / 10 / 8, 1);
         ID3D11UnorderedAccessView* null4[4] = {}; dc->CSSetUnorderedAccessViews(0, 4, null4, nullptr); dc->CSSetShaderResources(0, 3, nulls);
         // low-res flow-ish pass
-        ID3D11ShaderResourceView* s1[2] = { sPrev, sCur }; dc->CSSetShaderResources(0, 2, s1); dc->CSSetUnorderedAccessViews(0, 1, &uFlow, nullptr); dc->CSSetShader(csFlow, nullptr, 0); dc->Dispatch(FW / 8, FH / 8, 1);
+        ID3D11ShaderResourceView* s1[2] = { sPrev, sCur }; dc->CSSetShaderResources(0, 2, s1); dc->CSSetUnorderedAccessViews(0, 1, &uFlow, nullptr); dc->CSSetShader(csFlow, nullptr, 0); host.Dispatch(dc, FW / 8, FH / 8, 1);
         dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls);
         // finest LSFG flow level (RGBA16F UAV0, coarser level at S4): what the addon feeds the model as motion vectors
-        dc->CSSetShaderResources(4, 1, &sPyr3); dc->CSSetUnorderedAccessViews(0, 1, &uFlow16, nullptr); dc->CSSetShader(csFlow16, nullptr, 0); dc->Dispatch(FLW / 8, FLH / 8, 1);
+        dc->CSSetShaderResources(4, 1, &sPyr3); dc->CSSetUnorderedAccessViews(0, 1, &uFlow16, nullptr); dc->CSSetShader(csFlow16, nullptr, 0); host.Dispatch(dc, FLW / 8, FLH / 8, 1);
         { ID3D11ShaderResourceView* n8[8] = {}; dc->CSSetShaderResources(0, 8, n8); } dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr);
         // X3: generated, generated, real
         present(false); std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -252,17 +261,17 @@ int main(int argc, char** argv) {
         uint64_t checks2 = 0, composed2 = 0;
         for (int fr = 0; fr < 150; ++fr) {
             Fill(dc, c2, W2, H2); Fill(dc, p2c, W2, H2);
-            dc->CSSetShaderResources(0, 1, &sC2); dc->CSSetUnorderedAccessViews(0, 4, uP2, nullptr); dc->CSSetShader(csPyr, nullptr, 0); dc->Dispatch(W2 * 7 / 10 / 8, H2 * 7 / 10 / 8, 1);
+            dc->CSSetShaderResources(0, 1, &sC2); dc->CSSetUnorderedAccessViews(0, 4, uP2, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W2 * 7 / 10 / 8, H2 * 7 / 10 / 8, 1);
             ID3D11UnorderedAccessView* null4[4] = {}; dc->CSSetUnorderedAccessViews(0, 4, null4, nullptr); dc->CSSetShaderResources(0, 3, nulls);
             for (int k = 0; k < 3; ++k) {
                 ID3D11Texture2D* bb = nullptr; sc->GetBuffer(0, IID_PPV_ARGS(&bb));
                 if (fr > 100 && fr % 10 == 0 && k == 0) { double mean = 0; uint64_t changed = CountChanged(dev, dc, bb, W2, H2, &mean, nullptr); checks2++; if (changed > (uint64_t)W2 * H2 / 20) composed2++; }
                 if (k == 2) dc->CopyResource(bb, c2);
-                else { ID3D11ShaderResourceView* s3[3] = { sP2, sC2, sFlow16 }; dc->CSSetShaderResources(0, 3, s3); dc->CSSetUnorderedAccessViews(0, 1, &uO2, nullptr); dc->CSSetShader(csGen, nullptr, 0); dc->Dispatch(W2 / 8, H2 / 8, 1); dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls); dc->CopyResource(bb, o2); }
+                else { ID3D11ShaderResourceView* s3[3] = { sP2, sC2, sFlow16 }; dc->CSSetShaderResources(0, 3, s3); dc->CSSetUnorderedAccessViews(0, 1, &uO2, nullptr); dc->CSSetShader(csGen, nullptr, 0); host.Dispatch(dc, W2 / 8, H2 / 8, 1); dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls); dc->CopyResource(bb, o2); }
                 bb->Release(); sc->Present(0, 0); pump();
             }
             // the low-res passes keep hammering the table so the stale detector has dispatches to count
-            for (int k = 0; k < 40; ++k) { ID3D11ShaderResourceView* s1[2] = { sLa, sLb }; dc->CSSetShaderResources(0, 2, s1); dc->CSSetUnorderedAccessViews(0, 1, &uFlow, nullptr); dc->CSSetShader(csFlow, nullptr, 0); dc->Dispatch(FW / 8, FH / 8, 1); dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls); }
+            for (int k = 0; k < 40; ++k) { ID3D11ShaderResourceView* s1[2] = { sLa, sLb }; dc->CSSetShaderResources(0, 2, s1); dc->CSSetUnorderedAccessViews(0, 1, &uFlow, nullptr); dc->CSSetShader(csFlow, nullptr, 0); host.Dispatch(dc, FW / 8, FH / 8, 1); dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls); }
             if (fr % 30 == 0) frame("res2"); else emptyFrame();
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }

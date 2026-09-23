@@ -1,25 +1,24 @@
+// Events the manager sends to addons (IHost::SubscribeEvent), and the payloads that come with them. The numbers are part of the addon API: they
+// never change, and new events only take new numbers.
 #pragma once
 #include <cstdint>
 
-// Event IDs for the addon event system
 enum EamEvent : uint32_t {
-    EAM_EVENT_ADDON_LOADED       = 1,
-    EAM_EVENT_ADDON_UNLOADED     = 2,
-    EAM_EVENT_SETTINGS_CHANGED   = 3,
-    EAM_EVENT_SHADER_INTERCEPTED = 4,
-    EAM_EVENT_HOST_SHUTDOWN      = 5,
-    EAM_EVENT_SETTINGS_APPLIED   = 6, // Fired after ApplySettings completes
-    EAM_EVENT_D3D11_DEVICE_READY = 7, // Fired when D3D11 device pointer is captured
-    EAM_EVENT_D3D11_DEVICE_CHANGED = 8, // Fired when device is recreated (addons should clear stale state)
+    EAM_EVENT_ADDON_LOADED       = 1,   // an addon has started; payload EamAddonEventData
+    EAM_EVENT_ADDON_UNLOADED     = 2,   // an addon has stopped (switched off, or unloaded); payload EamAddonEventData
+    EAM_EVENT_SETTINGS_CHANGED   = 3,   // reserved: not sent (yet)
+    EAM_EVENT_SHADER_INTERCEPTED = 4,   // reserved: not sent (yet); its payload would be EamShaderEventData
+    EAM_EVENT_HOST_SHUTDOWN      = 5,   // Lossless Scaling is closing; no payload
+    EAM_EVENT_SETTINGS_APPLIED   = 6,   // Lossless Scaling has just applied its settings (its ApplySettings returned); no payload
+    EAM_EVENT_D3D11_DEVICE_READY = 7,   // Lossless Scaling made a D3D11 device (IHost::GetD3D11Device has it now); no payload
+    EAM_EVENT_D3D11_DEVICE_CHANGED = 8, // ...and it replaces an earlier one: drop anything made on the old device; sent before DEVICE_READY
 
-    // Custom events start here (for inter-addon communication)
-    EAM_EVENT_CUSTOM             = 0x10000
+    EAM_EVENT_CUSTOM             = 0x10000   // from here up: addons' own events, for talking to each other
 };
 
-// Event callback signature
+// Called on the thread that published the event. `data` is valid only during the call.
 typedef void (*EamEventCallback)(uint32_t eventId, const void* data, uint32_t dataSize, void* userData);
 
-// Event data structures
 struct EamAddonEventData {
     const char* addonName;
     const char* addonVersion;

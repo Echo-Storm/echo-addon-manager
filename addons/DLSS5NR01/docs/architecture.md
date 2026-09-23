@@ -43,19 +43,17 @@ rate.
 
 ## Components
 
-### DispatchHook (`src/addon/dispatch_hook.cpp`)
+### The compute passes (the manager's dispatch callback)
 
-An inline code hook (MinHook) on every implementation of `ID3D11DeviceContext::Dispatch` inside
-`d3d11.dll` (five entry points on current Windows builds). This is how the addon sees every compute
-pass Lossless Scaling issues on every device in the process.
+The addon sees each of Lossless Scaling's compute passes through the manager's pre-dispatch
+callback, with `GetDispatchingContext()` (addon API 1.1) saying which context the pass runs on.
+Lossless Scaling makes more than one device when scaling starts; the passes run on the first, and
+the manager calls back for all of them. The manager hooks the code of every
+`ID3D11DeviceContext::Dispatch` implementation in `d3d11.dll`, not the context's function table,
+which `SetMultithreadProtected` (called by Lossless Scaling) rewrites.
 
-Why not the context vtable, which is what the manager's own dispatch callback patches: each
-context carries a private copy of its vtable, and `ID3D11Multithread::SetMultithreadProtected`
-rewrites that copy with a different set of entry points, dropping any patched slot. Lossless
-Scaling enables multithread protection through Windows.Graphics.Capture, so vtable patches never
-fire.
-
-The addon's own compose dispatches are marked with a thread-local flag so the hook ignores them.
+Up to 0.7.6 the addon carried a hook of its own for this, from before the manager's worked. The
+addon's own compose dispatches are marked with a thread-local flag, so they are ignored.
 
 ### FrameTap (`src/addon/frame_tap.cpp`)
 

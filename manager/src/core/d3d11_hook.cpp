@@ -15,7 +15,15 @@ namespace D3D11Hook {
 namespace {
 
 std::atomic<eam::HostImpl*> g_host{ nullptr };
-std::atomic<ID3D11DeviceContext*> g_lsContext{ nullptr };   // the immediate context of the newest device Lossless Scaling made
+// The immediate contexts of the devices Lossless Scaling made, newest last. It makes more than one when scaling starts (two within a tenth of a
+// second, seen live), and the compute passes run on the first: every one of them is watched, not only the newest.
+constexpr int kContexts = 8;
+std::atomic<ID3D11DeviceContext*> g_lsContexts[kContexts] = {};
+std::atomic<int> g_nextContext{ 0 };
+bool IsLossless(ID3D11DeviceContext* ctx) {
+    for (const auto& c : g_lsContexts) if (c.load(std::memory_order_acquire) == ctx) return true;
+    return false;
+}
 std::atomic<uint32_t> g_dispatches{ 0 };
 thread_local ID3D11DeviceContext* t_dispatching = nullptr;
 
@@ -49,7 +57,7 @@ int g_hooked = 0;
 // jumps on into the real implementation (hooked as well), and an addon may dispatch its own work from a callback.
 template <int I> void STDMETHODCALLTYPE Detour(ID3D11DeviceContext* ctx, UINT x, UINT y, UINT z) {
     const DispatchFn original = g_hooks[I].original;
-    if (t_dispatching || ctx != g_lsContext.load(std::memory_order_acquire)) { original(ctx, x, y, z); return; }
+    if (t_dispatching || !ctx || !IsLossless(ctx)) { original(ctx, x, y, z); return; }
     t_dispatching = ctx;
     g_dispatches.fetch_add(1, std::memory_order_relaxed);
     eam::HostImpl* const host = g_host.load(std::memory_order_acquire);
@@ -137,7 +145,7 @@ int InstallDispatchHooks() {
 
 void Shutdown() {
     g_host.store(nullptr, std::memory_order_release);
-    g_lsContext.store(nullptr, std::memory_order_release);
+    for (auto& c : g_lsContexts) c.store(nullptr, std::memory_order_release);
     g_dispatches.store(0, std::memory_order_relaxed);
 }
 
@@ -146,8 +154,8 @@ void Attach(ID3D11Device* device, ID3D11DeviceContext* context) {
     if (!host) return;
     void* const before = host->GetD3D11Device();
     host->SetD3D11Device(device, context);
-    g_lsContext.store(context, std::memory_order_release);
-    g_dispatches.store(0, std::memory_order_relaxed);
+    if (!IsLossless(context)) g_lsContexts[g_nextContext.fetch_add(1) % kContexts].store(context, std::memory_order_release);
+    if (!before) g_dispatches.store(0, std::memory_order_relaxed);
     if (before && before != static_cast<void*>(device)) eam::EventBus::Instance().Publish(EAM_EVENT_D3D11_DEVICE_CHANGED);
     eam::EventBus::Instance().Publish(EAM_EVENT_D3D11_DEVICE_READY);
 }

@@ -178,7 +178,7 @@ Visual Studio 2022 (Desktop C++ workload) and CMake 3.20+ on Windows. Dear ImGui
 ```powershell
 powershell -File tools\build_all.ps1                     # manager and Neural Rendering
 powershell -File tools\build_all.ps1 -Only host          # the manager only
-powershell -File tools\run_addon_tests.ps1               # offline tests, no game needed (the window tests show a window for a moment)
+powershell -File tools\run_addon_tests.ps1               # the offline tests for what changed since the last commit (-All: every one, -List: the suites)
 powershell -File tools\ci.ps1                            # what the GitHub build runs: a clean build of the manager, installer and sample addon, and the tests that need no GPU
 powershell -File tools\package.ps1                       # the release zip, with the Setup exe built around the files
 ```

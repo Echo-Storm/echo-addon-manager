@@ -74,4 +74,10 @@ struct IHost {
     // "model_ms"), `unit` is free text ("ms", "%") used for labels. The host keeps the last few thousand samples per series.
     // Cheap enough for every frame; do not publish faster than that.
     virtual void PublishMetric(const char* addonId, const char* key, double value, const char* unit) = 0;
+
+    // ---- Added in API 1.1 (GetHostVersion() >= 0x010100).
+
+    // Inside a dispatch callback: the ID3D11DeviceContext the pass runs on (borrowed, do not Release). Lossless Scaling makes more than one
+    // device, and this tells them apart. Null outside a callback.
+    virtual void* GetDispatchingContext() = 0;
 };

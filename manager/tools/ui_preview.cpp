@@ -77,6 +77,7 @@ struct FakeHost : IHost {
     void SetPostDispatchCallback(EamPostDispatchCallback, void*) override {}
     void* GetCurrentComputeShader() override { return nullptr; }
     uint32_t GetDispatchCount() override { return 0; }
+    void* GetDispatchingContext() override { return nullptr; }
     void SetStatus(const char*, const char*, int) override {}
     void PublishMetric(const char*, const char*, double, const char*) override {}
 };

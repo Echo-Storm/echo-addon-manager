@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.7 (internal, 2026-09-23)
+
+Not a public release (the manager still shows 0.7.0).
+
+- **Fixed (in 0.7.6, before it reached a game): the dispatch callbacks watched only the newest device.** Lossless Scaling makes two D3D11 devices within a tenth of a second when scaling
+  starts, and its compute passes run on the first. The logs of 2026-09-23 show this twice. The manager now watches the contexts of every device Lossless Scaling makes, and the core test checks
+  that the first device's passes still call back after a second device is made.
+- **Addon API 1.1: `IHost::GetDispatchingContext()`.** Inside a dispatch callback it gives the context the pass runs on, which tells Lossless Scaling's devices apart. Like every addition, it is
+  appended to the end of `IHost`, so addons built against 1.0 are unaffected.
+- **Neural Rendering uses the manager's dispatch callback instead of a hook of its own.** Each of Lossless Scaling's passes now goes through one detour instead of two stacked ones (two code hooks
+  on the same function can undo each other when one is removed). The addon no longer needs MinHook, and asks for API 1.1 (`min_host_version`). It declares `EAM_CAP_DISPATCH_HOOK`, and its panel
+  shows the passes seen instead of a hook count. The offline test host now runs the callback the way the manager does, and every model scenario passes.
+- **Fixed: two addons that both registered a dispatch callback without userData replaced each other's.** A callback was identified by its userData alone, and the SDK's default is null.
+  It is now identified by the calling addon together with its userData.
+- **The addon interface is now locked by a test.** The core test holds a frozen copy of the interface as released with API 1.0 and calls today's host through it, as an addon built against
+  0.7.0 does. Every call must reach the right function, and the event ids and payload layouts must be unchanged.
+- `events.h` rewritten, documenting each event and its payload. `SETTINGS_CHANGED` and `SHADER_INTERCEPTED` are marked as reserved: they were declared but never sent.
+- **Tests: only what the change can affect.**
+  - `tools\run_addon_tests.ps1` runs the suites that the files changed since the last commit can affect, and prints only failures and the time each took. `-Only core,gui` picks suites and
+    `-All` runs everything; the suites are core, features, sample, update, gui, installer, setupexe and nr.
+  - The Neural Rendering model scenarios have an everyday set (`run_hosttest_matrix.py --quick`: 3 scenarios, about 70 s) beside the full one (15, about 6 minutes).
+
 ## 0.7.6 (internal, 2026-09-23)
 
 Not a public release (the manager still shows 0.7.0).

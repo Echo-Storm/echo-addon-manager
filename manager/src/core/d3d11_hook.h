@@ -4,8 +4,9 @@
 // makes to the host (and publishes the device events).
 //
 // The passes: a code hook on each ID3D11DeviceContext::Dispatch implementation in d3d11.dll, which runs the callbacks only for the immediate
-// contexts of those devices. Not a patch of the context's function table: each context keeps its own copy of that table, and
-// ID3D11Multithread::SetMultithreadProtected() (which Lossless Scaling calls) swaps the copy's entries, dropping a patched slot.
+// contexts of those devices: all of them, since Lossless Scaling makes more than one and its compute passes run on the first. Not a patch of the
+// context's function table: each context keeps its own copy of that table, and ID3D11Multithread::SetMultithreadProtected() (which Lossless
+// Scaling calls) swaps the copy's entries, dropping a patched slot.
 #pragma once
 #include <cstdint>
 
@@ -28,7 +29,7 @@ void Attach(ID3D11Device* device, ID3D11DeviceContext* context);
 
 // The compute shader bound on the context whose Dispatch is running on this thread (borrowed); null outside a dispatch callback.
 void* GetCurrentComputeShader();
-// Dispatches on Lossless Scaling's contexts since its device was created.
+// Dispatches on Lossless Scaling's contexts since its first device was created.
 uint32_t GetDispatchCount();
 // The context whose Dispatch is running on this thread; null outside a dispatch callback.
 ID3D11DeviceContext* DispatchingContext();

@@ -6,6 +6,7 @@
 #include "../log/logger.h"
 #include "../../sdk/include/eam/version.h"
 #include <algorithm>
+#include <intrin.h>
 #include <windows.h>
 
 namespace eam {
@@ -15,16 +16,24 @@ namespace {
 // Addons may pass null for any text; the registries want real strings.
 const char* Text(const char* s) { return s ? s : ""; }
 
-// Sets, replaces or removes the hook that belongs to `owner`.
+// The module (addon DLL) that code at `address` belongs to.
+void* ModuleAt(void* address) {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, static_cast<LPCWSTR>(address), &module);
+    return module;
+}
+
+// Sets, replaces or removes the hook of one owner: the calling module and its userData. Two addons that both pass no userData keep a callback
+// each; one addon passing different userData values keeps one per value.
 template <class Hook, class Callback>
-void SetHook(std::vector<Hook>& hooks, Callback callback, void* owner) {
-    const auto mine = std::find_if(hooks.begin(), hooks.end(), [owner](const Hook& h) { return h.owner == owner; });
+void SetHook(std::vector<Hook>& hooks, Callback callback, void* owner, void* module) {
+    const auto mine = std::find_if(hooks.begin(), hooks.end(), [&](const Hook& h) { return h.owner == owner && h.module == module; });
     if (!callback) {
         if (mine != hooks.end()) hooks.erase(mine);
     } else if (mine != hooks.end()) {
         mine->callback = callback;
     } else {
-        hooks.push_back({ callback, owner });
+        hooks.push_back({ callback, owner, module });
     }
 }
 
@@ -97,18 +106,19 @@ void HostImpl::SetD3D11Device(void* device, void* context) {
 
 void* HostImpl::GetCurrentComputeShader() { return D3D11Hook::GetCurrentComputeShader(); }
 uint32_t HostImpl::GetDispatchCount() { return D3D11Hook::GetDispatchCount(); }
+void* HostImpl::GetDispatchingContext() { return D3D11Hook::DispatchingContext(); }
 
 // ---- dispatch callbacks
 
 void HostImpl::SetPreDispatchCallback(EamPreDispatchCallback callback, void* userData) {
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
-    SetHook(m_preHooks, callback, userData);
+    SetHook(m_preHooks, callback, userData, ModuleAt(_ReturnAddress()));
     Recount();
 }
 
 void HostImpl::SetPostDispatchCallback(EamPostDispatchCallback callback, void* userData) {
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
-    SetHook(m_postHooks, callback, userData);
+    SetHook(m_postHooks, callback, userData, ModuleAt(_ReturnAddress()));
     Recount();
 }
 
