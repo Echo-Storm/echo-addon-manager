@@ -95,7 +95,13 @@ And one **addon**, which is separate because it needs an NVIDIA GPU and a file y
 
 | Addon | What it does | Default |
 |-------|--------------|---------|
-| **DLSS 5 Neural Rendering** | Runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures and applies the result to every frame it presents, real and generated, without ever making Lossless Scaling wait. Saved looks, per-game looks, HUD protection, shadows and highlights, colour, film grain and temporal smoothing. Needs an NVIDIA RTX GPU and a copy of `nvngx_dlssnr.dll` that you supply. [More](addons/DLSS5NR01/README.md) | on |
+| **DLSS 5 Neural Rendering** | Runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures and applies the result to every frame it presents, real and generated, without ever making Lossless Scaling wait. Saved looks, per-game looks, HUD protection drawn on a snapshot of the game, screenshots of what you see, shadows and highlights, colour, film grain and temporal smoothing. Needs an NVIDIA RTX GPU and a copy of `nvngx_dlssnr.dll` that you supply. [More](addons/DLSS5NR01/README.md) | on |
+
+**HUD protection, drawn on the game.** In Neural Rendering's panel, *Take a snapshot* shows the game as you see it, and you draw the areas the enhancement must leave
+exactly as they are (action bars, chat, the minimap, quest text): drag to add an area, drag it to move it, drag an edge or corner to resize it, right-click to remove it.
+The areas are saved with each look, so every game can have its own layout.
+
+<p align="center"><img src="docs/images/hud-editor.png" alt="The HUD areas drawn on a snapshot of World of Warcraft: Forever in Neural Rendering's panel" width="100%"></p>
 
 ## Using it
 
