@@ -109,20 +109,20 @@ struct Core {
             LOG_ERROR("Core", "Scanning addons failed: %s", e.what());
         }
 
-        // Install shader hooks
-        ShaderHook::Initialize(addonManager.get());
-        ShaderHook::InstallHooks();
-        LOG_INFO("Core", "Shader hooks installed");
+        // Addons may replace resources of Lossless Scaling's DLL (its shaders)
+        eam::AddonManager* const addons = addonManager.get();
+        ShaderHook::InstallHooks(hLosslessOriginal, [addons](const wchar_t* name, const wchar_t* type, const void** data, uint32_t* size) {
+            return addons->InterceptResource(name, type, data, size);
+        });
 
-        // Install D3D11 device capture hook (for CUDA/DLSS addons)
+        // Lossless Scaling's D3D11 device (the Dispatch hooks come later, on the window thread: they need D3D, which DllMain must not use)
         D3D11Hook::Initialize(host.get());
-        LOG_INFO("Core", "D3D11 hooks installed");
 
         // Built-in features that are switched on (on their own threads where they hook things: this runs in DllMain)
         eam::features::Start();
 
         // Start GUI thread (loads + initializes addons)
-        eam::GuiManager::StartGuiThread(addonManager.get());
+        eam::GuiManager::StartGuiThread(addonManager.get(), [] { D3D11Hook::InstallDispatchHooks(); });
 
         return true;
     }
@@ -137,7 +137,6 @@ struct Core {
         eam::features::Stop();
         D3D11Hook::Shutdown();
         ShaderHook::UninstallHooks();
-        ShaderHook::Shutdown();
 
         if (addonManager) {
             addonManager.reset();

@@ -1,5 +1,6 @@
 #pragma once
 #include "../../sdk/include/eam/ihost.h"
+#include <atomic>
 #include <deque>
 #include <mutex>
 #include <string>
@@ -63,6 +64,9 @@ private:
     std::mutex m_dispatchMutex;
     std::vector<Hook<EamPreDispatchCallback>> m_preHooks;
     std::vector<Hook<EamPostDispatchCallback>> m_postHooks;
+    // How many of each there are, read without the lock: every one of Lossless Scaling's dispatches asks, and usually there are none.
+    std::atomic<size_t> m_preCount{ 0 }, m_postCount{ 0 };
+    void Recount() { m_preCount.store(m_preHooks.size(), std::memory_order_relaxed); m_postCount.store(m_postHooks.size(), std::memory_order_relaxed); }
 };
 
 } // namespace eam

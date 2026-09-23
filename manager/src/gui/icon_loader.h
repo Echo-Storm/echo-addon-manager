@@ -1,14 +1,20 @@
+// Addon icons: a PNG, JPEG or BMP file made into a texture the window can draw.
 #pragma once
 #include <d3d11.h>
 #include <string>
+#include <vector>
 
 namespace eam {
 
-// Set the D3D11 device used for texture creation (call once during GUI init)
-void IconLoader_SetDevice(ID3D11Device* device);
+// The window's device, which the textures are made on (set when the window's device is created).
+void SetIconDevice(ID3D11Device* device);
 
-// Load an image file (PNG, JPG, BMP, etc.) as a D3D11 shader resource view.
-// Returns nullptr on failure. Caller must Release() the returned texture.
-ID3D11ShaderResourceView* IconLoader_LoadFromFile(const std::wstring& path);
+// Reads and decodes the image at `path` into RGBA, 8 bits a channel, rows top to bottom. False (and a line in the log) when the file cannot be
+// read or decoded, or is larger than 16 MB or 1024 pixels a side. The path is used as it is (any characters).
+bool DecodeImageFile(const std::wstring& path, std::vector<unsigned char>& rgba, int& w, int& h);
+
+// The image at `path` as a texture view (the caller releases it), or null when there is no device, the file cannot be read or decoded, or the
+// image is larger than an icon has any reason to be (1024 pixels a side).
+ID3D11ShaderResourceView* LoadIconTexture(const std::wstring& path);
 
 } // namespace eam

@@ -103,14 +103,17 @@ uint32_t HostImpl::GetDispatchCount() { return D3D11Hook::GetDispatchCount(); }
 void HostImpl::SetPreDispatchCallback(EamPreDispatchCallback callback, void* userData) {
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
     SetHook(m_preHooks, callback, userData);
+    Recount();
 }
 
 void HostImpl::SetPostDispatchCallback(EamPostDispatchCallback callback, void* userData) {
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
     SetHook(m_postHooks, callback, userData);
+    Recount();
 }
 
 bool HostImpl::InvokePreDispatch(uint32_t x, uint32_t y, uint32_t z) {
+    if (!m_preCount.load(std::memory_order_relaxed)) return false;
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
     bool skip = false, faulted = false;
     for (auto& hook : m_preHooks) {
@@ -118,16 +121,17 @@ bool HostImpl::InvokePreDispatch(uint32_t x, uint32_t y, uint32_t z) {
         if (!CallPre(hook.callback, x, y, z, hook.owner, &wantsSkip)) { hook.callback = nullptr; faulted = true; continue; }
         if (wantsSkip) skip = true;   // all of them run, even after one asks to skip
     }
-    if (faulted) DropFaulted(m_preHooks, "pre");
+    if (faulted) { DropFaulted(m_preHooks, "pre"); Recount(); }
     return skip;
 }
 
 void HostImpl::InvokePostDispatch(uint32_t x, uint32_t y, uint32_t z) {
+    if (!m_postCount.load(std::memory_order_relaxed)) return;
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
     bool faulted = false;
     for (auto& hook : m_postHooks)
         if (!CallPost(hook.callback, x, y, z, hook.owner)) { hook.callback = nullptr; faulted = true; }
-    if (faulted) DropFaulted(m_postHooks, "post");
+    if (faulted) { DropFaulted(m_postHooks, "post"); Recount(); }
 }
 
 // ---- live status and metrics
@@ -146,6 +150,7 @@ size_t HostImpl::ForgetCode(uintptr_t begin, uintptr_t end) {
     const size_t before = m_preHooks.size() + m_postHooks.size();
     m_preHooks.erase(std::remove_if(m_preHooks.begin(), m_preHooks.end(), inside), m_preHooks.end());
     m_postHooks.erase(std::remove_if(m_postHooks.begin(), m_postHooks.end(), inside), m_postHooks.end());
+    Recount();
     return before - (m_preHooks.size() + m_postHooks.size());
 }
 

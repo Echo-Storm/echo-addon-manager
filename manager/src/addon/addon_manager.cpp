@@ -362,7 +362,7 @@ bool AddonManager::InterceptResource(const wchar_t* name, const wchar_t* type, c
 void AddonManager::LoadAddonIcons() {
     std::lock_guard<std::mutex> lock(m_mutex);
     for (AddonInfo& addon : m_addons)
-        if (!addon.iconTexture && !addon.iconPath.empty()) addon.iconTexture = IconLoader_LoadFromFile(addon.iconPath);
+        if (!addon.iconTexture && !addon.iconPath.empty()) addon.iconTexture = LoadIconTexture(addon.iconPath);
 }
 
 std::vector<AddonInfo>& AddonManager::GetAddons() { return m_addons; }

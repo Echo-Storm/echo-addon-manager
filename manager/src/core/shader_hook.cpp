@@ -1,147 +1,135 @@
 #include "shader_hook.h"
-#include "iat_patcher.h"
-#include "../addon/addon_manager.h"
+#include "hook_util.h"
 #include "../log/logger.h"
-#include <map>
+#include <algorithm>
+#include <filesystem>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace ShaderHook {
 
-static eam::AddonManager* g_addonManager = nullptr;
-static std::map<HRSRC, CachedShader> g_shaderCache;
-static CRITICAL_SECTION g_cacheLock;
-static bool g_hooksInstalled = false;
+namespace {
 
-// Original API function pointers
-static HRSRC(WINAPI *g_origFindResourceW)(HMODULE, LPCWSTR, LPCWSTR) = nullptr;
-static HGLOBAL(WINAPI *g_origLoadResource)(HMODULE, HRSRC) = nullptr;
-static DWORD(WINAPI *g_origSizeofResource)(HMODULE, HRSRC) = nullptr;
-static LPVOID(WINAPI *g_origLockResource)(HGLOBAL) = nullptr;
-static BOOL(WINAPI *g_origFreeResource)(HGLOBAL) = nullptr;
+// Our handles: this tag in the upper half, a sequence number in the lower. Real resource handles point into a loaded module, which never has
+// the tag's address.
+constexpr uintptr_t kTag = uintptr_t(0xF00DB00F) << 32;
+constexpr uintptr_t kTagMask = uintptr_t(0xFFFFFFFF) << 32;
+bool IsOurs(const void* handle) { return (reinterpret_cast<uintptr_t>(handle) & kTagMask) == kTag; }
 
-static const uint32_t CUSTOM_SHADER_MAGIC = 0xF00DB00Fu;
+struct Replacement { std::vector<uint8_t> bytes; };
 
-inline HRSRC MakeCustomHandle(DWORD id) {
-    uintptr_t magicShift = (sizeof(uintptr_t) == 8) ? 32 : 16;
-    uintptr_t v = (((uintptr_t)CUSTOM_SHADER_MAGIC) << magicShift) | (uintptr_t)(id & 0xFFFF);
-    return (HRSRC)(v);
+std::mutex g_mutex;
+Interceptor g_intercept;
+// Every replacement ever handed out, never removed: Lossless Scaling may keep the pointer LockResource gave it.
+std::unordered_map<uintptr_t, std::unique_ptr<Replacement>> g_replacements;
+std::unordered_map<std::wstring, uintptr_t> g_handleFor;   // the same resource with the same bytes gets the same handle again
+uint32_t g_nextSerial = 1;
+
+using FindResourceWFn = HRSRC(WINAPI*)(HMODULE, LPCWSTR, LPCWSTR);
+using LoadResourceFn = HGLOBAL(WINAPI*)(HMODULE, HRSRC);
+using SizeofResourceFn = DWORD(WINAPI*)(HMODULE, HRSRC);
+using LockResourceFn = LPVOID(WINAPI*)(HGLOBAL);
+using FreeResourceFn = BOOL(WINAPI*)(HGLOBAL);
+
+// A patched import slot and what it held before.
+struct Patched { const char* name; void* hook; void** slot = nullptr; void* original = nullptr; };
+
+HRSRC WINAPI OnFindResourceW(HMODULE, LPCWSTR, LPCWSTR);
+HGLOBAL WINAPI OnLoadResource(HMODULE, HRSRC);
+DWORD WINAPI OnSizeofResource(HMODULE, HRSRC);
+LPVOID WINAPI OnLockResource(HGLOBAL);
+BOOL WINAPI OnFreeResource(HGLOBAL);
+
+Patched g_patched[] = {
+    { "FindResourceW", (void*)&OnFindResourceW }, { "LoadResource", (void*)&OnLoadResource }, { "SizeofResource", (void*)&OnSizeofResource },
+    { "LockResource", (void*)&OnLockResource }, { "FreeResource", (void*)&OnFreeResource },
+};
+template <class Fn> Fn Original(int i) { return reinterpret_cast<Fn>(g_patched[i].original); }
+
+std::wstring KeyOf(LPCWSTR name, LPCWSTR type) {
+    auto part = [](LPCWSTR s) { return IS_INTRESOURCE(s) ? L"#" + std::to_wstring((uintptr_t)s) : std::wstring(s ? s : L""); };
+    return part(type) + L"/" + part(name);
 }
 
-inline bool IsCustomHandle(HRSRC handle) {
-    uintptr_t v = (uintptr_t)handle;
-    uintptr_t magicShift = (sizeof(uintptr_t) == 8) ? 32 : 16;
-    return (v >> magicShift) == (uintptr_t)CUSTOM_SHADER_MAGIC;
+const Replacement* Find(const void* handle) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    const auto it = g_replacements.find(reinterpret_cast<uintptr_t>(handle));
+    return it == g_replacements.end() ? nullptr : it->second.get();
 }
 
-static const CachedShader* GetCachedShader(HRSRC handle) {
-    EnterCriticalSection(&g_cacheLock);
-    auto it = g_shaderCache.find(handle);
-    LeaveCriticalSection(&g_cacheLock);
-    if (it != g_shaderCache.end()) return &it->second;
-    return nullptr;
-}
-
-HRSRC WINAPI HookedFindResourceW(HMODULE hModule, LPCWSTR lpName, LPCWSTR lpType) {
-    if (g_addonManager) {
-        const void* customData = nullptr;
-        uint32_t customSize = 0;
-
-        if (g_addonManager->InterceptResource(lpName, lpType, &customData, &customSize)) {
-            if (customData && customSize > 0) {
-                DWORD handleId = IS_INTRESOURCE(lpName) ? (DWORD)(uintptr_t)lpName : 0xFFFF;
-                HRSRC customHandle = MakeCustomHandle(handleId);
-
-                EnterCriticalSection(&g_cacheLock);
-                CachedShader& cached = g_shaderCache[customHandle];
-                cached.bytecode.assign((const uint8_t*)customData, (const uint8_t*)customData + customSize);
-                LeaveCriticalSection(&g_cacheLock);
-
-                LOG_DEBUG("ShaderHook", "Intercepted resource, handle: 0x%llX", (unsigned long long)(uintptr_t)customHandle);
-                return customHandle;
-            }
+HRSRC WINAPI OnFindResourceW(HMODULE module, LPCWSTR name, LPCWSTR type) {
+    const void* data = nullptr; uint32_t size = 0;
+    Interceptor intercept;
+    { std::lock_guard<std::mutex> lock(g_mutex); intercept = g_intercept; }
+    if (intercept && intercept(name, type, &data, &size) && data && size) {
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        std::lock_guard<std::mutex> lock(g_mutex);
+        const std::wstring key = KeyOf(name, type);
+        const auto known = g_handleFor.find(key);
+        if (known != g_handleFor.end()) {
+            const std::vector<uint8_t>& had = g_replacements[known->second]->bytes;
+            if (had.size() == size && std::equal(had.begin(), had.end(), bytes)) return reinterpret_cast<HRSRC>(known->second);
         }
+        const uintptr_t handle = kTag | g_nextSerial++;
+        g_replacements[handle] = std::make_unique<Replacement>(Replacement{ std::vector<uint8_t>(bytes, bytes + size) });
+        g_handleFor[key] = handle;
+        LOG_DEBUG("ShaderHook", "Resource %s replaced by an addon (%u bytes)", std::filesystem::path(key).u8string().c_str(), size);
+        return reinterpret_cast<HRSRC>(handle);
     }
-    return g_origFindResourceW ? g_origFindResourceW(hModule, lpName, lpType) : nullptr;
+    const auto real = Original<FindResourceWFn>(0);
+    return real ? real(module, name, type) : nullptr;
 }
 
-HGLOBAL WINAPI HookedLoadResource(HMODULE hModule, HRSRC hResInfo) {
-    if (IsCustomHandle(hResInfo)) return (HGLOBAL)hResInfo;
-    return g_origLoadResource ? g_origLoadResource(hModule, hResInfo) : nullptr;
+HGLOBAL WINAPI OnLoadResource(HMODULE module, HRSRC res) {
+    if (IsOurs(res)) return reinterpret_cast<HGLOBAL>(res);   // our handle serves as its own "loaded" handle
+    const auto real = Original<LoadResourceFn>(1);
+    return real ? real(module, res) : nullptr;
 }
 
-DWORD WINAPI HookedSizeofResource(HMODULE hModule, HRSRC hResInfo) {
-    if (IsCustomHandle(hResInfo)) {
-        const CachedShader* cached = GetCachedShader(hResInfo);
-        return cached ? static_cast<DWORD>(cached->bytecode.size()) : 0;
+DWORD WINAPI OnSizeofResource(HMODULE module, HRSRC res) {
+    if (IsOurs(res)) { const Replacement* r = Find(res); return r ? static_cast<DWORD>(r->bytes.size()) : 0; }
+    const auto real = Original<SizeofResourceFn>(2);
+    return real ? real(module, res) : 0;
+}
+
+LPVOID WINAPI OnLockResource(HGLOBAL loaded) {
+    if (IsOurs(loaded)) { const Replacement* r = Find(loaded); return r ? const_cast<uint8_t*>(r->bytes.data()) : nullptr; }
+    const auto real = Original<LockResourceFn>(3);
+    return real ? real(loaded) : nullptr;
+}
+
+BOOL WINAPI OnFreeResource(HGLOBAL loaded) {
+    if (IsOurs(loaded)) return FALSE;   // what FreeResource returns for success: it is obsolete and frees nothing
+    const auto real = Original<FreeResourceFn>(4);
+    return real ? real(loaded) : FALSE;
+}
+
+} // namespace
+
+bool InstallHooks(HMODULE module, Interceptor intercept) {
+    UninstallHooks();
+    { std::lock_guard<std::mutex> lock(g_mutex); g_intercept = std::move(intercept); }
+    int patched = 0;
+    for (Patched& p : g_patched) {
+        p.slot = eam::hooks::ImportSlot(module, "kernel32.dll", p.name);
+        p.original = p.slot ? eam::hooks::SwapSlot(p.slot, p.hook) : nullptr;
+        if (!p.original) { p.slot = nullptr; LOG_WARN("ShaderHook", "%s is not imported from kernel32 (or could not be patched): it is not intercepted", p.name); continue; }
+        ++patched;
     }
-    return g_origSizeofResource ? g_origSizeofResource(hModule, hResInfo) : 0;
-}
-
-LPVOID WINAPI HookedLockResource(HGLOBAL hResData) {
-    HRSRC asHandle = (HRSRC)hResData;
-    if (IsCustomHandle(asHandle)) {
-        const CachedShader* cached = GetCachedShader(asHandle);
-        if (cached && !cached->bytecode.empty()) return (void*)cached->bytecode.data();
-    }
-    return g_origLockResource ? g_origLockResource(hResData) : nullptr;
-}
-
-BOOL WINAPI HookedFreeResource(HGLOBAL hResData) {
-    if (IsCustomHandle((HRSRC)hResData)) return TRUE;
-    return g_origFreeResource ? g_origFreeResource(hResData) : TRUE;
-}
-
-void Initialize(eam::AddonManager* addonManager) {
-    g_addonManager = addonManager;
-    InitializeCriticalSection(&g_cacheLock);
-    LOG_INFO("ShaderHook", "Initialized");
-}
-
-void Shutdown() {
-    EnterCriticalSection(&g_cacheLock);
-    g_shaderCache.clear();
-    LeaveCriticalSection(&g_cacheLock);
-    DeleteCriticalSection(&g_cacheLock);
-    g_addonManager = nullptr;
-}
-
-void InstallHooks() {
-    if (g_hooksInstalled) return;
-
-    HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
-    if (!hKernel32) return;
-
-    g_origFindResourceW = (HRSRC(WINAPI*)(HMODULE, LPCWSTR, LPCWSTR))GetProcAddress(hKernel32, "FindResourceW");
-    g_origLoadResource = (HGLOBAL(WINAPI*)(HMODULE, HRSRC))GetProcAddress(hKernel32, "LoadResource");
-    g_origSizeofResource = (DWORD(WINAPI*)(HMODULE, HRSRC))GetProcAddress(hKernel32, "SizeofResource");
-    g_origLockResource = (LPVOID(WINAPI*)(HGLOBAL))GetProcAddress(hKernel32, "LockResource");
-    g_origFreeResource = (BOOL(WINAPI*)(HGLOBAL))GetProcAddress(hKernel32, "FreeResource");
-
-    if (!g_origFindResourceW || !g_origLoadResource || !g_origSizeofResource ||
-        !g_origLockResource || !g_origFreeResource) {
-        LOG_ERROR("ShaderHook", "Failed to get original function pointers");
-        return;
-    }
-
-    HMODULE hLosslessOriginal = GetModuleHandleW(L"Lossless_original.dll");
-    if (!hLosslessOriginal) {
-        LOG_ERROR("ShaderHook", "Failed to get Lossless_original.dll handle");
-        return;
-    }
-
-    IatPatcher::PatchIat(hLosslessOriginal, "kernel32.dll", "FindResourceW", &HookedFindResourceW);
-    IatPatcher::PatchIat(hLosslessOriginal, "kernel32.dll", "LoadResource", &HookedLoadResource);
-    IatPatcher::PatchIat(hLosslessOriginal, "kernel32.dll", "SizeofResource", &HookedSizeofResource);
-    IatPatcher::PatchIat(hLosslessOriginal, "kernel32.dll", "LockResource", &HookedLockResource);
-    IatPatcher::PatchIat(hLosslessOriginal, "kernel32.dll", "FreeResource", &HookedFreeResource);
-
-    g_hooksInstalled = true;
-    LOG_INFO("ShaderHook", "Hooks installed");
+    LOG_INFO("ShaderHook", "%d of 5 resource functions hooked", patched);
+    return patched > 0;
 }
 
 void UninstallHooks() {
-    if (!g_hooksInstalled) return;
-    g_hooksInstalled = false;
-    LOG_INFO("ShaderHook", "Hooks uninstalled");
+    for (Patched& p : g_patched) {
+        if (p.slot && *p.slot == p.hook) eam::hooks::SwapSlot(p.slot, p.original);   // only while it is still ours
+        p.slot = nullptr;
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_intercept = nullptr;
 }
 
 } // namespace ShaderHook

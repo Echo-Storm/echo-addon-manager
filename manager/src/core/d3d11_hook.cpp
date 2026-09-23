@@ -1,188 +1,168 @@
 #include "d3d11_hook.h"
-#include "iat_patcher.h"
+#include "hook_util.h"
 #include "../host/host_impl.h"
 #include "../event/event_system.h"
 #include "../log/logger.h"
-#include <d3d11.h>
-#include <cstdint>
+#include <MinHook.h>
+#include <d3d11_4.h>
+#include <algorithm>
+#include <atomic>
+#include <utility>
+#include <vector>
 
 namespace D3D11Hook {
 
-static eam::HostImpl* g_host = nullptr;
-static bool g_installed = false;
+namespace {
 
-// Original D3D11CreateDevice function pointer
-typedef HRESULT(WINAPI* PFN_D3D11CreateDevice)(
-    IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
-    const D3D_FEATURE_LEVEL*, UINT, UINT,
-    ID3D11Device**, D3D_FEATURE_LEVEL*, ID3D11DeviceContext**);
+std::atomic<eam::HostImpl*> g_host{ nullptr };
+std::atomic<ID3D11DeviceContext*> g_lsContext{ nullptr };   // the immediate context of the newest device Lossless Scaling made
+std::atomic<uint32_t> g_dispatches{ 0 };
+thread_local ID3D11DeviceContext* t_dispatching = nullptr;
 
-static PFN_D3D11CreateDevice g_origCreateDevice = nullptr;
+// ---- the device
 
-// Original vtable function pointers
-typedef void(STDMETHODCALLTYPE* PFN_Dispatch)(
-    ID3D11DeviceContext*, UINT, UINT, UINT);
-typedef void(STDMETHODCALLTYPE* PFN_CSSetShader)(
-    ID3D11DeviceContext*, ID3D11ComputeShader*, ID3D11ClassInstance* const*, UINT);
+using CreateDeviceFn = HRESULT(WINAPI*)(IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT, const D3D_FEATURE_LEVEL*, UINT, UINT, ID3D11Device**,
+                                        D3D_FEATURE_LEVEL*, ID3D11DeviceContext**);
+CreateDeviceFn g_realCreateDevice = nullptr;
+bool g_importPatched = false;
 
-static PFN_Dispatch g_origDispatch = nullptr;
-static PFN_CSSetShader g_origCSSetShader = nullptr;
-
-// Track currently bound compute shader for dispatch identification
-static ID3D11ComputeShader* g_currentCS = nullptr;
-static uint32_t g_dispatchCount = 0;
-static void** g_hookedVtable = nullptr;
-
-static void STDMETHODCALLTYPE HookedCSSetShader(
-    ID3D11DeviceContext* ctx, ID3D11ComputeShader* shader,
-    ID3D11ClassInstance* const* classInstances, UINT numClassInstances)
-{
-    g_currentCS = shader;
-    if (g_origCSSetShader) {
-        g_origCSSetShader(ctx, shader, classInstances, numClassInstances);
-    }
-}
-
-// Hooked Dispatch — called every time Lossless.dll dispatches a compute shader
-static void STDMETHODCALLTYPE HookedDispatch(
-    ID3D11DeviceContext* ctx, UINT x, UINT y, UINT z)
-{
-    g_dispatchCount++;
-
-    if (g_host) {
-        bool skip = g_host->InvokePreDispatch(x, y, z);
-        if (skip) return;
-    }
-
-    if (g_origDispatch) {
-        g_origDispatch(ctx, x, y, z);
-    }
-
-    if (g_host) {
-        g_host->InvokePostDispatch(x, y, z);
-    }
-}
-
-static bool HookVtableSlot(void** vtable, UINT slot, void* hook, void** origOut) {
-    *origOut = vtable[slot];
-    DWORD oldProtect;
-    if (VirtualProtect(&vtable[slot], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect)) {
-        vtable[slot] = hook;
-        VirtualProtect(&vtable[slot], sizeof(void*), oldProtect, &oldProtect);
-        return true;
-    }
-    return false;
-}
-
-static void InstallDispatchHook(ID3D11DeviceContext* ctx) {
-    void** vtable = *(void***)ctx;
-
-    // Reset shader tracking — previous device's shader pointers are now stale
-    g_currentCS = nullptr;
-
-    // Don't re-hook same vtable: g_origDispatch would be overwritten with
-    // HookedDispatch itself, causing infinite recursion on next Dispatch call.
-    if (vtable == g_hookedVtable) {
-        LOG_INFO("D3D11Hook", "Vtable %p already hooked, skipping re-hook", vtable);
-        return;
-    }
-
-    if (HookVtableSlot(vtable, 41, (void*)&HookedDispatch, (void**)&g_origDispatch))
-        LOG_INFO("D3D11Hook", "Dispatch hook installed (slot 41)");
-
-    if (HookVtableSlot(vtable, 39, (void*)&HookedCSSetShader, (void**)&g_origCSSetShader))
-        LOG_INFO("D3D11Hook", "CSSetShader hook installed (slot 39)");
-
-    g_hookedVtable = vtable;
-}
-
-// Hooked D3D11CreateDevice — captures device and context
-static HRESULT WINAPI HookedD3D11CreateDevice(
-    IDXGIAdapter* pAdapter,
-    D3D_DRIVER_TYPE DriverType,
-    HMODULE Software,
-    UINT Flags,
-    const D3D_FEATURE_LEVEL* pFeatureLevels,
-    UINT FeatureLevels,
-    UINT SDKVersion,
-    ID3D11Device** ppDevice,
-    D3D_FEATURE_LEVEL* pFeatureLevel,
-    ID3D11DeviceContext** ppImmediateContext)
-{
-    HRESULT hr = g_origCreateDevice(
-        pAdapter, DriverType, Software, Flags,
-        pFeatureLevels, FeatureLevels, SDKVersion,
-        ppDevice, pFeatureLevel, ppImmediateContext);
-
-    if (SUCCEEDED(hr) && g_host) {
-        ID3D11Device* device = ppDevice ? *ppDevice : nullptr;
-        ID3D11DeviceContext* context = ppImmediateContext ? *ppImmediateContext : nullptr;
-
-        if (device && context) {
-            bool deviceChanged = (g_host->GetD3D11Device() != nullptr &&
-                                  g_host->GetD3D11Device() != device);
-
-            g_host->SetD3D11Device(device, context);
-            g_dispatchCount = 0;
-
-            D3D_FEATURE_LEVEL fl = pFeatureLevel ? *pFeatureLevel : D3D_FEATURE_LEVEL_11_0;
-            LOG_INFO("D3D11Hook", "Captured D3D11 device (%p) and context (%p), FL %x",
-                     device, context, fl);
-
-            InstallDispatchHook(context);
-
-            if (deviceChanged) {
-                eam::EventBus::Instance().Publish(EAM_EVENT_D3D11_DEVICE_CHANGED);
-            }
-            eam::EventBus::Instance().Publish(EAM_EVENT_D3D11_DEVICE_READY);
-        }
+HRESULT WINAPI OnCreateDevice(IDXGIAdapter* adapter, D3D_DRIVER_TYPE type, HMODULE software, UINT flags, const D3D_FEATURE_LEVEL* levels,
+                              UINT levelCount, UINT sdk, ID3D11Device** device, D3D_FEATURE_LEVEL* level, ID3D11DeviceContext** context) {
+    const HRESULT hr = g_realCreateDevice(adapter, type, software, flags, levels, levelCount, sdk, device, level, context);
+    if (SUCCEEDED(hr) && device && *device && context && *context) {
+        LOG_INFO("D3D11Hook", "Lossless Scaling made a D3D11 device (%p, context %p, feature level %x)", *device, *context, level ? (unsigned)*level : 0u);
+        Attach(*device, *context);
     }
     return hr;
 }
 
+// ---- the passes
+
+using DispatchFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, UINT, UINT);
+constexpr int kDispatchSlot = 41;   // ID3D11DeviceContext::Dispatch in the function table
+constexpr int kMaxHooks = 8;        // room to spare: the runtime has a handful
+struct Hooked { void* target = nullptr; DispatchFn original = nullptr; };
+Hooked g_hooks[kMaxHooks];
+int g_hooked = 0;
+
+// One per hooked implementation, each calling on to its own original. Only the outermost Dispatch on a thread runs the callbacks: a refresh stub
+// jumps on into the real implementation (hooked as well), and an addon may dispatch its own work from a callback.
+template <int I> void STDMETHODCALLTYPE Detour(ID3D11DeviceContext* ctx, UINT x, UINT y, UINT z) {
+    const DispatchFn original = g_hooks[I].original;
+    if (t_dispatching || ctx != g_lsContext.load(std::memory_order_acquire)) { original(ctx, x, y, z); return; }
+    t_dispatching = ctx;
+    g_dispatches.fetch_add(1, std::memory_order_relaxed);
+    eam::HostImpl* const host = g_host.load(std::memory_order_acquire);
+    const bool skip = host && host->InvokePreDispatch(x, y, z);
+    if (!skip) {
+        original(ctx, x, y, z);
+        if (host) host->InvokePostDispatch(x, y, z);
+    }
+    t_dispatching = nullptr;
+}
+template <int... I> void* DetourAt(int i, std::integer_sequence<int, I...>) {
+    void* const all[] = { (void*)&Detour<I>... };
+    return all[i];
+}
+void* DetourAt(int i) { return DetourAt(i, std::make_integer_sequence<int, kMaxHooks>{}); }
+
+void Note(std::vector<void*>& found, ID3D11DeviceContext* ctx) {
+    void* const fn = (*reinterpret_cast<void***>(ctx))[kDispatchSlot];
+    if (fn && std::find(found.begin(), found.end(), fn) == found.end()) found.push_back(fn);
+}
+
+// Every state that gives a context another function table: plain, multithread protected (whose table starts as refresh stubs that the first
+// state-setting call resolves), and deferred. The tables belong to the runtime, not the driver, so a WARP device shows them all.
+std::vector<void*> FindDispatchImplementations() {
+    std::vector<void*> found;
+    auto noteResolved = [&](ID3D11DeviceContext* ctx) { Note(found, ctx); ctx->CSSetShader(nullptr, nullptr, 0); Note(found, ctx); };
+    for (const D3D_DRIVER_TYPE type : { D3D_DRIVER_TYPE_WARP, D3D_DRIVER_TYPE_HARDWARE }) {
+        for (const UINT flags : { 0u, (UINT)D3D11_CREATE_DEVICE_SINGLETHREADED }) {
+            ID3D11Device* dev = nullptr; ID3D11DeviceContext* ctx = nullptr;
+            const HRESULT hr = D3D11CreateDevice(nullptr, type, nullptr, flags, nullptr, 0, D3D11_SDK_VERSION, &dev, nullptr, &ctx);
+            if (FAILED(hr)) { LOG_WARN("D3D11Hook", "A probe device (type %d, flags %u) failed: 0x%08x", (int)type, flags, (unsigned)hr); continue; }
+            noteResolved(ctx);
+            ID3D11Multithread* mt = nullptr;
+            if (SUCCEEDED(ctx->QueryInterface(IID_PPV_ARGS(&mt)))) {
+                for (const BOOL on : { TRUE, FALSE, TRUE }) { mt->SetMultithreadProtected(on); noteResolved(ctx); }
+                mt->Release();
+            }
+            ID3D11DeviceContext* deferred = nullptr;
+            if (SUCCEEDED(dev->CreateDeferredContext(0, &deferred))) { noteResolved(deferred); deferred->Release(); }
+            ctx->Release(); dev->Release();
+        }
+        if (!found.empty()) break;   // WARP was enough: the graphics card is left alone
+    }
+    return found;
+}
+
+} // namespace
+
 void Initialize(eam::HostImpl* host) {
-    g_host = host;
-    if (g_installed) return;
-
-    HMODULE hLosslessOriginal = GetModuleHandleW(L"Lossless_original.dll");
-    if (!hLosslessOriginal) {
-        LOG_ERROR("D3D11Hook", "Lossless_original.dll not loaded");
+    g_host.store(host, std::memory_order_release);
+    if (g_importPatched) return;
+    const HMODULE lossless = GetModuleHandleW(L"Lossless_original.dll");
+    if (!lossless) { LOG_ERROR("D3D11Hook", "Lossless_original.dll is not loaded"); return; }
+    HMODULE d3d11 = GetModuleHandleW(L"d3d11.dll");
+    if (!d3d11) d3d11 = LoadLibraryW(L"d3d11.dll");
+    g_realCreateDevice = d3d11 ? reinterpret_cast<CreateDeviceFn>(GetProcAddress(d3d11, "D3D11CreateDevice")) : nullptr;
+    if (!g_realCreateDevice) { LOG_ERROR("D3D11Hook", "d3d11.dll's D3D11CreateDevice was not found"); return; }
+    // The slot holds the delay-load stub until the first call; ours calls the real function directly, so the stub is never needed.
+    void** const slot = eam::hooks::DelayImportSlot(lossless, "d3d11.dll", "D3D11CreateDevice");
+    if (!slot || !eam::hooks::SwapSlot(slot, (void*)&OnCreateDevice)) {
+        LOG_ERROR("D3D11Hook", "Lossless_original.dll's delay import of D3D11CreateDevice was not found or could not be patched: its device will not be seen");
         return;
     }
+    g_importPatched = true;
+    LOG_INFO("D3D11Hook", "Watching for Lossless Scaling's D3D11 device");
+}
 
-    // Get original D3D11CreateDevice from d3d11.dll
-    HMODULE hD3D11 = GetModuleHandleW(L"d3d11.dll");
-    if (!hD3D11) hD3D11 = LoadLibraryW(L"d3d11.dll");
-    if (!hD3D11) {
-        LOG_ERROR("D3D11Hook", "Failed to load d3d11.dll");
-        return;
+int InstallDispatchHooks() {
+    if (g_hooked) return g_hooked;
+    const std::vector<void*> targets = FindDispatchImplementations();
+    if (targets.empty()) { LOG_ERROR("D3D11Hook", "No Dispatch implementation found: dispatch callbacks will not run"); return 0; }
+    if (!eam::hooks::Begin()) { LOG_ERROR("D3D11Hook", "MinHook could not start: dispatch callbacks will not run"); return 0; }
+    for (void* target : targets) {
+        if (g_hooked == kMaxHooks) break;
+        Hooked& h = g_hooks[g_hooked];
+        if (MH_CreateHook(target, DetourAt(g_hooked), reinterpret_cast<void**>(&h.original)) != MH_OK) continue;
+        if (MH_EnableHook(target) != MH_OK) { MH_RemoveHook(target); continue; }
+        h.target = target;
+        ++g_hooked;
     }
-    g_origCreateDevice = (PFN_D3D11CreateDevice)GetProcAddress(hD3D11, "D3D11CreateDevice");
-
-    // D3D11CreateDevice is a delay import in Lossless.dll.
-    // We always need the real function pointer from d3d11.dll first,
-    // then patch the delay IAT thunk to point to our hook.
-    IatPatcher::PatchDelayIat(
-        hLosslessOriginal, "d3d11.dll", "D3D11CreateDevice", &HookedD3D11CreateDevice);
-    LOG_INFO("D3D11Hook", "D3D11CreateDevice delay IAT hook installed");
-
-    g_installed = true;
+    if (!g_hooked) { eam::hooks::End(); LOG_ERROR("D3D11Hook", "The Dispatch implementations could not be hooked: dispatch callbacks will not run"); return 0; }
+    LOG_INFO("D3D11Hook", "Hooked %d of %zu Dispatch implementations", g_hooked, targets.size());
+    return g_hooked;
 }
 
 void Shutdown() {
-    g_host = nullptr;
-    g_installed = false;
-    g_hookedVtable = nullptr;
-    g_currentCS = nullptr;
-    g_dispatchCount = 0;
+    g_host.store(nullptr, std::memory_order_release);
+    g_lsContext.store(nullptr, std::memory_order_release);
+    g_dispatches.store(0, std::memory_order_relaxed);
+}
+
+void Attach(ID3D11Device* device, ID3D11DeviceContext* context) {
+    eam::HostImpl* const host = g_host.load(std::memory_order_acquire);
+    if (!host) return;
+    void* const before = host->GetD3D11Device();
+    host->SetD3D11Device(device, context);
+    g_lsContext.store(context, std::memory_order_release);
+    g_dispatches.store(0, std::memory_order_relaxed);
+    if (before && before != static_cast<void*>(device)) eam::EventBus::Instance().Publish(EAM_EVENT_D3D11_DEVICE_CHANGED);
+    eam::EventBus::Instance().Publish(EAM_EVENT_D3D11_DEVICE_READY);
 }
 
 void* GetCurrentComputeShader() {
-    return g_currentCS;
+    ID3D11DeviceContext* const ctx = t_dispatching;
+    if (!ctx) return nullptr;
+    ID3D11ComputeShader* shader = nullptr;
+    ctx->CSGetShader(&shader, nullptr, nullptr);
+    if (shader) shader->Release();   // borrowed: the context still holds it
+    return shader;
 }
 
-uint32_t GetDispatchCount() {
-    return g_dispatchCount;
-}
+uint32_t GetDispatchCount() { return g_dispatches.load(std::memory_order_relaxed); }
+
+ID3D11DeviceContext* DispatchingContext() { return t_dispatching; }
 
 } // namespace D3D11Hook

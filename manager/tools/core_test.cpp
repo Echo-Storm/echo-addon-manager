@@ -7,7 +7,9 @@
 #include "src/addon/addon_security.h"
 #include "src/config/config_manager.h"
 #include "src/config/settings_backup.h"
+#include "src/core/d3d11_hook.h"
 #include "src/core/instance_guard.h"
+#include "src/core/shader_hook.h"
 #include "src/event/event_system.h"
 #include "src/host/gpu_stats.h"
 #include "src/host/host_impl.h"
@@ -16,6 +18,8 @@
 #include "eam/version.h"
 #include "imgui.h"
 #include <windows.h>
+#include <d3d11_4.h>
+#include <d3dcompiler.h>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -509,6 +513,90 @@ static void TestInstanceGuard(const fs::path& T) {
     Check("once the first lets go, the folder is free again", ClaimInChild(a) == 0);
 }
 
+// ---- the resource hook, on this program's own imports of kernel32's resource functions
+
+static void TestResourceHook() {
+    printf("== resource replacement (the hook addons use to replace Lossless Scaling's shaders)\n");
+    static const char one[] = "first replacement", two[] = "the second, longer replacement";
+    const HRSRC realManifest = FindResourceW(nullptr, MAKEINTRESOURCEW(1), MAKEINTRESOURCEW(24));   // RT_MANIFEST, before the hook
+    const bool hooked = ShaderHook::InstallHooks(GetModuleHandleW(nullptr), [&](const wchar_t* name, const wchar_t*, const void** data, uint32_t* size) {
+        if (IS_INTRESOURCE(name)) return false;
+        if (!wcscmp(name, L"ONE")) { *data = one; *size = sizeof one; return true; }
+        if (!wcscmp(name, L"TWO")) { *data = two; *size = sizeof two; return true; }
+        return false;
+    });
+    Check("this program's resource imports are hooked", hooked);
+    const HRSRC a = FindResourceW(nullptr, L"ONE", MAKEINTRESOURCEW(10)), b = FindResourceW(nullptr, L"TWO", MAKEINTRESOURCEW(10));
+    Check("two replaced resources with names get different handles", a && b && a != b);
+    auto bytes = [](HRSRC r) {
+        const HGLOBAL loaded = LoadResource(nullptr, r);
+        const void* p = LockResource(loaded);
+        return p ? std::string(static_cast<const char*>(p), SizeofResource(nullptr, r)) : std::string();
+    };
+    Check("...and each reads back its own bytes", bytes(a) == std::string(one, sizeof one) && bytes(b) == std::string(two, sizeof two));
+    Check("the same resource with the same bytes gets the same handle again", FindResourceW(nullptr, L"ONE", MAKEINTRESOURCEW(10)) == a);
+    Check("freeing a replacement reports success, as FreeResource does", FreeResource(LoadResource(nullptr, a)) == FALSE);
+    Check("a resource no addon replaces comes from the program as before", FindResourceW(nullptr, MAKEINTRESOURCEW(1), MAKEINTRESOURCEW(24)) == realManifest);
+    const char* const handedOut = static_cast<const char*>(LockResource(LoadResource(nullptr, b)));
+    ShaderHook::UninstallHooks();
+    Check("after the hook is taken out, nothing is replaced", FindResourceW(nullptr, L"ONE", MAKEINTRESOURCEW(10)) == nullptr);
+    Check("...and replacement bytes handed out earlier are still readable", handedOut && std::string(handedOut) == two);
+}
+
+// ---- the dispatch hook, on real D3D11 devices
+
+struct DispatchSeen { int pre = 0, post = 0; ID3D11DeviceContext* ctx = nullptr; void* shader = nullptr; bool skip = false; };
+static bool CountPre(uint32_t, uint32_t, uint32_t, void* user) {
+    auto* s = static_cast<DispatchSeen*>(user);
+    ++s->pre; s->ctx = D3D11Hook::DispatchingContext(); s->shader = D3D11Hook::GetCurrentComputeShader();
+    return s->skip;
+}
+static void CountPost(uint32_t, uint32_t, uint32_t, void* user) { ++static_cast<DispatchSeen*>(user)->post; }
+
+static void TestDispatchHook() {
+    printf("== dispatch callbacks around Lossless Scaling's compute passes\n");
+    HostImpl h;
+    D3D11Hook::Initialize(&h);   // no Lossless_original.dll here: only the host is taken
+    Check("the Dispatch implementations are hooked", D3D11Hook::InstallDispatchHooks() > 0);
+    ID3D11Device* dev = nullptr; ID3D11DeviceContext* ctx = nullptr; ID3D11Device* other = nullptr; ID3D11DeviceContext* otherCtx = nullptr;
+    D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &dev, nullptr, &ctx);
+    D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &other, nullptr, &otherCtx);
+    if (!ctx || !otherCtx) { Check("WARP devices for the test", false); return; }
+    ID3DBlob* code = nullptr; ID3D11ComputeShader* cs = nullptr;
+    const char src[] = "RWTexture2D<float> o : register(u0); [numthreads(1,1,1)] void main(uint3 i : SV_DispatchThreadID) { }";
+    if (SUCCEEDED(D3DCompile(src, sizeof src - 1, nullptr, nullptr, nullptr, "main", "cs_5_0", 0, 0, &code, nullptr))) {
+        dev->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &cs); code->Release();
+    }
+    D3D11Hook::Attach(dev, ctx);
+    Check("the device made by Lossless Scaling is handed to the host", h.GetD3D11Device() == dev && h.GetD3D11DeviceContext() == ctx);
+    DispatchSeen seen;
+    h.SetPreDispatchCallback(CountPre, &seen);
+    h.SetPostDispatchCallback(CountPost, &seen);
+    ctx->CSSetShader(cs, nullptr, 0);
+    ctx->Dispatch(1, 1, 1);
+    Check("a Dispatch on its context runs the pre- and post-dispatch callbacks once each", seen.pre == 1 && seen.post == 1, std::to_string(seen.pre) + "/" + std::to_string(seen.post));
+    Check("...and during them the dispatching context and the bound compute shader are known", seen.ctx == ctx && cs && seen.shader == cs);
+    Check("outside a dispatch there is no dispatching context", D3D11Hook::DispatchingContext() == nullptr && D3D11Hook::GetCurrentComputeShader() == nullptr);
+    ID3D11Multithread* mt = nullptr;
+    if (SUCCEEDED(ctx->QueryInterface(IID_PPV_ARGS(&mt)))) { mt->SetMultithreadProtected(TRUE); mt->Release(); }
+    ctx->CSSetShader(cs, nullptr, 0);
+    ctx->Dispatch(1, 1, 1); ctx->Dispatch(1, 1, 1);
+    Check("they still run once the context is multithread protected (as Lossless Scaling's is)", seen.pre == 3 && seen.post == 3, std::to_string(seen.pre));
+    otherCtx->Dispatch(1, 1, 1);
+    Check("a Dispatch on another device's context does not run them", seen.pre == 3);
+    Check("the dispatch count is Lossless Scaling's dispatches only", D3D11Hook::GetDispatchCount() == 3, std::to_string(D3D11Hook::GetDispatchCount()));
+    seen.skip = true;
+    ctx->Dispatch(1, 1, 1);
+    Check("a pre-dispatch callback that asks to skip: no post-dispatch callback", seen.pre == 4 && seen.post == 3);
+    seen.skip = false;
+    D3D11Hook::Shutdown();
+    ctx->Dispatch(1, 1, 1);
+    Check("after shutdown no callback runs, and dispatching still works", seen.pre == 4);
+    h.SetPreDispatchCallback(nullptr, &seen); h.SetPostDispatchCallback(nullptr, &seen);
+    if (cs) cs->Release();
+    otherCtx->Release(); other->Release(); ctx->Release(); dev->Release();
+}
+
 int main(int argc, char** argv) {
     if (argc > 2 && !strcmp(argv[1], "claim")) {   // the second process of TestInstanceGuard
         const std::string f = argv[2];
@@ -553,7 +641,7 @@ int main(int argc, char** argv) {
     WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false},"renamed_old":{"_enabled":false,"keep":"me"}},"global":{"security_level":0}})");
 
     setvbuf(stdout, nullptr, _IONBF, 0);
-    try { TestInstanceGuard(T); TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
+    try { TestInstanceGuard(T); TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); TestResourceHook(); TestDispatchHook(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
 
     HostImpl host;
     int loadedEvents = 0, unloadedEvents = 0;

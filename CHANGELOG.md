@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.7.6 (internal, 2026-09-23)
+
+Not a public release (the manager still shows 0.7.0).
+
+The manager's core hooks rewritten as our own code, with the bugs found on the way:
+
+- **Fixed: addons' dispatch callbacks never ran under Lossless Scaling.** The manager patched `Dispatch` in the context's function table. Each context has its own copy of that table, and
+  `SetMultithreadProtected` (which Lossless Scaling calls) swaps the copy's entries, so the patch stopped firing (checked with a test program). The same was true of `GetDispatchCount` and
+  `GetCurrentComputeShader`. Neural Rendering was not affected because it hooks the code itself; the manager now does that too. It hooks each `Dispatch` implementation in d3d11.dll and runs the
+  callbacks only for Lossless Scaling's context, with no cost to its dispatches while no addon has a callback.
+  - The hooks are installed on the manager's window thread, before the addons load. Finding them needs D3D, which must not run inside DllMain.
+  - `GetCurrentComputeShader` now asks the context during a dispatch callback, instead of hooking every `CSSetShader`; outside a callback it returns null.
+  - An addon's own dispatches from inside a callback do not call it back.
+- **Fixed: Windowed mode and any other MinHook user in the manager could switch each other off.** Windowed mode started MinHook for itself and, when it stopped, disabled every hook in the manager
+  and shut MinHook down. MinHook is now shared with a count of users, and each part switches only its own hooks on and off.
+- **Fixed, resource replacement** (the hook addons use to replace Lossless Scaling's shaders):
+  - every replaced resource with a string name got the same handle, so a second one replaced the first;
+  - shutting down deleted a lock that later calls still used;
+  - uninstalling left the import table pointing at the hook;
+  - it said "Hooks installed" even when patching had failed.
+
+  Each replacement now gets its own handle, and the same resource with the same bytes gets the same handle again. Replacement bytes stay valid for as long as Lossless Scaling may hold them.
+  Uninstalling puts the import slots back, and the log says how many of the five functions were hooked.
+- **Fixed: icons in a folder with non-ASCII characters in its name did not load** (addon icons, and the window icon's PNG fallback). The image library opened files by an ANSI path. Files are now read by
+  their full path, and images over 1024 pixels a side or 16 MB are refused.
+- The D3D11 device hook checks what it patches. It now logs a failure instead of "installed", and never calls a missing `D3D11CreateDevice`.
+- The export forwarding list is now one line per export; the exports were checked against Lossless Scaling's own DLL (all 11).
+- `iat_patcher.h` is replaced by `core/hook_util` (import table lookup, delay imports, the shared MinHook).
+- New core tests, on this program's own imports and on real D3D11 devices:
+  - resource replacement: separate handles, reuse, pass-through and uninstall;
+  - dispatch callbacks, including after multithread protection is switched on;
+  - another device's context is left alone;
+  - skipping a pass;
+  - nothing runs after shutdown.
+
 ## 0.7.5 (internal, 2026-09-23)
 
 Not a public release (the manager still shows 0.7.0).

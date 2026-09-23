@@ -11,9 +11,9 @@ enum EamLogLevel : uint8_t {
     EAM_LOG_ERROR = 4
 };
 
-// Dispatch hook callback: called before/after ID3D11DeviceContext::Dispatch.
-// Return true from pre-dispatch to skip the original Dispatch call.
-// threadGroupCountX/Y/Z match the Dispatch parameters.
+// Called around each of Lossless Scaling's compute passes (ID3D11DeviceContext::Dispatch on its device's immediate context), on its render
+// thread, with the pass's thread group counts. A pre-dispatch callback returns true to have the pass skipped (then no post-dispatch callback runs).
+// Dispatches an addon makes itself from inside a callback do not call back.
 typedef bool (*EamPreDispatchCallback)(uint32_t threadGroupCountX,
                                            uint32_t threadGroupCountY,
                                            uint32_t threadGroupCountZ,
@@ -56,11 +56,10 @@ struct IHost {
     virtual void SetPreDispatchCallback(EamPreDispatchCallback callback, void* userData = nullptr) = 0;
     virtual void SetPostDispatchCallback(EamPostDispatchCallback callback, void* userData = nullptr) = 0;
 
-    // Get the currently bound compute shader (set by most recent CSSetShader).
-    // Returns ID3D11ComputeShader* — borrowed pointer, do NOT Release.
+    // Inside a dispatch callback: the ID3D11ComputeShader bound for the pass (borrowed, do not Release). Null outside one.
     virtual void* GetCurrentComputeShader() = 0;
 
-    // Total Dispatch calls since device creation (for diagnostics).
+    // Lossless Scaling's compute passes since its device was created (for diagnostics).
     virtual uint32_t GetDispatchCount() = 0;
 
     // ---- Added in API 1.0 (GetHostVersion() >= 0x010000). Appended at the end of the interface, so addons built against an

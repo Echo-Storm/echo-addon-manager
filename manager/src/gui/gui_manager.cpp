@@ -46,6 +46,7 @@ constexpr UINT_PTR kUpdateTimer = 0x4C51;   // once a minute: is the daily updat
 // under the loader lock when the DLL unloads, which is no place to release D3D objects.
 struct Shell {
     AddonManager* manager = nullptr;
+    std::function<void()> beforeAddons;   // run first on the window thread (see StartGuiThread)
     HWND hwnd = nullptr;                    // set once the window and its device exist
     std::atomic<bool> hidden{ false };      // closed to the tray: the window exists but is not shown, and nothing is drawn
     std::atomic<int> failFramesForTest{ 0 };
@@ -225,13 +226,15 @@ bool GuiManager::WindowVisible() { return !g.hidden; }
 
 void GuiManager::FailNextFramesForTest(int n) { g.failFramesForTest = n; }
 
-void GuiManager::StartGuiThread(AddonManager* manager) {
+void GuiManager::StartGuiThread(AddonManager* manager, std::function<void()> beforeAddons) {
     g.manager = manager;
+    g.beforeAddons = std::move(beforeAddons);
     if (HANDLE thread = CreateThread(nullptr, 0, GuiThread, nullptr, 0, nullptr)) CloseHandle(thread);
 }
 
 DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
     auto& cfg = ConfigManager::Instance();
+    if (g.beforeAddons) g.beforeAddons();
 
     // Load addons in the GUI thread to avoid the loader lock. Settings > "Auto-load addons on startup": when off, addons wait for "Load now".
     if (g.manager) {
@@ -287,7 +290,7 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
     }
 
     // Addon icons need the window's D3D11 device.
-    IconLoader_SetDevice(g.device.Device());
+    SetIconDevice(g.device.Device());
     if (g.manager) g.manager->LoadAddonIcons();
 
     IMGUI_CHECKVERSION();

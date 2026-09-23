@@ -51,6 +51,7 @@ set(FEATURE_SOURCES
     src/features/reshade_windows.cpp
     src/features/reshade_input.cpp
     src/features/windowed_mode.cpp
+    src/core/hook_util.cpp
     src/features/windowed_dxgi.cpp
 )
 
@@ -173,6 +174,7 @@ add_executable(eam_uipreview EXCLUDE_FROM_ALL
     src/features/reshade_windows.cpp
     src/features/reshade_input.cpp
     src/features/windowed_mode.cpp
+    src/core/hook_util.cpp
     src/features/windowed_dxgi.cpp
     src/gui/tabs/tab_performance.cpp
     src/gui/tabs/tab_settings.cpp

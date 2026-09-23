@@ -1,5 +1,5 @@
 #include "chrome.h"
-#include "../../../third_party/stb_image.h"
+#include "../icon_loader.h"
 #include <filesystem>
 #include <string>
 
@@ -30,16 +30,14 @@ HICON IconFromIco(const fs::path& path, int cx, int cy) {
     return static_cast<HICON>(LoadImageW(nullptr, path.c_str(), IMAGE_ICON, cx, cy, LR_LOADFROMFILE));
 }
 
-// A PNG file as an icon: decoded with stb_image, red and blue swapped into the BGRA order Windows wants.
+// A PNG file as an icon, red and blue swapped into the BGRA order Windows wants.
 HICON IconFromPng(const fs::path& path) {
-    const std::string utf8 = path.u8string();
-    int w = 0, h = 0, channels = 0;
-    unsigned char* rgba = stbi_load(utf8.c_str(), &w, &h, &channels, 4);
-    if (!rgba) return nullptr;
-    for (int i = 0; i < w * h; ++i) std::swap(rgba[i * 4 + 0], rgba[i * 4 + 2]);
+    std::vector<unsigned char> rgba;
+    int w = 0, h = 0;
+    if (!DecodeImageFile(path.wstring(), rgba, w, h)) return nullptr;
+    for (size_t i = 0; i + 3 < rgba.size(); i += 4) std::swap(rgba[i], rgba[i + 2]);
 
-    HBITMAP color = CreateBitmap(w, h, 1, 32, rgba);
-    stbi_image_free(rgba);
+    HBITMAP color = CreateBitmap(w, h, 1, 32, rgba.data());
     if (!color) return nullptr;
 
     HDC screen = GetDC(nullptr);

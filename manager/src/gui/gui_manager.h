@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <windows.h>
 
 namespace eam {
@@ -7,7 +8,8 @@ class AddonManager;
 
 class GuiManager {
 public:
-    static void StartGuiThread(AddonManager* manager);
+    // Starts the window thread. `beforeAddons` runs on it first, before the addons load (work that must not run in DllMain).
+    static void StartGuiThread(AddonManager* manager, std::function<void()> beforeAddons = {});
 
     // The manager window is hidden, not destroyed, when it is closed: it lives in the notification area (tray) and
     // comes back with a click on its icon or a hotkey (Ctrl+Shift + an F-key, F12 by default).

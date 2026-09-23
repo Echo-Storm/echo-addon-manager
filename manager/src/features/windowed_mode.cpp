@@ -5,6 +5,7 @@
 #include "../log/logger.h"
 #include "imgui.h"
 #include "eam/widgets.h"
+#include "../core/hook_util.h"
 #include <MinHook.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -150,17 +151,23 @@ bool g_hooksUp = false;
 HANDLE g_initThread = nullptr;
 HANDLE g_watcherThread = nullptr;
 
+LPVOID g_targets[3] = {};         // what MinHook hooked, so only these are switched on and off (MinHook is shared within the manager)
+
 void InstallHooks() {
     LOG_INFO("Windowed", "Installing hooks...");
-    if (MH_Initialize() != MH_OK) {
+    if (!eam::hooks::Begin()) {
         LOG_ERROR("Windowed", "Failed to initialize MinHook");
         return;
     }
-    MH_CreateHookApi(L"user32.dll", "EnumDisplayMonitors", &EnumDisplayMonitorsHook, (LPVOID*)&g_realEnumDisplayMonitors);
-    MH_CreateHookApi(L"user32.dll", "GetMonitorInfoW", &GetMonitorInfoHook, (LPVOID*)&g_realGetMonitorInfoW);
-    MH_CreateHookApi(L"dxgi.dll", "CreateDXGIFactory1", &CreateDXGIFactory1Hook, (LPVOID*)&g_realCreateDXGIFactory1);
-    if (MH_EnableHook(MH_ALL_HOOKS) != MH_OK) {
+    MH_CreateHookApiEx(L"user32.dll", "EnumDisplayMonitors", &EnumDisplayMonitorsHook, (LPVOID*)&g_realEnumDisplayMonitors, &g_targets[0]);
+    MH_CreateHookApiEx(L"user32.dll", "GetMonitorInfoW", &GetMonitorInfoHook, (LPVOID*)&g_realGetMonitorInfoW, &g_targets[1]);
+    MH_CreateHookApiEx(L"dxgi.dll", "CreateDXGIFactory1", &CreateDXGIFactory1Hook, (LPVOID*)&g_realCreateDXGIFactory1, &g_targets[2]);
+    bool enabled = true;
+    for (LPVOID target : g_targets) enabled = target && MH_EnableHook(target) == MH_OK && enabled;
+    if (!enabled) {
         LOG_ERROR("Windowed", "Failed to enable hooks");
+        for (LPVOID& target : g_targets) { if (target) { MH_DisableHook(target); MH_RemoveHook(target); } target = nullptr; }
+        eam::hooks::End();
         return;
     }
     g_hooksUp = true;
@@ -175,8 +182,8 @@ void RemoveHooks() {
     if (g_watcherThread) { WaitForSingleObject(g_watcherThread, 2000); CloseHandle(g_watcherThread); g_watcherThread = nullptr; }
     if (!g_hooksUp) return;
     g_hooksUp = false;
-    MH_DisableHook(MH_ALL_HOOKS);
-    MH_Uninitialize();
+    for (LPVOID& target : g_targets) { if (target) { MH_DisableHook(target); MH_RemoveHook(target); } target = nullptr; }
+    eam::hooks::End();
     LOG_INFO("Windowed", "Hooks removed");
 }
 

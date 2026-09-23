@@ -2,81 +2,71 @@
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_BMP
+#define STBI_NO_STDIO   // the file is read here, by its wide path: stb's own fopen would take the path in the ANSI code page
 #include "../../third_party/stb_image.h"
 #include "icon_loader.h"
 #include "../log/logger.h"
-#include <string>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <vector>
 
 namespace eam {
 
-static ID3D11Device* g_iconDevice = nullptr;
+namespace {
+ID3D11Device* g_device = nullptr;
+constexpr int kMaxSide = 1024;
+constexpr size_t kMaxFileBytes = 16u << 20;
 
-void IconLoader_SetDevice(ID3D11Device* device) {
-    g_iconDevice = device;
+std::string Utf8(const std::wstring& path) { return std::filesystem::path(path).u8string(); }   // for the log
+
+std::vector<unsigned char> ReadFile(const std::wstring& path) {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path, ec);
+    if (ec || size == 0 || size > kMaxFileBytes) return {};
+    std::ifstream file(std::filesystem::path(path), std::ios::binary);
+    return std::vector<unsigned char>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+}
+} // namespace
+
+void SetIconDevice(ID3D11Device* device) { g_device = device; }
+
+bool DecodeImageFile(const std::wstring& path, std::vector<unsigned char>& rgba, int& w, int& h) {
+    const std::vector<unsigned char> file = ReadFile(path);
+    int channels = 0;
+    w = h = 0;
+    if (file.empty() || !stbi_info_from_memory(file.data(), (int)file.size(), &w, &h, &channels)) {
+        LOG_WARN("Icons", "Not an image that can be read (PNG, JPEG or BMP up to 16 MB): %s", Utf8(path).c_str());
+        return false;
+    }
+    if (w <= 0 || h <= 0 || w > kMaxSide || h > kMaxSide) {
+        LOG_WARN("Icons", "Too large for an icon (%dx%d; at most %d a side): %s", w, h, kMaxSide, Utf8(path).c_str());
+        return false;
+    }
+    unsigned char* const pixels = stbi_load_from_memory(file.data(), (int)file.size(), &w, &h, &channels, 4);
+    if (!pixels) { LOG_WARN("Icons", "Could not decode %s: %s", Utf8(path).c_str(), stbi_failure_reason()); return false; }
+    rgba.assign(pixels, pixels + (size_t)w * h * 4);
+    stbi_image_free(pixels);
+    return true;
 }
 
-// Convert wstring path to UTF-8 for stb_image
-static std::string WToUtf8(const std::wstring& wstr) {
-    if (wstr.empty()) return "";
-    int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), nullptr, 0, nullptr, nullptr);
-    std::string result(size, 0);
-    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &result[0], size, nullptr, nullptr);
-    return result;
-}
+ID3D11ShaderResourceView* LoadIconTexture(const std::wstring& path) {
+    if (!g_device) return nullptr;
+    std::vector<unsigned char> rgba;
+    int w = 0, h = 0;
+    if (!DecodeImageFile(path, rgba, w, h)) return nullptr;
 
-ID3D11ShaderResourceView* IconLoader_LoadFromFile(const std::wstring& path) {
-    if (!g_iconDevice) return nullptr;
-
-    // stb_image doesn't support wchar paths directly, use UTF-8
-    std::string utf8Path = WToUtf8(path);
-
-    int width, height, channels;
-    unsigned char* data = stbi_load(utf8Path.c_str(), &width, &height, &channels, 4); // Force RGBA
-    if (!data) {
-        LOG_WARN("IconLoader", "Failed to load icon: %s", utf8Path.c_str());
-        return nullptr;
-    }
-
-    // Create D3D11 texture
-    D3D11_TEXTURE2D_DESC desc = {};
-    desc.Width = width;
-    desc.Height = height;
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-    D3D11_SUBRESOURCE_DATA subResource = {};
-    subResource.pSysMem = data;
-    subResource.SysMemPitch = width * 4;
-
-    ID3D11Texture2D* pTexture = nullptr;
-    HRESULT hr = g_iconDevice->CreateTexture2D(&desc, &subResource, &pTexture);
-    stbi_image_free(data);
-
-    if (FAILED(hr) || !pTexture) {
-        LOG_WARN("IconLoader", "Failed to create texture for icon: %s", utf8Path.c_str());
-        return nullptr;
-    }
-
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = 1;
-
-    ID3D11ShaderResourceView* pSRV = nullptr;
-    hr = g_iconDevice->CreateShaderResourceView(pTexture, &srvDesc, &pSRV);
-    pTexture->Release();
-
-    if (FAILED(hr)) {
-        LOG_WARN("IconLoader", "Failed to create SRV for icon: %s", utf8Path.c_str());
-        return nullptr;
-    }
-
-    LOG_DEBUG("IconLoader", "Loaded icon %dx%d: %s", width, height, utf8Path.c_str());
-    return pSRV;
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = (UINT)w; desc.Height = (UINT)h; desc.MipLevels = 1; desc.ArraySize = 1; desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1; desc.Usage = D3D11_USAGE_IMMUTABLE; desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    const D3D11_SUBRESOURCE_DATA pixels{ rgba.data(), (UINT)w * 4, 0 };
+    ID3D11Texture2D* texture = nullptr;
+    HRESULT hr = g_device->CreateTexture2D(&desc, &pixels, &texture);
+    ID3D11ShaderResourceView* view = nullptr;
+    if (SUCCEEDED(hr)) { hr = g_device->CreateShaderResourceView(texture, nullptr, &view); texture->Release(); }
+    if (FAILED(hr)) { LOG_WARN("Icons", "Could not make a texture for %s: 0x%08x", Utf8(path).c_str(), (unsigned)hr); return nullptr; }
+    LOG_DEBUG("Icons", "Loaded %dx%d: %s", w, h, Utf8(path).c_str());
+    return view;
 }
 
 } // namespace eam
