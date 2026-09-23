@@ -6,6 +6,7 @@
 #include "src/addon/addon_manager.h"
 #include "src/addon/addon_security.h"
 #include "src/config/config_manager.h"
+#include "src/config/settings_backup.h"
 #include "src/event/event_system.h"
 #include "src/host/gpu_stats.h"
 #include "src/host/host_impl.h"
@@ -177,6 +178,21 @@ static void TestConfig(const fs::path& T) {
         Check("Replace swaps everything and saves at once", !C.IsAddonEnabled("r", true) && ReadJson(p)["global"]["log_level"] == 3);
         C.Replace(json::array({ 1, 2 }));
         Check("Replace with something that is not an object leaves an empty object", C.Snapshot().is_object() && C.Snapshot().empty());
+
+        // Loading settings from a file says "restart to apply". Until then the running addons still hold their old settings, and an addon that writes
+        // everything back when it shuts down (Neural Rendering does) would put the old ones back over the imported ones.
+        C.Replace(json{ { "addons", { { "nr", { { "look", "imported" } } } } }, { "global", { { "ui", { { "size", 150 } } } } } }, /*untilRestart=*/true);
+        C.Set("nr", "look", "old, from memory");
+        C.SetAddonEnabled("nr", false);
+        C.GlobalSet("ui", "size", 100);
+        C.Save();
+        const json after = ReadJson(p);
+        Check("after a settings import, later writes wait for the restart and the imported settings stay in the file",
+              after["addons"]["nr"]["look"] == "imported" && !after["addons"]["nr"].contains("_enabled") && after["global"]["ui"]["size"] == 150);
+        Check("...and they are what is read until then", C.Get("nr", "look") == "imported" && C.IsAddonEnabled("nr", true));
+        Check("...and the manager knows a restart is pending", C.RestartPending());
+        C.Load(p.wstring());
+        Check("loading the file (the restart) lifts that", !C.RestartPending() && (C.Set("nr", "look", "new"), C.Get("nr", "look") == "new"));
     }
 
     {   // the very old settings file, addons_config.ini
@@ -190,11 +206,45 @@ static void TestConfig(const fs::path& T) {
         Check("settings from the old .ini are carried over, one per addon folder", !C.IsAddonEnabled("One", true) && C.IsAddonEnabled("Two", false) && C.IsAddonEnabled("Three", false));
         Check("...and written to config.json straight away", fs::exists(p) && ReadJson(p)["addons"]["One"]["_enabled"] == false);
     }
+
+    {   // a hand-edited file whose sections are not objects: must not throw when an addon or the manager writes to it
+        const fs::path dir = base / "shapes";
+        fs::create_directories(dir);
+        const fs::path p = dir / "config.json";
+        WriteFile(p, R"({"addons":[1,2],"global":"oops","keep":"me"})");
+        C.Load(p.wstring());
+        bool threw = false;
+        try { C.Set("x", "k", "v"); C.SetAddonEnabled("y", false); C.GlobalSet("ui", "size", 100); C.Save(); } catch (...) { threw = true; }
+        Check("sections that are not objects are replaced, not thrown over", !threw && C.Get("x", "k") == "v" && !C.IsAddonEnabled("y", true) && C.GlobalGetOr<int>("ui", "size", 0) == 100);
+        Check("...and other keys in the file are kept", C.Snapshot().value("keep", std::string()) == "me");
+        WriteFile(p, R"({"addons":{"z":"not an object","w":{"k":"1"}}})");
+        C.Load(p.wstring());
+        threw = false;
+        try { C.Set("z", "k", "v"); C.SetAddonEnabled("z", true); } catch (...) { threw = true; }
+        Check("one addon's entry that is not an object is replaced when it is written, the others are kept", !threw && C.Get("z", "k") == "v" && C.Get("w", "k") == "1");
+    }
+
+    {   // text that is not valid UTF-8 (an addon that stores a path in the ANSI code page): saving must not throw and must write the file
+        const fs::path dir = base / "utf8";
+        fs::create_directories(dir);
+        const fs::path p = dir / "config.json";
+        C.Load(p.wstring());
+        bool threw = false;
+        try { C.Set("x", "path", "C:\\Users\\Jos\xE9\\model.dll"); C.GlobalSet(nullptr, "note", std::string("caf\xE9")); C.Save(); } catch (...) { threw = true; }
+        Check("invalid UTF-8 from an addon does not make Save throw", !threw);
+        Check("...and the file is still written, with the rest intact", fs::exists(p) && ReadJson(p)["addons"]["x"].contains("path"));
+        std::string backup;
+        threw = false;
+        try { backup = MakeSettingsBackupText(C.Snapshot(), "test"); } catch (...) { threw = true; }
+        Check("a settings backup of the same settings does not throw either", !threw && backup.find("lsproxy_settings_backup") != std::string::npos);
+    }
 }
 
 static bool PreSkips(uint32_t, uint32_t, uint32_t, void* user) { ++*(int*)user; return true; }
 static bool PreLetsThrough(uint32_t, uint32_t, uint32_t, void* user) { ++*(int*)user; return false; }
 static void PostCounts(uint32_t, uint32_t, uint32_t, void* user) { ++*(int*)user; }
+static bool PreFaults(uint32_t, uint32_t, uint32_t, void*) { volatile int* p = nullptr; return *p == 1; }
+static void PostFaults(uint32_t, uint32_t, uint32_t, void*) { volatile int* p = nullptr; *p = 1; }
 static void EventGot(uint32_t id, const void* data, uint32_t size, void* user) {
     auto* seen = (std::pair<uint32_t, std::string>*)user;
     seen->first = id;
@@ -232,9 +282,24 @@ static void TestHost(const fs::path& T) {
     h.SetPreDispatchCallback(nullptr, &skip);          // no callback removes the owner's entry
     h.InvokePreDispatch(1, 2, 3);
     Check("setting no callback removes that owner's entry", skip == 2 && through == 3);
+
     h.SetPostDispatchCallback(nullptr, &post);
     h.InvokePostDispatch(1, 2, 3);
     Check("...for post-dispatch as well", post == 1);
+
+    // a dispatch callback that faults is called from Lossless Scaling's render thread: it must be dropped, never crash the process
+    int beforeFault = 0, afterFault = 0;
+    h.SetPreDispatchCallback(PreLetsThrough, &beforeFault);
+    h.SetPreDispatchCallback(PreFaults, &afterFault);
+    h.SetPostDispatchCallback(PostFaults, &afterFault);
+    const size_t hooksBefore = h.DispatchHookCount();
+    h.InvokePreDispatch(1, 2, 3);    // unguarded, this ends the test program with an access violation
+    h.InvokePostDispatch(1, 2, 3);
+    Check("a faulting pre- or post-dispatch callback does not crash the dispatch, and the others still run", beforeFault == 1);
+    Check("...the faulting ones are removed", h.DispatchHookCount() == hooksBefore - 2, std::to_string(h.DispatchHookCount()) + " of " + std::to_string(hooksBefore));
+    h.InvokePreDispatch(1, 2, 3);
+    Check("...and are not called again", beforeFault == 2);
+    h.SetPreDispatchCallback(nullptr, &beforeFault);
 
     h.SetD3D11Device((void*)0x10, (void*)0x20);
     Check("the device and context handed over by the hook are what addons get", h.GetD3D11Device() == (void*)0x10 && h.GetD3D11DeviceContext() == (void*)0x20);
@@ -591,6 +656,34 @@ int main(int argc, char** argv) {
     }   // the manager unloads everything here, including the addon that faulted
 
     Check("shutting down unloads what was loaded", Calls(alpha, "shutdown") == 3, std::to_string(Calls(alpha, "shutdown")));
+
+    {   // an addon that forgets to take back its callbacks: after it is unloaded they would point into freed code (the dispatch one on Lossless Scaling's render thread)
+        printf("== an addon that leaves its callbacks behind\n");
+        const fs::path L = T / "leaky_addons";
+        fs::create_directories(L);
+        const fs::path leaky = MakeAddon(L, "leaky", "leaky.dll", nullptr, "leaky");
+        HostImpl h2;
+        AddonManager m2(&h2, L.wstring());
+        ImGuiContext* c2 = ImGui::CreateContext();
+        ImGui::SetCurrentContext(c2);
+        m2.ScanAddons();
+        m2.LoadAddons();
+        m2.InitializeAddons(c2);
+        const size_t subs = EventBus::Instance().SubscriberCount(0x7E57);
+        h2.PublishEvent(0x7E57, nullptr, 0);
+        h2.InvokePreDispatch(1, 1, 1);
+        Check("its callbacks are called while it is loaded", subs >= 1 && Calls(leaky, "event") == 1 && Calls(leaky, "dispatch") == 1 && h2.DispatchHookCount() == 1);
+        m2.ToggleAddon(IndexOf(m2, "leaky"), false);
+        Check("switching it off removes the callbacks it left registered", EventBus::Instance().SubscriberCount(0x7E57) == subs - 1 && h2.DispatchHookCount() == 0,
+              std::to_string(EventBus::Instance().SubscriberCount(0x7E57)) + " subscribers, " + std::to_string(h2.DispatchHookCount()) + " dispatch hooks");
+        h2.PublishEvent(0x7E57, nullptr, 0);
+        h2.InvokePreDispatch(1, 1, 1);
+        Check("...so nothing calls into the unloaded DLL any more", Calls(leaky, "event") == 1 && Calls(leaky, "dispatch") == 1);
+        m2.ToggleAddon(IndexOf(m2, "leaky"), true);
+        h2.InvokePreDispatch(1, 1, 1);
+        Check("switched on again, it registers afresh and works", Calls(leaky, "dispatch") == 2 && h2.DispatchHookCount() == 1);
+        ImGui::DestroyContext(c2);
+    }
     fs::remove_all(T, ec);
     printf("\n%s\n", g_failed ? "CORE TEST FAILED" : "CORE TEST PASSED");
     return g_failed ? 1 : 0;

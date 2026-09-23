@@ -15,6 +15,7 @@ public:
     static bool WindowVisible();
     static void ApplyHotkey();               // (re)registers the hotkey from the config; call after it changes
     static const char* HotkeyStatus();       // "registered", "off" or why it could not be registered
+    static void FailNextFramesForTest(int n);   // the next n frames throw while drawing (the window test checks the window survives)
     static void RequestUserScale();          // the interface-size setting changed: re-apply the scale at the start of the next frame
 
 private:

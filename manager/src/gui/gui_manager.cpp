@@ -18,11 +18,13 @@
 #include "../update/update_check.h"
 #include "../../sdk/include/lsproxy/version.h"
 #include "imgui.h"
+#include "imgui_internal.h"   // ImGui::ErrorRecoveryStoreState / ErrorRecoveryTryToRecoverState
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_win32.h"
 #include <shellapi.h>
 #include <atomic>
 #include <cmath>
+#include <stdexcept>
 #include <string>
 
 #pragma comment(lib, "d3d11.lib")
@@ -46,6 +48,8 @@ struct Shell {
     AddonManager* manager = nullptr;
     HWND hwnd = nullptr;                    // set once the window and its device exist
     std::atomic<bool> hidden{ false };      // closed to the tray: the window exists but is not shown, and nothing is drawn
+    std::atomic<int> failFramesForTest{ 0 };
+    int frameFailures = 0;                  // frames whose drawing threw, this session
     std::atomic<bool> scaleDirty{ false };  // the interface-size setting changed: apply it before the next frame
     bool minimized = false;
     bool bringAddonsForward = false;        // set by a drop: show the Addons tab so the confirmation is seen
@@ -219,6 +223,8 @@ const char* GuiManager::HotkeyStatus() { return window::hotkey::Status(); }
 void GuiManager::ToggleWindow() { ShowManager(g.hidden); }
 bool GuiManager::WindowVisible() { return !g.hidden; }
 
+void GuiManager::FailNextFramesForTest(int n) { g.failFramesForTest = n; }
+
 void GuiManager::StartGuiThread(AddonManager* manager) {
     g.manager = manager;
     if (HANDLE thread = CreateThread(nullptr, 0, GuiThread, nullptr, 0, nullptr)) CloseHandle(thread);
@@ -318,7 +324,23 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-        window::RenderMainFrame(g.manager, g.bringAddonsForward);
+        // Anything that throws while drawing or acting on a click (a settings file that cannot be written, a folder that vanished) must not
+        // end Lossless Scaling: the half-drawn frame is unwound with ImGui's own error recovery, and the window carries on.
+        ImGuiErrorRecoveryState recovery;
+        ImGui::ErrorRecoveryStoreState(&recovery);
+        const char* failure = nullptr;
+        std::string why;
+        try {
+            if (g.failFramesForTest > 0) { --g.failFramesForTest; throw std::runtime_error("a test failure"); }
+            window::RenderMainFrame(g.manager, g.bringAddonsForward);
+        } catch (const std::exception& e) { failure = "exception"; why = e.what(); } catch (...) { failure = "exception"; why = "unknown"; }
+        if (failure) {
+            ImGui::ErrorRecoveryTryToRecoverState(&recovery);
+            if (++g.frameFailures <= 3) {   // not every frame of a repeating problem
+                LOG_ERROR("GUI", "Drawing the window failed (%s); the window carries on", why.c_str());
+                widgets::ToastShow("Something went wrong in the manager window (see the Logs tab).", widgets::ToastType::Error, 6.0f);
+            }
+        }
         widgets::ToastRender();
         ImGui::Render();
 

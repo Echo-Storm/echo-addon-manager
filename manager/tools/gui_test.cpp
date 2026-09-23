@@ -200,6 +200,15 @@ int wmain(int argc, wchar_t** argv) {
     // let it draw a few frames while visible and then drop to hidden again; nothing should fall over
     Sleep(500);
     Check("still there after drawing frames", WindowThere());
+
+    // drawing that throws (a settings file that cannot be written, a folder that vanished) must not end the process: the frame is unwound and the window carries on
+    GuiManager::FailNextFramesForTest(5);
+    Sleep(600);
+    bool logged = false;
+    for (const auto& e : Logger::Instance().GetEntries(LogLevel::Error)) if (e.message.find("Drawing the window failed") != std::string::npos) logged = true;
+    Check("frames that throw while drawing are survived, and said so in the log", WindowThere() && WinVisibleNow() && logged);
+    Sleep(300);
+    Check("...and the window draws normally afterwards", WindowThere() && WinVisibleNow());
     SendMessageW(hwnd, WM_SIZE, SIZE_MINIMIZED, 0);
     Sleep(100);
     SendMessageW(hwnd, WM_HOTKEY, kHotkeyMsgId, 0);

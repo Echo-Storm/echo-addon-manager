@@ -6,6 +6,7 @@
 #include "../log/logger.h"
 #include "../../sdk/include/lsproxy/version.h"
 #include <algorithm>
+#include <windows.h>
 
 namespace lsproxy {
 
@@ -25,6 +26,25 @@ void SetHook(std::vector<Hook>& hooks, Callback callback, void* owner) {
     } else {
         hooks.push_back({ callback, owner });
     }
+}
+
+// Dispatch callbacks run on Lossless Scaling's render thread, where a fault would end the process. Kept apart from anything that owns
+// C++ objects: a function with a __try block cannot also have destructors to run.
+bool CallPre(LsProxyPreDispatchCallback cb, uint32_t x, uint32_t y, uint32_t z, void* owner, bool* skip) {
+    __try { *skip = cb(x, y, z, owner); return true; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+bool CallPost(LsProxyPostDispatchCallback cb, uint32_t x, uint32_t y, uint32_t z, void* owner) {
+    __try { cb(x, y, z, owner); return true; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+
+// Removes the callbacks that faulted (marked with a null callback) and says so once for each.
+template <class Hook>
+void DropFaulted(std::vector<Hook>& hooks, const char* kind) {
+    for (const Hook& h : hooks)
+        if (!h.callback) LOG_ERROR("Host", "An addon's %s-dispatch callback faulted and was removed (owner %p); the addon may need restarting", kind, h.owner);
+    hooks.erase(std::remove_if(hooks.begin(), hooks.end(), [](const Hook& h) { return !h.callback; }), hooks.end());
 }
 
 } // namespace
@@ -92,15 +112,22 @@ void HostImpl::SetPostDispatchCallback(LsProxyPostDispatchCallback callback, voi
 
 bool HostImpl::InvokePreDispatch(uint32_t x, uint32_t y, uint32_t z) {
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
-    bool skip = false;
-    for (const auto& hook : m_preHooks)
-        if (hook.callback(x, y, z, hook.owner)) skip = true;   // all of them run, even after one asks to skip
+    bool skip = false, faulted = false;
+    for (auto& hook : m_preHooks) {
+        bool wantsSkip = false;
+        if (!CallPre(hook.callback, x, y, z, hook.owner, &wantsSkip)) { hook.callback = nullptr; faulted = true; continue; }
+        if (wantsSkip) skip = true;   // all of them run, even after one asks to skip
+    }
+    if (faulted) DropFaulted(m_preHooks, "pre");
     return skip;
 }
 
 void HostImpl::InvokePostDispatch(uint32_t x, uint32_t y, uint32_t z) {
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
-    for (const auto& hook : m_postHooks) hook.callback(x, y, z, hook.owner);
+    bool faulted = false;
+    for (auto& hook : m_postHooks)
+        if (!CallPost(hook.callback, x, y, z, hook.owner)) { hook.callback = nullptr; faulted = true; }
+    if (faulted) DropFaulted(m_postHooks, "post");
 }
 
 // ---- live status and metrics
@@ -111,6 +138,20 @@ void HostImpl::SetStatus(const char* addonId, const char* text, int level) {
 
 void HostImpl::PublishMetric(const char* addonId, const char* key, double value, const char* unit) {
     Metrics::Instance().Publish(Text(addonId), Text(key), value, Text(unit));
+}
+
+size_t HostImpl::ForgetCode(uintptr_t begin, uintptr_t end) {
+    std::lock_guard<std::mutex> lock(m_dispatchMutex);
+    const auto inside = [&](auto& hook) { const uintptr_t at = reinterpret_cast<uintptr_t>(hook.callback); return at >= begin && at < end; };
+    const size_t before = m_preHooks.size() + m_postHooks.size();
+    m_preHooks.erase(std::remove_if(m_preHooks.begin(), m_preHooks.end(), inside), m_preHooks.end());
+    m_postHooks.erase(std::remove_if(m_postHooks.begin(), m_postHooks.end(), inside), m_postHooks.end());
+    return before - (m_preHooks.size() + m_postHooks.size());
+}
+
+size_t HostImpl::DispatchHookCount() {
+    std::lock_guard<std::mutex> lock(m_dispatchMutex);
+    return m_preHooks.size() + m_postHooks.size();
 }
 
 } // namespace lsproxy

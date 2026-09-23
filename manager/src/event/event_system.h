@@ -19,6 +19,10 @@ public:
     void Unsubscribe(uint32_t eventId, EventCallback callback);   // removes every subscription of that callback to the event
     void Publish(uint32_t eventId, const void* data = nullptr, uint32_t dataSize = 0);
 
+    // Removes every subscription whose callback lies in [begin, end): an addon's DLL that is being unloaded. Returns how many.
+    size_t ForgetCode(uintptr_t begin, uintptr_t end);
+    size_t SubscriberCount(uint32_t eventId) const;   // for tests
+
 private:
     EventBus() = default;
 

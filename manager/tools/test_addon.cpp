@@ -4,6 +4,7 @@
 //   restart         asks for a restart to be enabled or disabled
 //   crash_init      faults in AddonInitialize
 //   crash_shutdown  faults in AddonShutdown
+//   leaky           subscribes to event 0x7E57 and sets a pre-dispatch callback, and leaves both registered when it is shut down
 #include <lsproxy/addon_sdk.h>
 #include <windows.h>
 #include <fstream>
@@ -35,9 +36,16 @@ static void Fault() {
     *p = 1;
 }
 
-LSPROXY_EXPORT void AddonInitialize(IHost*, ImGuiContext*, void*, void*, void*) {
+static void OnTestEvent(uint32_t, const void*, uint32_t, void*) { Note("event"); }
+static bool OnTestPreDispatch(uint32_t, uint32_t, uint32_t, void*) { Note("dispatch"); return false; }
+
+LSPROXY_EXPORT void AddonInitialize(IHost* host, ImGuiContext*, void*, void*, void*) {
     Note("init");
     if (Mode() == "crash_init") Fault();
+    if (Mode() == "leaky" && host) {   // registers callbacks and never clears them (AddonShutdown below does not): the manager has to
+        host->SubscribeEvent(0x7E57, OnTestEvent, nullptr);
+        host->SetPreDispatchCallback(OnTestPreDispatch, reinterpret_cast<void*>(0x7E57));
+    }
 }
 
 LSPROXY_EXPORT void AddonShutdown() {

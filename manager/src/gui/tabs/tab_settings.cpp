@@ -124,6 +124,11 @@ void RenderTabSettings(AddonManager* manager) {
         }
     }
     widgets::Tip("Replaces the current settings with the ones in a file saved earlier. You are asked first, and your current settings are kept aside. Takes effect after Lossless Scaling restarts.");
+    if (config.RestartPending()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kWarn));
+        ImGui::TextWrapped("Settings were loaded from a file. Restart Lossless Scaling to use them. Until then, changes you make here or in an addon are not saved, so they cannot undo the loaded settings.");
+        ImGui::PopStyleColor();
+    }
     if (s_askImport) { ImGui::OpenPopup("Load settings"); s_askImport = false; }
     if (ImGui::BeginPopupModal("Load settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
@@ -135,7 +140,7 @@ void RenderTabSettings(AddonManager* manager) {
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, S(6)));
         if (lsp::Button("Load", lsp::icons::kCheck, lsp::ButtonKind::Primary)) {
-            const ImportResult r = ImportSettings(s_importText, config.Snapshot(), fs::path(ExeDir()) / L"backups", [&](const nlohmann::json& j) { config.Replace(j); });
+            const ImportResult r = ImportSettings(s_importText, config.Snapshot(), fs::path(ExeDir()) / L"backups", [&](const nlohmann::json& j) { config.Replace(j, /*untilRestart=*/true); });
             widgets::ToastShow(r.message, r.ok ? widgets::ToastType::Success : widgets::ToastType::Error, 9.0f);
             ImGui::CloseCurrentPopup();
         }

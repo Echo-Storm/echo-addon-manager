@@ -39,8 +39,13 @@ public:
     void PublishMetric(const char* addonId, const char* key, double value, const char* unit) override;
 
     // Called from the Dispatch hook. InvokePreDispatch runs every callback and says whether any of them wants the dispatch skipped.
+    // A callback that faults is removed (and logged) instead of taking Lossless Scaling's render thread down.
     bool InvokePreDispatch(uint32_t x, uint32_t y, uint32_t z);
     void InvokePostDispatch(uint32_t x, uint32_t y, uint32_t z);
+
+    // Removes every dispatch callback whose code lies in [begin, end): an addon's DLL that is being unloaded. Returns how many.
+    size_t ForgetCode(uintptr_t begin, uintptr_t end);
+    size_t DispatchHookCount();   // pre and post together (for tests)
 
 private:
     template <class Callback>

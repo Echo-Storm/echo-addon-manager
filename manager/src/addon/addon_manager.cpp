@@ -268,6 +268,14 @@ void AddonManager::UnloadModule(AddonInfo& addon) {
     if (!addon.IsLoaded()) return;
     guarded::Shutdown(addon.exports);
     Announce(LSPROXY_EVENT_ADDON_UNLOADED, addon);
+    // Whatever the addon left registered would point into freed code once its DLL is gone (a dispatch callback on Lossless Scaling's render
+    // thread): take back every event subscription and dispatch callback whose code lies in the DLL's image.
+    const auto base = reinterpret_cast<uintptr_t>(addon.hModule);
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(addon.hModule);
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+    const uintptr_t end = base + nt->OptionalHeader.SizeOfImage;
+    const size_t left = EventBus::Instance().ForgetCode(base, end) + (m_host ? m_host->ForgetCode(base, end) : 0);
+    if (left) LOG_WARN("AddonManager", "'%s' left %zu callback(s) registered when it shut down; removed them", addon.id.c_str(), left);
     FreeLibrary(addon.hModule);
     addon.hModule = nullptr;
     addon.exports = AddonExports{};

@@ -25,6 +25,19 @@ const json* AddonNode(const json& all, const std::string& id) {
     return node != addons->end() && node->is_object() ? &*node : nullptr;
 }
 
+// The object an addon's settings live in, made so when the file had something else there ("addons": [..], or an addon's entry that is text).
+// nlohmann's operator[] throws on a value that is not an object, and SetConfig is called from inside addon code.
+json& AddonObject(json& all, const std::string& id) {
+    json& addons = all["addons"];
+    if (!addons.is_object()) addons = json::object();
+    json& addon = addons[id];
+    if (!addon.is_object()) addon = json::object();
+    return addon;
+}
+
+// Text an addon stored may not be valid UTF-8 (a path in the ANSI code page): replace such bytes instead of throwing, which dump() does by default.
+std::string Dump(const json& j) { return j.dump(2, ' ', false, json::error_handler_t::replace); }
+
 std::string Utf8(const std::wstring& text) {
     if (text.empty()) return {};
     const int bytes = WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(), nullptr, 0, nullptr, nullptr);
@@ -69,6 +82,8 @@ void ConfigManager::Load(const std::wstring& path) {
     m_path = path;
     m_basePath = fs::path(path).parent_path().wstring();
     m_lastWritten.clear();   // nothing is known about the disk yet
+    m_frozen = false;        // a fresh start: an import before it has been applied
+    m_frozenNoted = false;
     m_data = EmptySettings();
 
     std::error_code ec;
@@ -78,6 +93,16 @@ void ConfigManager::Load(const std::wstring& path) {
         if (parsed.is_object()) {
             m_data = std::move(parsed);
             m_loaded = true;
+            // A hand-edited file may hold something other than an object in the two sections the manager writes to: keep a copy, start those afresh
+            bool reshaped = false;
+            for (const char* section : { "addons", "global" }) {
+                const auto it = m_data.find(section);
+                if (it != m_data.end() && !it->is_object()) { *it = json::object(); reshaped = true; }
+            }
+            if (reshaped) {
+                CopyFileW(path.c_str(), (path + L".corrupt").c_str(), FALSE);
+                LOG_WARN("Config", "config.json had 'addons' or 'global' in an unexpected form; kept a copy as config.json.corrupt and started those afresh");
+            }
             LOG_INFO("Config", "Loaded config from config.json");
             return;
         }
@@ -102,10 +127,10 @@ void ConfigManager::MigrateFromIni() {
         if (!it->is_directory(ec)) continue;
         const std::wstring name = it->path().filename().wstring();
         const bool on = GetPrivateProfileIntW(L"Addons", name.c_str(), 1, ini.c_str()) != 0;
-        m_data["addons"][Utf8(name)][kOwnFlag] = on;
+        AddonObject(m_data, Utf8(name))[kOwnFlag] = on;
     }
 
-    const std::string text = m_data.dump(2);
+    const std::string text = Dump(m_data);
     if (WriteAtomically(m_path, text)) {
         m_lastWritten = text;
         LOG_INFO("Config", "Migration complete, saved config.json");
@@ -118,7 +143,7 @@ void ConfigManager::Save() {
         LOG_WARN("Config", "Save called before config was loaded, ignoring");
         return;
     }
-    std::string text = m_data.dump(2);
+    std::string text = Dump(m_data);
     if (text.size() <= 4) {   // "{}" or "null": never replace the user's file with nothing
         LOG_WARN("Config", "Save aborted: config data is empty");
         return;
@@ -143,9 +168,21 @@ std::string ConfigManager::Get(const std::string& addonId, const std::string& ke
     return defaultVal;
 }
 
+bool ConfigManager::Frozen() {
+    if (!m_frozen) return false;
+    if (!m_frozenNoted) { m_frozenNoted = true; LOG_INFO("Config", "Settings were loaded from a file: changes wait until Lossless Scaling restarts"); }
+    return true;
+}
+
+bool ConfigManager::RestartPending() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_frozen;
+}
+
 void ConfigManager::Set(const std::string& addonId, const std::string& key, const std::string& value) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_data["addons"][addonId][key] = value;
+    if (Frozen()) return;
+    AddonObject(m_data, addonId)[key] = value;
 }
 
 bool ConfigManager::IsAddonEnabled(const std::string& addonId, bool defaultVal) {
@@ -161,7 +198,8 @@ bool ConfigManager::IsAddonEnabled(const std::string& addonId, bool defaultVal) 
 
 void ConfigManager::SetAddonEnabled(const std::string& addonId, bool enabled) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    json& addon = m_data["addons"][addonId];
+    if (Frozen()) return;
+    json& addon = AddonObject(m_data, addonId);
     addon[kOwnFlag] = enabled;
     const auto old = addon.find(kOldFlag);
     if (old != addon.end() && old->is_boolean()) addon.erase(old);
@@ -189,10 +227,12 @@ json ConfigManager::Snapshot() const {
     return m_data;
 }
 
-void ConfigManager::Replace(const json& all) {
+void ConfigManager::Replace(const json& all, bool untilRestart) {
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_data = all.is_object() ? all : json::object();
+        m_frozen = untilRestart;
+        m_frozenNoted = false;
     }
     Save();
 }
@@ -214,6 +254,7 @@ json ConfigManager::GlobalGet(const char* section, const char* key) const {
 
 void ConfigManager::GlobalSet(const char* section, const char* key, json value) {
     std::lock_guard<std::mutex> lock(m_mutex);
+    if (Frozen()) return;
     json& global = m_data["global"];
     if (!global.is_object()) global = json::object();
 

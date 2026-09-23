@@ -34,8 +34,11 @@ public:
     bool RenameAddonSection(const std::string& from, const std::string& to);
 
     // A copy of everything, and a wholesale replacement that is saved at once (settings backup and restore).
+    // With `untilRestart` (loading settings from a file), every later write is dropped until the file is loaded again at the next start: the
+    // running addons still hold their old settings, and one that writes them all back when it shuts down would undo the import.
     nlohmann::json Snapshot() const;
-    void Replace(const nlohmann::json& all);
+    void Replace(const nlohmann::json& all, bool untilRestart = false);
+    bool RestartPending() const;
 
     // The host's own settings under "global"; `section` may be null for a top-level key. GlobalGet gives null when the setting is absent.
     nlohmann::json GlobalGet(const char* section, const char* key) const;
@@ -58,6 +61,9 @@ private:
     std::string m_lastWritten;   // what is on disk, so an unchanged Save writes nothing
     mutable std::mutex m_mutex;
     bool m_loaded = false;
+    bool m_frozen = false;       // settings were imported: writes wait for the restart
+    bool m_frozenNoted = false;  // the first dropped write is logged, not every one
+    bool Frozen();               // true (and logged once) when a write must be dropped; call with m_mutex held
 };
 
 } // namespace lsproxy

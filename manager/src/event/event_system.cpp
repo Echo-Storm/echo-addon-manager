@@ -53,4 +53,24 @@ void EventBus::Publish(uint32_t eventId, const void* data, uint32_t dataSize) {
             LOG_ERROR("EventBus", "A subscriber to event %u faulted and was skipped", (unsigned)eventId);
 }
 
+size_t EventBus::ForgetCode(uintptr_t begin, uintptr_t end) {
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+    size_t removed = 0;
+    for (auto& [id, subs] : m_subscribers) {
+        const size_t before = subs.size();
+        subs.erase(std::remove_if(subs.begin(), subs.end(), [&](const Subscriber& s) {
+            const uintptr_t at = reinterpret_cast<uintptr_t>(s.callback);
+            return at >= begin && at < end;
+        }), subs.end());
+        removed += before - subs.size();
+    }
+    return removed;
+}
+
+size_t EventBus::SubscriberCount(uint32_t eventId) const {
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+    const auto list = m_subscribers.find(eventId);
+    return list == m_subscribers.end() ? 0 : list->second.size();
+}
+
 } // namespace lsproxy

@@ -19,7 +19,7 @@ std::string MakeSettingsBackupText(const json& config, const char* proxyVersion)
     j["proxy_version"] = proxyVersion ? proxyVersion : "";
     j["created"] = Timestamp();
     j["config"] = config;
-    return j.dump(2);
+    return j.dump(2, ' ', false, json::error_handler_t::replace);   // an addon's text may not be valid UTF-8: never throw over it
 }
 
 BackupParse ParseSettingsBackup(const std::string& text) {
@@ -55,10 +55,12 @@ ImportResult ImportSettings(const std::string& text, const json& current, const 
     if (!p.ok) { r.message = p.message; return r; }
     std::error_code ec;
     fs::create_directories(backupDir, ec);
-    const fs::path prev = backupDir / ("config.before-import-" + Timestamp() + ".json");
+    fs::path prev = backupDir / ("config.before-import-" + Timestamp() + ".json");
+    for (int n = 2; fs::exists(prev, ec) && n < 1000; ++n)   // two imports in the same second must not overwrite the first one's copy
+        prev = backupDir / ("config.before-import-" + Timestamp() + "-" + std::to_string(n) + ".json");
     {
         std::ofstream out(prev, std::ios::binary);
-        out << current.dump(2);
+        out << current.dump(2, ' ', false, json::error_handler_t::replace);
         if (!out) { r.message = "Could not save your current settings first, so nothing was changed."; return r; }
     }
     apply(p.config);
