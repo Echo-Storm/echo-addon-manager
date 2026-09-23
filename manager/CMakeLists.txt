@@ -91,7 +91,6 @@ set(GUI_SOURCES
     src/gui/tabs/tab_about.cpp
     src/gui/widgets/toggle_switch.cpp
     src/gui/widgets/toast.cpp
-    src/gui/widgets/search_bar.cpp
     src/gui/widgets/addon_card.cpp
     src/gui/widgets/status_bar.cpp
     src/gui/widgets/empty_state.cpp

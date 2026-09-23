@@ -1,8 +1,6 @@
+// The addon SDK in one include: versions, events, the host interface and the exports an addon provides. widgets.h and icons.h (the shared
+// look) are separate, since not every addon draws with them.
 #pragma once
-
-// Echo Addon Manager - Addon SDK, single include header
-// Include this file in your addon project to access all SDK types.
-
 #include "version.h"
 #include "events.h"
 #include "ihost.h"

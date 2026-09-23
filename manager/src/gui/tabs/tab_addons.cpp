@@ -5,7 +5,6 @@
 #include "../../addon/addon_manager.h"
 #include "../../config/config_manager.h"
 #include "../widgets/addon_card.h"
-#include "../widgets/search_bar.h"
 #include "../widgets/toast.h"
 #include "../widgets/empty_state.h"
 #include "../widgets/tooltip.h"
@@ -386,7 +385,8 @@ void RenderTabAddons(AddonManager* manager) {
     int sel = resolveSelection();
 
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F)) ImGui::SetKeyboardFocusHere();   // Ctrl+F: jump to the search box
-    widgets::SearchBar("##addon_search", s_searchBuffer, sizeof(s_searchBuffer), "Search addons... (Ctrl+F)");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##addon_search", "Search addons... (Ctrl+F)", s_searchBuffer, sizeof(s_searchBuffer));
     widgets::Tip("Filter the list by name, author or tag.");
     ImGui::Dummy(ImVec2(0, S(2)));
 

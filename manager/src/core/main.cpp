@@ -1,3 +1,5 @@
+// Lossless.dll, as Lossless Scaling loads it. Every export but ApplySettings is forwarded to Lossless_original.dll by the linker
+// (proxy_exports.h). Loading it starts the manager: the log, the settings and addons, the hooks, the built-in features and the window.
 #include "proxy_exports.h"
 #include "shader_hook.h"
 #include "d3d11_hook.h"
@@ -17,191 +19,132 @@
 
 namespace fs = std::filesystem;
 
-// ============================================================================
-// Manual ApplySettings wrapper
-// ============================================================================
+// ---------------------------------------------------------------------------------------------------------------------------------
+// ApplySettings: Lossless Scaling calls it with the settings of the profile being applied. Ours logs them, calls the real one, then
+// tells the addons (EAM_EVENT_SETTINGS_APPLIED), which may adjust things now that Lossless Scaling has.
+// ---------------------------------------------------------------------------------------------------------------------------------
 
-typedef void(__fastcall* ApplySettings_t)(
-    int, int, int, int,
-    float, uint8_t, int, uint8_t,
-    int, int, int, float, float,
-    int, uint8_t, uint8_t, uint8_t, uint8_t,
-    int, int, uint8_t, uint8_t,
-    int, int, uint8_t, int, int,
-    int, int, int, int, uint8_t);
+extern "C" __declspec(dllexport) void __fastcall ApplySettings(
+    int scalingMode, int scalingFitMode, int scalingType, int scalingSubtype, float scaleFactor, uint8_t resizeBeforeScale, int sharpness,
+    uint8_t vrs, int frameGenType, int frameGenSize, int frameGenMode, float frameGenMultiplier, float frameGenTarget, int frameGenFlowScale,
+    uint8_t clipCursor, uint8_t adjustCursorSpeed, uint8_t hideCursor, uint8_t scaleCursor, int syncMode, int maxFrameLatency, uint8_t gsyncSupport,
+    uint8_t hdrSupport, int captureApi, int queueTarget, uint8_t drawFps, int gpuId, int displayId, int cropLeft, int cropTop, int cropRight,
+    int cropBottom, uint8_t multiDisplayMode);
 
-static HMODULE g_hOriginal = nullptr;
-static ApplySettings_t g_origApplySettings = nullptr;
+namespace {
 
-// Core owns all subsystems with proper lifetime management
-struct Core {
+decltype(&ApplySettings) g_realApplySettings = nullptr;
+
+// What the manager runs, from DllMain's attach to its detach.
+struct Manager {
     std::unique_ptr<eam::HostImpl> host;
-    std::unique_ptr<eam::AddonManager> addonManager;
+    std::unique_ptr<eam::AddonManager> addons;
     bool passive = false;   // another Lossless Scaling from this folder already runs a manager: this copy only forwards
 
-    bool Init() {
-        // Must run before GuiManager creates its window, or Windows bitmap-stretches it instead.
-        if (HMODULE hUser32 = GetModuleHandleW(L"user32.dll")) {
-            typedef BOOL(WINAPI* PFN_SetProcessDpiAwarenessContext)(HANDLE);
-            auto pSetCtx = (PFN_SetProcessDpiAwarenessContext)
-                GetProcAddress(hUser32, "SetProcessDpiAwarenessContext");
-            if (pSetCtx) {
-                const HANDLE kPerMonitorAwareV2 = (HANDLE)-4; // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-                pSetCtx(kPerMonitorAwareV2);
-            } else {
-                SetProcessDPIAware();
-            }
-        }
+    bool Start();
+    void Stop();
+};
+std::unique_ptr<Manager> g_manager;
 
-        // Determine paths
-        wchar_t buffer[MAX_PATH];
-        GetModuleFileNameW(NULL, buffer, MAX_PATH);
-        fs::path exePath(buffer);
-        // Logs live in <Lossless Scaling>\\logs so the program's own folder stays readable.
-        std::error_code logDirError;
-        fs::create_directories(exePath.parent_path() / "logs", logDirError);
-        fs::path logPath = exePath.parent_path() / "logs" / EAM_PRODUCT_FILE ".log";
+// Before any window exists (the manager's own is created on its thread), or Windows scales it as a bitmap instead of at the real DPI.
+void BecomeDpiAware() {
+    using SetContextFn = BOOL(WINAPI*)(HANDLE);
+    const HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    const auto setContext = user32 ? reinterpret_cast<SetContextFn>(GetProcAddress(user32, "SetProcessDpiAwarenessContext")) : nullptr;
+    if (setContext) setContext(reinterpret_cast<HANDLE>(-4));   // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 (Windows 10 1703 and later)
+    else SetProcessDPIAware();
+}
 
-        // Initialize logger first
-        eam::Logger::Instance().Init(logPath.wstring());
-        LOG_INFO("Core", "%s v%s (built %s) starting...", EAM_PRODUCT_NAME, EAM_VERSION_STRING, __DATE__);
-        eam::InstallCrashLogging();
+fs::path ProgramFolder() {
+    wchar_t exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    return fs::path(exe).parent_path();
+}
 
-        // Load original DLL
-        HMODULE hLosslessOriginal = LoadLibraryW(L"Lossless_original.dll");
-        if (!hLosslessOriginal) {
-            LOG_ERROR("Core", "Failed to load Lossless_original.dll!");
-            return false;
-        }
-        g_hOriginal = hLosslessOriginal;
-        LOG_INFO("Core", "Lossless_original.dll loaded");
+// Runs inside DllMain (the loader lock is held): nothing here may wait for another thread or use D3D. What needs to is started on threads.
+bool Manager::Start() {
+    BecomeDpiAware();
+    const fs::path folder = ProgramFolder();
+    std::error_code ec;
+    fs::create_directories(folder / "logs", ec);   // the logs sit in <Lossless Scaling>\logs, not beside the program
+    eam::Logger::Instance().Init((folder / "logs" / EAM_PRODUCT_FILE ".log").wstring());
+    LOG_INFO("Core", "%s %s (built %s) starting", EAM_PRODUCT_NAME, EAM_VERSION_STRING, __DATE__);
+    eam::InstallCrashLogging();
 
-        // Resolve ApplySettings for our manual wrapper
-        g_origApplySettings = (ApplySettings_t)GetProcAddress(hLosslessOriginal, "ApplySettings");
-        if (!g_origApplySettings) {
-            LOG_ERROR("Core", "Failed to find ApplySettings in Lossless_original.dll!");
-        } else {
-            LOG_INFO("Core", "ApplySettings hooked for addon override support");
-        }
+    const HMODULE lossless = LoadLibraryW(L"Lossless_original.dll");
+    if (!lossless) { LOG_ERROR("Core", "Lossless_original.dll could not be loaded: Lossless Scaling cannot run"); return false; }
+    g_realApplySettings = reinterpret_cast<decltype(&ApplySettings)>(GetProcAddress(lossless, "ApplySettings"));
+    if (!g_realApplySettings) LOG_ERROR("Core", "Lossless_original.dll has no ApplySettings: settings will not reach Lossless Scaling");
 
-        // Lossless Scaling runs one copy of itself: a second start loads this DLL, hands over to the running copy and exits. It must not start a
-        // second window, tray icon, hotkey or set of addons, nor write the settings or the addon logs the running copy is using.
-        if (!eam::instance::Claim(exePath.parent_path().wstring())) {
-            passive = true;
-            LOG_INFO("Core", "Another Lossless Scaling from this folder is already running with the manager: this copy only forwards to Lossless Scaling and starts nothing");
-            return true;
-        }
-
-        // Create host
-        host = std::make_unique<eam::HostImpl>();
-
-        // Create addon manager (loads config, scans addons)
-        addonManager = std::make_unique<eam::AddonManager>(host.get());
-
-        // Settings > Log Level (loaded with the config in the AddonManager constructor).
-        eam::Logger::Instance().SetMinLevel(static_cast<eam::LogLevel>(std::clamp(
-            eam::ConfigManager::Instance().GlobalGetOr<int>(nullptr, "log_level", 2), 0, 4)));
-
-        // An unreadable addons folder must not take Lossless Scaling down with it (this runs in DllMain).
-        try {
-            addonManager->ScanAddons();
-        } catch (const std::exception& e) {
-            LOG_ERROR("Core", "Scanning addons failed: %s", e.what());
-        }
-
-        // Addons may replace resources of Lossless Scaling's DLL (its shaders)
-        eam::AddonManager* const addons = addonManager.get();
-        ShaderHook::InstallHooks(hLosslessOriginal, [addons](const wchar_t* name, const wchar_t* type, const void** data, uint32_t* size) {
-            return addons->InterceptResource(name, type, data, size);
-        });
-
-        // Lossless Scaling's D3D11 device (the Dispatch hooks come later, on the window thread: they need D3D, which DllMain must not use)
-        D3D11Hook::Initialize(host.get());
-
-        // Built-in features that are switched on (on their own threads where they hook things: this runs in DllMain)
-        eam::features::Start();
-
-        // Start GUI thread (loads + initializes addons)
-        eam::GuiManager::StartGuiThread(addonManager.get(), [] { D3D11Hook::InstallDispatchHooks(); });
-
+    // Lossless Scaling runs one copy of itself: started again, it loads this DLL, hands over to the running copy and exits. That second copy
+    // must not start another window, tray icon, hotkey or set of addons, or write the settings and logs the first one uses.
+    if (!eam::instance::Claim(folder.wstring())) {
+        passive = true;
+        LOG_INFO("Core", "A manager already runs for this Lossless Scaling folder: this copy only forwards to Lossless Scaling");
         return true;
     }
 
-    void Shutdown() {
-        if (passive) { eam::Logger::Instance().Shutdown(); return; }   // it started nothing
-        LOG_INFO("Core", "Shutting down...");
-
-        // Publish shutdown event
-        eam::EventBus::Instance().Publish(EAM_EVENT_HOST_SHUTDOWN);
-
-        eam::features::Stop();
-        D3D11Hook::Shutdown();
-        ShaderHook::UninstallHooks();
-
-        if (addonManager) {
-            addonManager.reset();
-        }
-        host.reset();
-
-        eam::instance::Release();
-        eam::Logger::Instance().Shutdown();
+    host = std::make_unique<eam::HostImpl>();
+    addons = std::make_unique<eam::AddonManager>(host.get());   // loads the settings
+    eam::Logger::Instance().SetMinLevel(static_cast<eam::LogLevel>(std::clamp(eam::ConfigManager::Instance().GlobalGetOr<int>(nullptr, "log_level", 2), 0, 4)));
+    try {
+        addons->ScanAddons();
+    } catch (const std::exception& e) {   // an unreadable addons folder must not take Lossless Scaling down with it
+        LOG_ERROR("Core", "The addons folder could not be read: %s", e.what());
     }
-};
 
-static std::unique_ptr<Core> g_core;
+    eam::AddonManager* const addonList = addons.get();
+    ShaderHook::InstallHooks(lossless, [addonList](const wchar_t* name, const wchar_t* type, const void** data, uint32_t* size) {
+        return addonList->InterceptResource(name, type, data, size);
+    });
+    D3D11Hook::Initialize(host.get());
+    eam::features::Start();
+    // The window thread hooks Dispatch first (that needs D3D), then loads the addons, then opens the window.
+    eam::GuiManager::StartGuiThread(addons.get(), [] { D3D11Hook::InstallDispatchHooks(); });
+    return true;
+}
 
-// ============================================================================
-// Exported ApplySettings wrapper — forwards to original, then fires event
-// ============================================================================
+void Manager::Stop() {
+    if (passive) { eam::Logger::Instance().Shutdown(); return; }
+    LOG_INFO("Core", "Shutting down");
+    eam::EventBus::Instance().Publish(EAM_EVENT_HOST_SHUTDOWN);
+    eam::features::Stop();
+    D3D11Hook::Shutdown();
+    ShaderHook::UninstallHooks();
+    addons.reset();   // stops and unloads the addons
+    host.reset();
+    eam::instance::Release();
+    eam::Logger::Instance().Shutdown();
+}
+
+} // namespace
 
 extern "C" __declspec(dllexport) void __fastcall ApplySettings(
-    int scalingMode, int scalingFitMode, int scalingType, int scalingSubtype,
-    float scaleFactor, uint8_t resizeBeforeScale, int sharpness, uint8_t vrs,
-    int frameGenType, int frameGenSize, int frameGenMode, float frameGenMultiplier, float frameGenTarget,
-    int frameGenFlowScale, uint8_t clipCursor, uint8_t adjustCursorSpeed, uint8_t hideCursor, uint8_t scaleCursor,
-    int syncMode, int maxFrameLatency, uint8_t gsyncSupport, uint8_t hdrSupport,
-    int captureApi, int queueTarget, uint8_t drawFps, int gpuId, int displayId,
-    int cropLeft, int cropTop, int cropRight, int cropBottom, uint8_t multiDisplayMode)
-{
-    // Record what Lossless Scaling applies, so a comparison of scalers or frame-generation settings can be lined up
-    // with the addon logs afterwards (the numbers are LS's own enum values).
+    int scalingMode, int scalingFitMode, int scalingType, int scalingSubtype, float scaleFactor, uint8_t resizeBeforeScale, int sharpness,
+    uint8_t vrs, int frameGenType, int frameGenSize, int frameGenMode, float frameGenMultiplier, float frameGenTarget, int frameGenFlowScale,
+    uint8_t clipCursor, uint8_t adjustCursorSpeed, uint8_t hideCursor, uint8_t scaleCursor, int syncMode, int maxFrameLatency, uint8_t gsyncSupport,
+    uint8_t hdrSupport, int captureApi, int queueTarget, uint8_t drawFps, int gpuId, int displayId, int cropLeft, int cropTop, int cropRight,
+    int cropBottom, uint8_t multiDisplayMode) {
+    // In the log, so a comparison of scalers or frame generation settings can be lined up with the addon logs (Lossless Scaling's own numbers).
     LOG_INFO("Core", "ApplySettings: scalingMode=%d fit=%d type=%d subtype=%d factor=%.2f sharpness=%d | frameGen type=%d size=%d mode=%d mult=%.2f target=%.1f flowScale=%d | capture=%d sync=%d maxLatency=%d queue=%d",
-             scalingMode, scalingFitMode, scalingType, scalingSubtype, scaleFactor, sharpness,
-             frameGenType, frameGenSize, frameGenMode, frameGenMultiplier, frameGenTarget, frameGenFlowScale,
-             captureApi, syncMode, maxFrameLatency, queueTarget);
-
-    // Forward to original
-    if (g_origApplySettings) {
-        g_origApplySettings(scalingMode, scalingFitMode, scalingType, scalingSubtype,
-            scaleFactor, resizeBeforeScale, sharpness, vrs,
-            frameGenType, frameGenSize, frameGenMode, frameGenMultiplier, frameGenTarget,
-            frameGenFlowScale, clipCursor, adjustCursorSpeed, hideCursor, scaleCursor,
-            syncMode, maxFrameLatency, gsyncSupport, hdrSupport,
-            captureApi, queueTarget, drawFps, gpuId, displayId,
-            cropLeft, cropTop, cropRight, cropBottom, multiDisplayMode);
-    }
-
-    // Notify addons that settings were just applied — they can now override globals
+             scalingMode, scalingFitMode, scalingType, scalingSubtype, scaleFactor, sharpness, frameGenType, frameGenSize, frameGenMode, frameGenMultiplier,
+             frameGenTarget, frameGenFlowScale, captureApi, syncMode, maxFrameLatency, queueTarget);
+    if (g_realApplySettings)
+        g_realApplySettings(scalingMode, scalingFitMode, scalingType, scalingSubtype, scaleFactor, resizeBeforeScale, sharpness, vrs, frameGenType,
+                            frameGenSize, frameGenMode, frameGenMultiplier, frameGenTarget, frameGenFlowScale, clipCursor, adjustCursorSpeed, hideCursor,
+                            scaleCursor, syncMode, maxFrameLatency, gsyncSupport, hdrSupport, captureApi, queueTarget, drawFps, gpuId, displayId,
+                            cropLeft, cropTop, cropRight, cropBottom, multiDisplayMode);
     eam::EventBus::Instance().Publish(EAM_EVENT_SETTINGS_APPLIED);
 }
 
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID /*lpReserved*/) {
-    switch (ul_reason_for_call) {
-    case DLL_PROCESS_ATTACH: {
-        DisableThreadLibraryCalls(hModule);
-        g_core = std::make_unique<Core>();
-        if (!g_core->Init()) {
-            g_core.reset();
-            return FALSE;
-        }
-        break;
-    }
-    case DLL_PROCESS_DETACH:
-        if (g_core) {
-            g_core->Shutdown();
-            g_core.reset();
-        }
-        break;
+BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
+    if (reason == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(module);
+        g_manager = std::make_unique<Manager>();
+        if (!g_manager->Start()) { g_manager.reset(); return FALSE; }
+    } else if (reason == DLL_PROCESS_DETACH && g_manager) {
+        g_manager->Stop();
+        g_manager.reset();
     }
     return TRUE;
 }

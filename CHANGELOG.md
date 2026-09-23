@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.8 (internal, 2026-09-23)
+
+Not a public release (the manager still shows 0.7.0).
+
+- **The manager's start-up (`main.cpp`) rewritten as our own code.**
+  - One `Start`/`Stop` pair: the log, Lossless_original.dll, the one-manager-per-folder check, the settings and addons, the hooks, the built-in features, then the window thread.
+  - `ApplySettings` keeps its exact signature, and the pointer to the real one now takes its type from ours, instead of a second hand-written copy of 32 parameters that could drift.
+  - Its log lines say what failed and what that means ("settings will not reach Lossless Scaling").
+- **The addon SDK headers rewritten** (`ihost.h`, `addon_sdk.h`; `events.h` in 0.7.7), with the same declarations in the same order (the frozen 1.0 test checks that). The documentation now says what the
+  manager actually does:
+  - `GetD3D11Device` is the newest device, and new ones come as scaling starts and stops;
+  - capabilities are declarations, not a gate (it said the device was withheld from addons that did not ask; it never was);
+  - each addon has one dispatch callback per userData, removed by itself when the addon unloads;
+  - `GetConfig`'s text stays valid for hundreds of later calls.
+- The one-line search box widget is gone; the Addons tab draws its search field directly.
+- The original project's code is now 11% of the manager's lines (from 19.9% at the start of this work). What remains is mostly declarations whose names are the API or the manager's own interface, and
+  common idioms; renaming them only to move the number is not worth the churn.
+
 ## 0.7.7 (internal, 2026-09-23)
 
 Not a public release (the manager still shows 0.7.0).
