@@ -1,6 +1,6 @@
 #include "search_bar.h"
 
-namespace lsproxy {
+namespace eam {
 namespace widgets {
 
 bool SearchBar(const char* id, char* buffer, size_t bufferSize, const char* hint) {
@@ -11,4 +11,4 @@ bool SearchBar(const char* id, char* buffer, size_t bufferSize, const char* hint
 }
 
 } // namespace widgets
-} // namespace lsproxy
+} // namespace eam

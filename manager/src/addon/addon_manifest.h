@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 // Reads an addon.json into `out`. A field of the wrong type is skipped rather than failing the whole file. Returns false, and says why in
 // `problem`, when the file cannot be read or is not a JSON object; `out` is then left as it was and `parsed` stays false.
@@ -13,4 +13,4 @@ bool ReadManifest(const std::filesystem::path& file, AddonManifest& out, std::st
 // Text that does not start with major.minor gives 0, which never blocks an addon.
 uint32_t ParseApiVersion(const std::string& text);
 
-} // namespace lsproxy
+} // namespace eam

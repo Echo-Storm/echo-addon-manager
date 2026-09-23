@@ -2,7 +2,7 @@
 apps with a stack of frames (a bright one in front, two fainter echoes behind it). Writes a multi-size .ico (16..256, each size drawn on its
 own with weights tuned for that size, not just scaled down) and a 256 px .png.
 
-    python make_echo_icon.py [outdir]        default: the manager folder, next to LP-icon.png
+    python make_echo_icon.py [outdir]        default: the manager folder, next to manager-icon.png
     python make_echo_icon.py --preview file.png    also writes a contact sheet of the sizes on the dark UI background
 """
 import math
@@ -72,9 +72,9 @@ def main():
     out = args[0] if args else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'manager')
     sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
     frames = {s: draw_icon(s) for s in sizes}
-    frames[256].save(out + r'\LP-icon.png')
-    frames[256].save(out + r'\LP-icon.ico', format='ICO', sizes=[(s, s) for s in sizes], append_images=[frames[s] for s in sizes if s != 256])
-    print('wrote', out + r'\LP-icon.png', 'and', out + r'\LP-icon.ico', sizes)
+    frames[256].save(out + r'\manager-icon.png')
+    frames[256].save(out + r'\manager-icon.ico', format='ICO', sizes=[(s, s) for s in sizes], append_images=[frames[s] for s in sizes if s != 256])
+    print('wrote', out + r'\manager-icon.png', 'and', out + r'\manager-icon.ico', sizes)
     if preview:
         sheet = Image.new('RGB', (sum(sizes[:6]) * 3 + 30 + 300, 320), (24, 24, 24))
         x = 10

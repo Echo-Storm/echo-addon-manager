@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace update {
 
 // ---- versions
@@ -70,4 +70,4 @@ std::string TakeNotice();
 std::string DescribeStatus(const Status& s);   // one line for Settings and About: "You have the latest version (0.4.1)." and so on
 
 } // namespace update
-} // namespace lsproxy
+} // namespace eam

@@ -1,10 +1,10 @@
 #include "tray.h"
 #include "../../log/logger.h"
-#include "../../../sdk/include/lsproxy/version.h"
+#include "../../../sdk/include/eam/version.h"
 #include <shellapi.h>
 #include <filesystem>
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 namespace tray {
 
@@ -19,7 +19,7 @@ void Open(const std::wstring& target) { ShellExecuteW(nullptr, L"open", target.c
 }
 
 std::wstring TipText(const std::wstring& hotkeyLabel) {
-    std::wstring tip = LSPROXY_PRODUCT_NAME_W L": click to open or close";
+    std::wstring tip = EAM_PRODUCT_NAME_W L": click to open or close";
     if (!hotkeyLabel.empty()) tip += L" (" + hotkeyLabel + L")";
     return tip;
 }
@@ -98,11 +98,11 @@ void ShowMenu(HWND hwnd, bool managerHidden, bool& toggle) {
     switch (cmd) {
     case kToggle:     toggle = true; break;
     case kOpenAddons: Open(dir + L"\\addons"); break;
-    case kOpenLog:    Open(dir + L"\\logs\\" + std::wstring(LSPROXY_PRODUCT_LOGFILE_W)); break;
+    case kOpenLog:    Open(dir + L"\\logs\\" + std::wstring(EAM_PRODUCT_LOGFILE_W)); break;
     case kOpenLogs:   Open(dir + L"\\logs"); break;
     }
 }
 
 } // namespace tray
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

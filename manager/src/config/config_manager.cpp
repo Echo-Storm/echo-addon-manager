@@ -8,7 +8,7 @@
 namespace fs = std::filesystem;
 using nlohmann::json;
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 
@@ -267,4 +267,4 @@ void ConfigManager::GlobalSet(const char* section, const char* key, json value) 
     (*where)[key] = std::move(value);
 }
 
-} // namespace lsproxy
+} // namespace eam

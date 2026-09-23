@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace lsproxy {
+namespace eam {
 
 // What addons publish through IHost::SetStatus / PublishMetric, and what the GUI reads. All calls are thread-safe.
 class Metrics {
@@ -51,4 +51,4 @@ private:
     std::chrono::steady_clock::time_point m_t0;
 };
 
-} // namespace lsproxy
+} // namespace eam

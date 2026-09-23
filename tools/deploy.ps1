@@ -12,7 +12,7 @@ param(
 )
 $root = Split-Path $PSScriptRoot -Parent   # the repository folder
 $items = @{
-    host     = @{ Src = "$root\manager\build\Release\Lossless.dll"; Dst = "$LsDir\Lossless.dll"; Extra = @("$root\manager\LP-icon.ico", "$root\manager\LP-icon.png") }
+    host     = @{ Src = "$root\manager\build\Release\Lossless.dll"; Dst = "$LsDir\Lossless.dll"; Extra = @("$root\manager\manager-icon.ico", "$root\manager\manager-icon.png") }
     nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_dlss5nr01.dll", "$root\addons\DLSS5NR01\build\Release\nr_selftest.exe", "$root\addons\DLSS5NR01\addon.json") }
 }
 if (-not (Test-Path "$LsDir\Lossless.dll")) { Write-Host "No Lossless Scaling folder at $LsDir (pass -LsDir or set LS_DIR)."; exit 4 }
@@ -49,6 +49,14 @@ if ($names -contains 'host') {
             New-Item -ItemType Directory -Force $aside | Out-Null
             Move-Item $from "$aside\$old"
             Write-Host "[host] moved the retired addon folder $old to $aside"
+        }
+    }
+    # the icons were called LP-icon.ico / .png up to 0.7.4 (now manager-icon): move the old ones aside
+    foreach ($old in 'LP-icon.ico', 'LP-icon.png') {
+        if (Test-Path "$LsDir\$old") {
+            New-Item -ItemType Directory -Force "$LsDir\backups" | Out-Null
+            Move-Item "$LsDir\$old" "$LsDir\backups\$([IO.Path]::GetFileNameWithoutExtension($old))-$stamp$([IO.Path]::GetExtension($old))"
+            Write-Host "[host] moved the old $old to the backups"
         }
     }
 }

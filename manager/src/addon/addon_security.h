@@ -2,7 +2,7 @@
 #include "addon_info.h"
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 // Optional integrity checking of addon DLLs against addons\trusted_addons.json, a file of the form
 //   { "<addon id>": ["<SHA-256 of its DLL, in hex>", ...], ... }
@@ -21,4 +21,4 @@ public:
     static void LoadTrustedHashes(const std::wstring& basePath);
 };
 
-} // namespace lsproxy
+} // namespace eam

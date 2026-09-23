@@ -7,13 +7,13 @@
 #include "../../host/gpu_stats.h"
 #include "../../log/logger.h"
 #include "../../update/update_check.h"
-#include "../../../sdk/include/lsproxy/version.h"
+#include "../../../sdk/include/eam/version.h"
 #include "../widgets/file_dialog.h"
 #include "../widgets/toast.h"
 #include "../widgets/tooltip.h"
 #include "../gui_manager.h"
 #include "imgui.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -21,7 +21,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace lsproxy {
+namespace eam {
 
 namespace fs = std::filesystem;
 
@@ -53,8 +53,8 @@ static std::string WindowsVersion() {
 // path of the install.
 static std::string BuildDiagnosticsSummary(AddonManager* manager) {
     std::ostringstream o;
-    o << LSPROXY_PRODUCT_NAME << " diagnostics\n";
-    o << "manager: " << LSPROXY_VERSION_STRING << " (built " << __DATE__ << " " << __TIME__ << ")\n";
+    o << EAM_PRODUCT_NAME << " diagnostics\n";
+    o << "manager: " << EAM_VERSION_STRING << " (built " << __DATE__ << " " << __TIME__ << ")\n";
     o << "system: " << WindowsVersion() << "\n";
     o << "install folder: " << Utf8(ExeDir()) << "\n";
     GpuStats::Instance().SampleOnce();
@@ -93,26 +93,26 @@ void RenderTabSettings(AddonManager* manager) {
     ImGui::Dummy(ImVec2(0, S(4)));
 
     // ---- Backup and restore
-    lsp::SectionLabel("Backup and restore (save and load your settings)");
+    eam::ui::SectionLabel("Backup and restore (save and load your settings)");
     ImGui::Dummy(ImVec2(0, S(2)));
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
     ImGui::TextWrapped("Save the settings of this manager and of every addon into one file, and load them back later or on another PC. The addons' own saved looks are kept in the same file.");
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0, S(4)));
-    if (lsp::Button("Save settings to a file", lsp::icons::kSave, lsp::ButtonKind::Primary)) {
+    if (eam::ui::Button("Save settings to a file", eam::ui::icons::kSave, eam::ui::ButtonKind::Primary)) {
         std::wstring path;
         SYSTEMTIME t; GetLocalTime(&t);
         wchar_t name[64]; swprintf(name, 64, L"EchoAddonManager-settings-%04d%02d%02d.json", t.wYear, t.wMonth, t.wDay);
         if (widgets::PickSaveFile(L"Save settings", name, L"Settings backup", L"*.json", path)) {
             std::ofstream out(fs::path(path), std::ios::binary);
-            out << MakeSettingsBackupText(config.Snapshot(), LSPROXY_VERSION_STRING);
+            out << MakeSettingsBackupText(config.Snapshot(), EAM_VERSION_STRING);
             out.close();
             widgets::ToastShow(out ? "Settings saved." : "Could not write that file.", out ? widgets::ToastType::Success : widgets::ToastType::Error);
         }
     }
     widgets::Tip("Saves the settings of every addon and of this manager into one file, to keep or to move to another PC.");
     ImGui::SameLine();
-    if (lsp::Button("Load settings from a file", lsp::icons::kDownload)) {
+    if (eam::ui::Button("Load settings from a file", eam::ui::icons::kDownload)) {
         std::wstring path;
         if (widgets::PickOpenFile(L"Load settings", L"Settings backup", L"*.json", path)) {
             std::ifstream in(fs::path(path), std::ios::binary);
@@ -125,7 +125,7 @@ void RenderTabSettings(AddonManager* manager) {
     }
     widgets::Tip("Replaces the current settings with the ones in a file saved earlier. You are asked first, and your current settings are kept aside. Takes effect after Lossless Scaling restarts.");
     if (config.RestartPending()) {
-        ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kWarn));
+        ImGui::PushStyleColor(ImGuiCol_Text, eam::ui::theme::V(eam::ui::theme::kWarn));
         ImGui::TextWrapped("Settings were loaded from a file. Restart Lossless Scaling to use them. Until then, changes you make here or in an addon are not saved, so they cannot undo the loaded settings.");
         ImGui::PopStyleColor();
     }
@@ -139,25 +139,25 @@ void RenderTabSettings(AddonManager* manager) {
                            s_importAddons, s_importAddons == 1 ? "" : "s");
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, S(6)));
-        if (lsp::Button("Load", lsp::icons::kCheck, lsp::ButtonKind::Primary)) {
+        if (eam::ui::Button("Load", eam::ui::icons::kCheck, eam::ui::ButtonKind::Primary)) {
             const ImportResult r = ImportSettings(s_importText, config.Snapshot(), fs::path(ExeDir()) / L"backups", [&](const nlohmann::json& j) { config.Replace(j, /*untilRestart=*/true); });
             widgets::ToastShow(r.message, r.ok ? widgets::ToastType::Success : widgets::ToastType::Error, 9.0f);
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (lsp::Button("Cancel", lsp::icons::kClose)) ImGui::CloseCurrentPopup();
+        if (eam::ui::Button("Cancel", eam::ui::icons::kClose)) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 
     // ---- Interface
     ImGui::Dummy(ImVec2(0, S(16)));
-    lsp::SectionLabel("Interface");
+    eam::ui::SectionLabel("Interface");
     ImGui::Dummy(ImVec2(0, S(2)));
     {
         int pct = config.GlobalGetOr<int>("ui", "scale_percent", 100);
         const int def = 100;
         ImGui::SetNextItemWidth(S(320));
-        if (lsp::SliderInt("Interface size", &pct, 75, 200, "%d%%", 0, &def)) {
+        if (eam::ui::SliderInt("Interface size", &pct, 75, 200, "%d%%", 0, &def)) {
             config.GlobalSet("ui", "scale_percent", pct);
             config.Save();
             GuiManager::RequestUserScale();   // applied at the start of the next frame
@@ -183,7 +183,7 @@ void RenderTabSettings(AddonManager* manager) {
 
     // ---- Addons
     ImGui::Dummy(ImVec2(0, S(16)));
-    lsp::SectionLabel("Addons");
+    eam::ui::SectionLabel("Addons");
     ImGui::Dummy(ImVec2(0, S(2)));
     {
         int securityLevel = config.GlobalGetOr<int>(nullptr, "security_level", 0);
@@ -201,7 +201,7 @@ void RenderTabSettings(AddonManager* manager) {
 
     // ---- Updates
     ImGui::Dummy(ImVec2(0, S(16)));
-    lsp::SectionLabel("Updates");
+    eam::ui::SectionLabel("Updates");
     ImGui::Dummy(ImVec2(0, S(2)));
     {
         bool daily = config.GlobalGetOr<bool>("updates", "check", true);
@@ -215,23 +215,23 @@ void RenderTabSettings(AddonManager* manager) {
         const update::Status st = update::Current();
         const bool checking = st.state == update::State::Checking;
         if (checking) ImGui::BeginDisabled();
-        if (lsp::Button(checking ? "Checking..." : "Check now", lsp::icons::kCheck)) update::StartCheckAsync();
+        if (eam::ui::Button(checking ? "Checking..." : "Check now", eam::ui::icons::kCheck)) update::StartCheckAsync();
         if (checking) ImGui::EndDisabled();
         widgets::Tip("Asks GitHub now, whatever the setting above says.");
         if (st.state == update::State::Available) {
             ImGui::SameLine();
-            if (lsp::Button("Open the download page", lsp::icons::kExternal, lsp::ButtonKind::Primary)) ShellExecuteA(nullptr, "open", st.url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            if (eam::ui::Button("Open the download page", eam::ui::icons::kExternal, eam::ui::ButtonKind::Primary)) ShellExecuteA(nullptr, "open", st.url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             widgets::Tip("Opens this project's release page in your browser. You download and install it yourself.");
         }
         const std::string line = update::DescribeStatus(st);
-        ImGui::PushStyleColor(ImGuiCol_Text, st.state == update::State::Available ? lsp::theme::V(lsp::theme::kAccent) : (st.state == update::State::Failed ? lsp::theme::V(lsp::theme::kWarn) : ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]));
+        ImGui::PushStyleColor(ImGuiCol_Text, st.state == update::State::Available ? eam::ui::theme::V(eam::ui::theme::kAccent) : (st.state == update::State::Failed ? eam::ui::theme::V(eam::ui::theme::kWarn) : ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]));
         ImGui::TextWrapped("%s", line.c_str());
         ImGui::PopStyleColor();
     }
 
     // ---- Logging and support
     ImGui::Dummy(ImVec2(0, S(16)));
-    lsp::SectionLabel("Logging and support");
+    eam::ui::SectionLabel("Logging and support");
     ImGui::Dummy(ImVec2(0, S(2)));
     {
         int logLevel = config.GlobalGetOr<int>(nullptr, "log_level", 2);
@@ -240,21 +240,21 @@ void RenderTabSettings(AddonManager* manager) {
         if (ImGui::Combo("Log detail", &logLevel, logItems, 5)) { config.GlobalSet(nullptr, "log_level", logLevel); config.Save(); Logger::Instance().SetMinLevel(static_cast<LogLevel>(logLevel)); }
         widgets::Tip("Messages below this level are dropped before they are recorded, in the Logs tab and in EchoAddonManager.log. Info is a good default; Debug and Trace are for tracking down a problem.");
     }
-    if (lsp::Button("Create a diagnostics file", lsp::icons::kPackage, lsp::ButtonKind::Primary)) {
+    if (eam::ui::Button("Create a diagnostics file", eam::ui::icons::kPackage, eam::ui::ButtonKind::Primary)) {
         const DiagResult d = CreateDiagnosticsZip(fs::path(ExeDir()), BuildDiagnosticsSummary(manager), fs::path(DesktopDir()));
         widgets::ToastShow(d.message, d.ok ? widgets::ToastType::Success : widgets::ToastType::Error, 9.0f);
         if (d.ok) ShellExecuteW(nullptr, L"open", L"explorer.exe", (L"/select,\"" + d.zip.wstring() + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
     }
     widgets::Tip("Puts the logs, the settings and a short summary (versions, GPU, which addons are on) into one zip on your Desktop, for a bug report. Nothing is uploaded: you decide who gets the file.");
     ImGui::SameLine();
-    if (lsp::Button("Logs folder", lsp::icons::kFolder)) OpenPath(ExeDir() + L"\\logs");
+    if (eam::ui::Button("Logs folder", eam::ui::icons::kFolder)) OpenPath(ExeDir() + L"\\logs");
     ImGui::SameLine();
-    if (lsp::Button("Addons folder", lsp::icons::kFolder)) OpenPath(ExeDir() + L"\\addons");
+    if (eam::ui::Button("Addons folder", eam::ui::icons::kFolder)) OpenPath(ExeDir() + L"\\addons");
     ImGui::SameLine();
-    if (lsp::Button("config.json", lsp::icons::kFile)) OpenPath(ExeDir() + L"\\addons\\config.json");
+    if (eam::ui::Button("config.json", eam::ui::icons::kFile)) OpenPath(ExeDir() + L"\\addons\\config.json");
 
     ImGui::Dummy(ImVec2(0, S(14)));
     ImGui::TextDisabled("Changes are saved as you make them.");
 }
 
-} // namespace lsproxy
+} // namespace eam

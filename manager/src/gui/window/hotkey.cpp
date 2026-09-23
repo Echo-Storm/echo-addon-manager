@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <mutex>
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 namespace hotkey {
 
@@ -57,4 +57,4 @@ const char* Status() { return g_status; }
 
 } // namespace hotkey
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

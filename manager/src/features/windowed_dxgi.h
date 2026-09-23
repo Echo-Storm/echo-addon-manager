@@ -6,7 +6,7 @@
 #include <dxgi1_6.h>
 #include <vector>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 namespace windowed {
 
@@ -154,4 +154,4 @@ public:
 
 } // namespace windowed
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

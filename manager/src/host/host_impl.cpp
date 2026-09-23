@@ -4,11 +4,11 @@
 #include "../core/d3d11_hook.h"
 #include "../event/event_system.h"
 #include "../log/logger.h"
-#include "../../sdk/include/lsproxy/version.h"
+#include "../../sdk/include/eam/version.h"
 #include <algorithm>
 #include <windows.h>
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 
@@ -30,11 +30,11 @@ void SetHook(std::vector<Hook>& hooks, Callback callback, void* owner) {
 
 // Dispatch callbacks run on Lossless Scaling's render thread, where a fault would end the process. Kept apart from anything that owns
 // C++ objects: a function with a __try block cannot also have destructors to run.
-bool CallPre(LsProxyPreDispatchCallback cb, uint32_t x, uint32_t y, uint32_t z, void* owner, bool* skip) {
+bool CallPre(EamPreDispatchCallback cb, uint32_t x, uint32_t y, uint32_t z, void* owner, bool* skip) {
     __try { *skip = cb(x, y, z, owner); return true; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
-bool CallPost(LsProxyPostDispatchCallback cb, uint32_t x, uint32_t y, uint32_t z, void* owner) {
+bool CallPost(EamPostDispatchCallback cb, uint32_t x, uint32_t y, uint32_t z, void* owner) {
     __try { cb(x, y, z, owner); return true; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
@@ -49,7 +49,7 @@ void DropFaulted(std::vector<Hook>& hooks, const char* kind) {
 
 } // namespace
 
-void HostImpl::Log(LsProxyLogLevel level, const char* message) {
+void HostImpl::Log(EamLogLevel level, const char* message) {
     Logger::Instance().Log(static_cast<LogLevel>(level), "Addon", "%s", Text(message));
 }
 
@@ -69,15 +69,15 @@ void HostImpl::SetConfig(const char* addonId, const char* key, const char* value
 
 void HostImpl::SaveConfig() { ConfigManager::Instance().Save(); }
 
-uint32_t HostImpl::GetHostVersion() { return LSPROXY_API_VERSION_INT; }
+uint32_t HostImpl::GetHostVersion() { return EAM_API_VERSION_INT; }
 
 // ---- events
 
-void HostImpl::SubscribeEvent(uint32_t eventId, LsProxyEventCallback callback, void* userData) {
+void HostImpl::SubscribeEvent(uint32_t eventId, EamEventCallback callback, void* userData) {
     EventBus::Instance().Subscribe(eventId, callback, userData);
 }
 
-void HostImpl::UnsubscribeEvent(uint32_t eventId, LsProxyEventCallback callback) {
+void HostImpl::UnsubscribeEvent(uint32_t eventId, EamEventCallback callback) {
     EventBus::Instance().Unsubscribe(eventId, callback);
 }
 
@@ -100,12 +100,12 @@ uint32_t HostImpl::GetDispatchCount() { return D3D11Hook::GetDispatchCount(); }
 
 // ---- dispatch callbacks
 
-void HostImpl::SetPreDispatchCallback(LsProxyPreDispatchCallback callback, void* userData) {
+void HostImpl::SetPreDispatchCallback(EamPreDispatchCallback callback, void* userData) {
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
     SetHook(m_preHooks, callback, userData);
 }
 
-void HostImpl::SetPostDispatchCallback(LsProxyPostDispatchCallback callback, void* userData) {
+void HostImpl::SetPostDispatchCallback(EamPostDispatchCallback callback, void* userData) {
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
     SetHook(m_postHooks, callback, userData);
 }
@@ -154,4 +154,4 @@ size_t HostImpl::DispatchHookCount() {
     return m_preHooks.size() + m_postHooks.size();
 }
 
-} // namespace lsproxy
+} // namespace eam

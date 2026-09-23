@@ -1,9 +1,9 @@
 #include "empty_state.h"
 #include "../gui_scale.h"
 #include "imgui.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 
-namespace lsproxy {
+namespace eam {
 namespace widgets {
 
 void EmptyState(float width, const char* title, const char* hint) {
@@ -11,7 +11,7 @@ void EmptyState(float width, const char* title, const char* hint) {
     const float icoSize = ImGui::GetFontSize() * 3.0f;
     ImGui::SetCursorPosX((width - icoSize) * 0.5f);
     const ImVec2 ip = ImGui::GetCursorScreenPos();
-    lsp::svg::Draw(ImGui::GetWindowDrawList(), lsp::icons::kPackage, ip, icoSize, lsp::theme::U(lsp::theme::kAccentDim), 1.6f);
+    eam::ui::svg::Draw(ImGui::GetWindowDrawList(), eam::ui::icons::kPackage, ip, icoSize, eam::ui::theme::U(eam::ui::theme::kAccentDim), 1.6f);
     ImGui::Dummy(ImVec2(icoSize, icoSize));
     ImGui::SetCursorPosX((width - ImGui::CalcTextSize(title).x) * 0.5f);
     ImGui::TextUnformatted(title);
@@ -22,4 +22,4 @@ void EmptyState(float width, const char* title, const char* hint) {
 }
 
 } // namespace widgets
-} // namespace lsproxy
+} // namespace eam

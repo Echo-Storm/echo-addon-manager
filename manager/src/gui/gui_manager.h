@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 
-namespace lsproxy {
+namespace eam {
 
 class AddonManager;
 
@@ -22,4 +22,4 @@ private:
     static DWORD WINAPI GuiThread(LPVOID lpParam);
 };
 
-} // namespace lsproxy
+} // namespace eam

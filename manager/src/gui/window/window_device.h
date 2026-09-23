@@ -2,7 +2,7 @@
 #include <d3d11.h>
 #include <dxgi.h>
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 
 // The manager window's own D3D11 device, swap chain and back-buffer view. It is separate from Lossless Scaling's (which the game capture uses),
@@ -34,4 +34,4 @@ private:
 };
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

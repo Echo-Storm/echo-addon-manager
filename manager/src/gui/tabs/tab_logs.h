@@ -1,7 +1,7 @@
 #pragma once
 
-namespace lsproxy {
+namespace eam {
 
 void RenderTabLogs();
 
-} // namespace lsproxy
+} // namespace eam

@@ -1,6 +1,6 @@
 #include "addon_runtime.h"
 
-namespace lsproxy {
+namespace eam {
 
 template <class Fn>
 static Fn Export(HMODULE module, const char* name) {
@@ -59,4 +59,4 @@ const char* Text(const char* (*getter)()) {
 }
 
 } // namespace guarded
-} // namespace lsproxy
+} // namespace eam

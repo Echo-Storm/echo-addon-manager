@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 struct PlaceResult {
     bool ok = false;
@@ -26,4 +26,4 @@ struct RemoveResult {
 // while its DLL is still loaded.
 RemoveResult MoveAddonToRemoved(const std::filesystem::path& addonFolder, const std::filesystem::path& addonsDir);
 
-} // namespace lsproxy
+} // namespace eam

@@ -3,16 +3,16 @@
 // hides instead of ending the thread and saves the placement, that the hotkey message toggles it, the minimum size, where a saved placement puts
 // the window, and that the thread ends cleanly and takes the window with it. Works on a throw-away config in %TEMP%; touches no game and no Lossless
 // Scaling install. Needs a GPU (the window has its own D3D11 device).
-//   lsproxy_guitest.exe            fresh config: default placement
-//   lsproxy_guitest.exe place      a saved placement in the config: the window must open there
-//   lsproxy_guitest.exe scaled     the same with the interface size at 150 %: closing must save the size it was loaded with
+//   eam_guitest.exe            fresh config: default placement
+//   eam_guitest.exe place      a saved placement in the config: the window must open there
+//   eam_guitest.exe scaled     the same with the interface size at 150 %: closing must save the size it was loaded with
 // The first run also checks the pure parts (placement, hotkey text, scale limits, status text, tray tip) when those modules exist.
 #include "src/addon/addon_manager.h"
 #include "src/config/config_manager.h"
 #include "src/gui/gui_manager.h"
 #include "src/host/host_impl.h"
 #include "src/log/logger.h"
-#include "lsproxy/version.h"
+#include "eam/version.h"
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
@@ -29,7 +29,7 @@
 #endif
 
 namespace fs = std::filesystem;
-using namespace lsproxy;
+using namespace eam;
 
 static int g_failed = 0;
 static void Check(const char* what, bool ok, const std::string& detail = "") {
@@ -40,7 +40,7 @@ static void Check(const char* what, bool ok, const std::string& detail = "") {
 static const wchar_t* kClass = L"EchoAddonManagerClass";
 static constexpr UINT kHotkeyMsgId = 0x4C50;   // the id the window registers its hotkey under
 
-static bool TrayAdded() { return lsproxy::window::tray::Added(); }
+static bool TrayAdded() { return eam::window::tray::Added(); }
 static bool WaitFor(bool (*cond)(), int ms) {
     for (int t = 0; t < ms; t += 20) { if (cond()) return true; Sleep(20); }
     return cond();
@@ -64,7 +64,7 @@ static bool WinHiddenNow() { HWND h = Find(); return h && !IsWindowVisible(h); }
 
 #ifdef HAVE_WINDOW_MODULES
 static void PureChecks() {
-    using namespace lsproxy::window;
+    using namespace eam::window;
     const OnScreenFn yes = [](const RECT&) { return true; };
     const OnScreenFn no = [](const RECT&) { return false; };
 
@@ -98,14 +98,14 @@ static void PureChecks() {
           ClampScalePercent(200) == 200 && ClampScalePercent(400) == 200);
 
     const std::string base = StatusCounts(3, 1);
-    Check("status: counts", base.find("   |   3 addons, 1 on") != std::string::npos && base.rfind(LSPROXY_PRODUCT_NAME " " LSPROXY_VERSION_STRING, 0) == 0, base);
+    Check("status: counts", base.find("   |   3 addons, 1 on") != std::string::npos && base.rfind(EAM_PRODUCT_NAME " " EAM_VERSION_STRING, 0) == 0, base);
     Check("status: one addon is singular", StatusCounts(1, 0).find("   |   1 addon, 0 on") != std::string::npos);
     Check("status: none is plural", StatusCounts(0, 0).find("   |   0 addons, 0 on") != std::string::npos);
     Check("status: a live status is added after the counts", WithLiveStatus("A", "Neural Rendering", "12 ms") == "A   |   Neural Rendering: 12 ms" && WithLiveStatus("A", "x", "") == "A");
 
     Check("status: an update is added when there is one", WithUpdate("A", "0.5.0") == "A   |   Update available: 0.5.0" && WithUpdate("A", "") == "A");
     const std::wstring tip = tray::TipText(L"");
-    Check("tray tip: the product name and what a click does", tip == std::wstring(LSPROXY_PRODUCT_NAME_W) + L": click to open or close");
+    Check("tray tip: the product name and what a click does", tip == std::wstring(EAM_PRODUCT_NAME_W) + L": click to open or close");
     Check("tray tip: the hotkey in brackets when there is one", tray::TipText(L"Ctrl+Shift+F12") == tip + L" (Ctrl+Shift+F12)");
 }
 #endif
@@ -117,7 +117,7 @@ int wmain(int argc, wchar_t** argv) {
 #ifdef HAVE_WINDOW_MODULES
     if (mode.empty()) PureChecks();
 #endif
-    const fs::path dir = fs::temp_directory_path() / (L"lsproxy_guitest_" + (mode.empty() ? std::wstring(L"plain") : mode));
+    const fs::path dir = fs::temp_directory_path() / (L"eam_guitest_" + (mode.empty() ? std::wstring(L"plain") : mode));
     std::error_code ec;
     fs::remove_all(dir, ec);
     fs::create_directories(dir / "addons");
@@ -142,8 +142,8 @@ int wmain(int argc, wchar_t** argv) {
 
     wchar_t title[128] = {};
     GetWindowTextW(hwnd, title, 128);
-    std::wstring want = std::wstring(LSPROXY_PRODUCT_NAME_W) + L" v";
-    for (const char* c = LSPROXY_VERSION_STRING; *c; ++c) want += (wchar_t)*c;
+    std::wstring want = std::wstring(EAM_PRODUCT_NAME_W) + L" v";
+    for (const char* c = EAM_VERSION_STRING; *c; ++c) want += (wchar_t)*c;
     Check("the title is the product name and version", want == title);
 
     // the window exists early; the thread marks it hidden (open on start off) a little later, once its D3D device and the tray are set up
@@ -222,7 +222,7 @@ int wmain(int argc, wchar_t** argv) {
 
     // Explorer can be slow to take the icon after a restart (a live log once showed one failed re-add lose the icon for the whole session): the window keeps trying.
     // The next two attempts to add the icon are made to fail; the icon must come back by itself.
-    lsproxy::window::tray::FailNextAddsForTest(2);
+    eam::window::tray::FailNextAddsForTest(2);
     SendMessageW(hwnd, wmTaskbar, 0, 0);
     Check("a failed re-add leaves no icon for now", !TrayAdded());
     Check("the window retries by itself and the icon comes back", WaitFor(TrayAdded, 15000));

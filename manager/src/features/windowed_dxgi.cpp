@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 namespace windowed {
 
@@ -328,4 +328,4 @@ HRESULT ProxyDXGIOutput::CheckHardwareCompositionSupport(UINT* p) { if (m_isFake
 
 } // namespace windowed
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

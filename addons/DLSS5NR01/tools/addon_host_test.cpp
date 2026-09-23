@@ -14,8 +14,8 @@
 #include <chrono>
 #include <thread>
 #include "imgui.h"
-#include "lsproxy/addon_sdk.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/addon_sdk.h"
+#include "eam/widgets.h"
 #include "ui_shot.h"
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -23,21 +23,21 @@
 #pragma comment(lib, "user32.lib")
 
 struct FakeHost : IHost {
-    struct Sub { uint32_t id; LsProxyEventCallback cb; void* ud; };
+    struct Sub { uint32_t id; EamEventCallback cb; void* ud; };
     std::vector<Sub> subs; std::map<std::string, std::string> cfg; void* dev = nullptr; void* ctx = nullptr;
     std::string lastPattern;
-    void Log(LsProxyLogLevel, const char* m) override { printf("[addon] %s\n", m); fflush(stdout); }
+    void Log(EamLogLevel, const char* m) override { printf("[addon] %s\n", m); fflush(stdout); }
     const char* GetConfig(const char*, const char* k, const char* d) override { auto it = cfg.find(k); return it == cfg.end() ? d : it->second.c_str(); }
     void SetConfig(const char*, const char* k, const char* v) override { cfg[k] = v; }
     void SaveConfig() override {}
     uint32_t GetHostVersion() override { return 0x10000; }   // API 1.0: the live status / metrics calls exist
-    void SubscribeEvent(uint32_t id, LsProxyEventCallback cb, void* ud) override { subs.push_back({ id, cb, ud }); }
-    void UnsubscribeEvent(uint32_t id, LsProxyEventCallback cb) override { for (size_t i = 0; i < subs.size();) if (subs[i].id == id && subs[i].cb == cb) subs.erase(subs.begin() + i); else ++i; }
+    void SubscribeEvent(uint32_t id, EamEventCallback cb, void* ud) override { subs.push_back({ id, cb, ud }); }
+    void UnsubscribeEvent(uint32_t id, EamEventCallback cb) override { for (size_t i = 0; i < subs.size();) if (subs[i].id == id && subs[i].cb == cb) subs.erase(subs.begin() + i); else ++i; }
     void PublishEvent(uint32_t id, const void* d, uint32_t n) override { auto copy = subs; for (auto& s : copy) if (s.id == id) s.cb(id, d, n, s.ud); }
     void* GetD3D11Device() override { return dev; }
     void* GetD3D11DeviceContext() override { return ctx; }
-    void SetPreDispatchCallback(LsProxyPreDispatchCallback, void*) override {}
-    void SetPostDispatchCallback(LsProxyPostDispatchCallback, void*) override {}
+    void SetPreDispatchCallback(EamPreDispatchCallback, void*) override {}
+    void SetPostDispatchCallback(EamPostDispatchCallback, void*) override {}
     void* GetCurrentComputeShader() override { return nullptr; }
     uint32_t GetDispatchCount() override { return 0; }
     // live status and metrics, recorded so the run can check that the addon reports them
@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
     UiShot shot;
     if (shotMode) {
         io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf");
-        lsp::theme::ApplyStyle(ImGui::GetStyle()); ImGui::GetStyle().FontSizeBase = 15.0f;
+        eam::ui::theme::ApplyStyle(ImGui::GetStyle()); ImGui::GetStyle().FontSizeBase = 15.0f;
         if (!shot.Init(shotW, shotH)) { printf("shot renderer init failed\n"); return 1; }
     } else {
         io.Fonts->AddFontDefault();
@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
     ID3D11Device* dev = nullptr; ID3D11DeviceContext* dc = nullptr; D3D_FEATURE_LEVEL fl;
     if (FAILED(D3D11CreateDevice(a, D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &dev, &fl, &dc))) { printf("device failed\n"); return 1; }
     ID3D11Multithread* mt = nullptr; dc->QueryInterface(IID_PPV_ARGS(&mt)); mt->SetMultithreadProtected(TRUE); mt->Release();   // like LS/WGC
-    host.dev = dev; host.ctx = dc; host.PublishEvent(LSPROXY_EVENT_D3D11_DEVICE_READY, nullptr, 0);
+    host.dev = dev; host.ctx = dc; host.PublishEvent(EAM_EVENT_D3D11_DEVICE_READY, nullptr, 0);
     for (int i = 0; i < 40; ++i) { frame("engine loading"); std::this_thread::sleep_for(std::chrono::milliseconds(250)); }
 
     // a real (small, visible) window + flip swap chain: the addon hooks Present and composes into its back buffer
@@ -270,7 +270,7 @@ int main(int argc, char** argv) {
         double mean = 0; uint64_t changed = CountChanged(dev, dc, c2, W2, H2, &mean, nullptr);
         printf("[check-res2] %ux%u frame texture: %llu pixels changed (%s); presented buffers composed in %llu of %llu samples (%s)\n", W2, H2, (unsigned long long)changed, changed == 0 ? "read-only" : "WRITTEN", (unsigned long long)composed2, (unsigned long long)checks2, composed2 >= checks2 / 2 && checks2 ? "TAP FOLLOWED" : "TAP LOST");
     }
-    host.PublishEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, nullptr, 0);
+    host.PublishEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, nullptr, 0);
     for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "exitmode=abrupt")) {
         // What Lossless Scaling does at exit: the process ends with the addon still loaded and AddonShutdown never called. The addon's static
         // destructors then run in DLL_PROCESS_DETACH, and a std::thread still joinable there calls std::terminate.

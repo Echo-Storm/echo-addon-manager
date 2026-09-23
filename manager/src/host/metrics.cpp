@@ -1,7 +1,7 @@
 #include "metrics.h"
 #include <algorithm>
 
-namespace lsproxy {
+namespace eam {
 
 Metrics& Metrics::Instance() { static Metrics m; return m; }
 Metrics::Metrics() : m_t0(std::chrono::steady_clock::now()) {}
@@ -83,4 +83,4 @@ Metrics::Status Metrics::BestStatus(double staleSeconds) const {
 
 void Metrics::Clear() { std::lock_guard<std::mutex> lk(m_mutex); m_series.clear(); m_status.clear(); }
 
-} // namespace lsproxy
+} // namespace eam

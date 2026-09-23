@@ -1,7 +1,7 @@
 #pragma once
 #include "imgui.h"
 
-namespace lsproxy {
+namespace eam {
 namespace widgets {
 
 // Wrapped tooltip for the item just submitted, shown after a short hover delay.
@@ -15,4 +15,4 @@ inline void Tip(const char* text) {
 }
 
 } // namespace widgets
-} // namespace lsproxy
+} // namespace eam

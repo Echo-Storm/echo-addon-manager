@@ -5,7 +5,7 @@
 #include <string>
 #include <thread>
 
-namespace lsproxy {
+namespace eam {
 
 // GPU load, power, clocks, temperature and memory of the first NVIDIA GPU, read through NVML. Sampling runs on its own thread, only
 // while something has asked for it recently (Wanted()), so an idle manager costs nothing.
@@ -58,4 +58,4 @@ private:
     int64_t m_takenAtMs = 0;
 };
 
-} // namespace lsproxy
+} // namespace eam

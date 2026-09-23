@@ -1,4 +1,4 @@
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include "tab_addons.h"
 #include "../gui_scale.h"
 #include "../gui_style.h"
@@ -26,7 +26,7 @@
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "uuid.lib")
 
-namespace lsproxy {
+namespace eam {
 
 // ---- installing an addon ------------------------------------------------------------------------------------------
 static std::wstring s_installSource;        // what the user picked, waiting for confirmation
@@ -194,7 +194,7 @@ static void RenderSettingsPane(AddonManager* manager, const AddonInfo& addon, in
             ImGui::TextWrapped("Restart Lossless Scaling to load this addon.");
         } else {
             ImGui::TextWrapped("This addon is enabled but not loaded.");
-            if (lsp::Button("Load now", lsp::icons::kPlay, lsp::ButtonKind::Primary)) {
+            if (eam::ui::Button("Load now", eam::ui::icons::kPlay, eam::ui::ButtonKind::Primary)) {
                 manager->LoadAddonNow(index);
                 widgets::ToastShow(manager->GetAddons()[index].IsLoaded() ? "Addon loaded" : "Could not load the addon",
                                    manager->GetAddons()[index].IsLoaded() ? widgets::ToastType::Success
@@ -225,7 +225,7 @@ static void RenderOverviewPane(AddonManager* manager, const AddonInfo& addon) {
     if (!addon.manifest.tags.empty()) {
         ImGui::Dummy(ImVec2(0, S(8)));
         for (const auto& tag : addon.manifest.tags) {
-            ImGui::PushStyleColor(ImGuiCol_Button, lsp::theme::V(lsp::theme::kSelection));
+            ImGui::PushStyleColor(ImGuiCol_Button, eam::ui::theme::V(eam::ui::theme::kSelection));
             ImGui::SmallButton(tag.c_str());
             ImGui::PopStyleColor();
             ImGui::SameLine();
@@ -243,7 +243,7 @@ static void RenderOverviewPane(AddonManager* manager, const AddonInfo& addon) {
             ImGui::BulletText("%s", dep.c_str());
             ImGui::SameLine();
             if (!found)                    StatusText("(not installed)", ImVec4(0.816f, 0.502f, 0.502f, 1));
-            else if (!found->enabled)      StatusText("(disabled)", lsp::theme::V(lsp::theme::kWarn));
+            else if (!found->enabled)      StatusText("(disabled)", eam::ui::theme::V(eam::ui::theme::kWarn));
             else                           ImGui::TextDisabled("(enabled)");
         }
     }
@@ -265,14 +265,14 @@ static void RenderConfigPane(const AddonInfo& addon) {
         ImGui::TextWrapped("This file is larger than the editor can hold safely; open it in a text editor instead.");
         return;
     }
-    if (lsp::Button("Save", lsp::icons::kSave, lsp::ButtonKind::Primary)) SaveConfigFile();
+    if (eam::ui::Button("Save", eam::ui::icons::kSave, eam::ui::ButtonKind::Primary)) SaveConfigFile();
     widgets::Tip("Write the text below to the addon's config file. Most addons read it only when they load, so a restart may be needed.");
     ImGui::SameLine();
-    if (lsp::Button("Reload", lsp::icons::kReset)) LoadConfigFile(addon.configPath);
+    if (eam::ui::Button("Reload", eam::ui::icons::kReset)) LoadConfigFile(addon.configPath);
     widgets::Tip("Discard your edits and read the file again.");
     if (s_cfgDirty) {
         ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kWarn));
+        ImGui::PushStyleColor(ImGuiCol_Text, eam::ui::theme::V(eam::ui::theme::kWarn));
         ImGui::TextUnformatted("unsaved changes");
         ImGui::PopStyleColor();
     }
@@ -310,14 +310,14 @@ static void RenderDetail(AddonManager* manager, AddonInfo& addon, int index) {
     ImGui::TextDisabled("Status");
     ImGui::SameLine();
     if (addon.faulted)            StatusText("Faulted", ImVec4(0.816f, 0.502f, 0.502f, 1));
-    else if (addon.IsLoaded())    StatusText("Loaded", lsp::theme::V(lsp::theme::kAccent));
+    else if (addon.IsLoaded())    StatusText("Loaded", eam::ui::theme::V(eam::ui::theme::kAccent));
     else                          ImGui::TextDisabled("Unloaded");
 
     ImGui::SameLine(0, S(24));
     ImGui::TextDisabled("Security");
     ImGui::SameLine();
     switch (addon.security) {
-        case SecurityVerdict::Trusted:  StatusText("Trusted", lsp::theme::V(lsp::theme::kAccent)); break;
+        case SecurityVerdict::Trusted:  StatusText("Trusted", eam::ui::theme::V(eam::ui::theme::kAccent)); break;
         case SecurityVerdict::Tampered: StatusText("Tampered!", ImVec4(0.816f, 0.502f, 0.502f, 1)); break;
         default:                        ImGui::TextDisabled("Unknown"); break;
     }
@@ -325,7 +325,7 @@ static void RenderDetail(AddonManager* manager, AddonInfo& addon, int index) {
     {   // remove, at the right end of the status line
         const float rw = ImGui::CalcTextSize("Remove").x + ImGui::GetFontSize() * 3.2f;
         ImGui::SameLine(ImGui::GetWindowWidth() - rw - ImGui::GetStyle().WindowPadding.x - S(4));
-        if (lsp::Button("Remove", lsp::icons::kTrash, lsp::ButtonKind::Danger)) { s_removeId = addon.id; s_askRemove = true; }
+        if (eam::ui::Button("Remove", eam::ui::icons::kTrash, eam::ui::ButtonKind::Danger)) { s_removeId = addon.id; s_askRemove = true; }
         widgets::Tip("Take this addon out of Lossless Scaling. You are asked first. Its folder is moved to addons/.removed, not erased.");
     }
 
@@ -335,7 +335,7 @@ static void RenderDetail(AddonManager* manager, AddonInfo& addon, int index) {
         ImGui::PopStyleColor();
     }
     if (addon.RequiresRestart()) {
-        ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kWarn));
+        ImGui::PushStyleColor(ImGuiCol_Text, eam::ui::theme::V(eam::ui::theme::kWarn));
         ImGui::TextWrapped("This addon needs Lossless Scaling restarted to apply enable/disable changes.");
         ImGui::PopStyleColor();
     }
@@ -344,7 +344,7 @@ static void RenderDetail(AddonManager* manager, AddonInfo& addon, int index) {
     // Tabs. The first time an addon is shown, land on its settings if it has any.
     // Capabilities are only known once the DLL is loaded, so an unloaded addon always gets the
     // Settings tab: that is where "Load now" and the reason it is not loaded are shown.
-    const bool hasSettings = !addon.IsLoaded() || (addon.capabilities & LSPROXY_CAP_HAS_SETTINGS) != 0;
+    const bool hasSettings = !addon.IsLoaded() || (addon.capabilities & EAM_CAP_HAS_SETTINGS) != 0;
     const bool hasConfig = !addon.configPath.empty();
     const bool firstShow = (s_tabsOpenedFor != addon.id);
     s_tabsOpenedFor = addon.id;
@@ -390,7 +390,7 @@ void RenderTabAddons(AddonManager* manager) {
     widgets::Tip("Filter the list by name, author or tag.");
     ImGui::Dummy(ImVec2(0, S(2)));
 
-    if (lsp::Button("Install addon", lsp::icons::kDownload, lsp::ButtonKind::Primary)) ImGui::OpenPopup("##install_menu");
+    if (eam::ui::Button("Install addon", eam::ui::icons::kDownload, eam::ui::ButtonKind::Primary)) ImGui::OpenPopup("##install_menu");
     widgets::Tip("Add an addon from a folder, a .zip or a .dll. It is copied into the addons folder and installed switched off.");
     if (ImGui::BeginPopup("##install_menu")) {
         std::wstring picked;
@@ -399,7 +399,7 @@ void RenderTabAddons(AddonManager* manager) {
         ImGui::EndPopup();
     }
     ImGui::SameLine();
-    if (lsp::Button("Open addons folder", lsp::icons::kFolder)) ShellExecuteW(nullptr, L"open", manager->GetAddonsPath().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (eam::ui::Button("Open addons folder", eam::ui::icons::kFolder)) ShellExecuteW(nullptr, L"open", manager->GetAddonsPath().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     widgets::Tip("Open the folder the addons live in, to remove or update one by hand.");
 
     if (s_askInstall) { ImGui::OpenPopup("Install addon"); s_askInstall = false; }
@@ -412,21 +412,21 @@ void RenderTabAddons(AddonManager* manager) {
                            "Only install addons from people you trust. It is installed switched off; you turn it on with its switch.");
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, S(6)));
-        if (lsp::Button("Install", lsp::icons::kDownload, lsp::ButtonKind::Primary)) {
+        if (eam::ui::Button("Install", eam::ui::icons::kDownload, eam::ui::ButtonKind::Primary)) {
             const AddonManager::InstallResult r = manager->InstallAddon(s_installSource);
             widgets::ToastShow(r.message, r.ok ? widgets::ToastType::Success : widgets::ToastType::Error, 7.0f);
             if (r.ok) s_selectedId = r.id;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (lsp::Button("Cancel", lsp::icons::kClose)) ImGui::CloseCurrentPopup();
+        if (eam::ui::Button("Cancel", eam::ui::icons::kClose)) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     if (s_askRemove) { ImGui::OpenPopup("Remove addon"); s_askRemove = false; }
     if (ImGui::BeginPopupModal("Remove addon", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         int ri = -1;
         for (int i = 0; i < (int)addons.size(); ++i) if (addons[i].id == s_removeId) ri = i;
-        if (ri < 0) { ImGui::TextUnformatted("That addon is already gone."); if (lsp::Button("Close")) ImGui::CloseCurrentPopup(); }
+        if (ri < 0) { ImGui::TextUnformatted("That addon is already gone."); if (eam::ui::Button("Close")) ImGui::CloseCurrentPopup(); }
         else {
             const std::string nm = addons[ri].GetDisplayName();
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
@@ -436,14 +436,14 @@ void RenderTabAddons(AddonManager* manager) {
                                "Its settings are kept, so installing it again brings them back.");
             ImGui::PopTextWrapPos();
             ImGui::Dummy(ImVec2(0, S(6)));
-            if (lsp::Button("Remove", lsp::icons::kTrash, lsp::ButtonKind::Danger)) {
+            if (eam::ui::Button("Remove", eam::ui::icons::kTrash, eam::ui::ButtonKind::Danger)) {
                 const AddonManager::InstallResult rr = manager->RemoveAddon(ri);
                 widgets::ToastShow(rr.message, rr.ok ? widgets::ToastType::Success : widgets::ToastType::Error, 7.0f);
                 if (rr.ok) s_selectedId.clear();
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (lsp::Button("Cancel", lsp::icons::kClose)) ImGui::CloseCurrentPopup();
+            if (eam::ui::Button("Cancel", eam::ui::icons::kClose)) ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
@@ -477,4 +477,4 @@ void RenderTabAddons(AddonManager* manager) {
     ImGui::EndChild();
 }
 
-} // namespace lsproxy
+} // namespace eam

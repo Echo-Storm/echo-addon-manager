@@ -3,7 +3,7 @@
 #include <windows.h>
 #include <chrono>
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 using nvmlReturn = int;   // 0 = success
@@ -130,4 +130,4 @@ std::string GpuStats::ThrottleText(uint64_t m) {
     return out;                         // 0x1 (idle) and 0x100 (display clocks) are not worth showing
 }
 
-} // namespace lsproxy
+} // namespace eam

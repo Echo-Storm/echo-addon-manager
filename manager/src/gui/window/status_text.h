@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 
 // The left side of the status bar: "<product> <version>   |   N addon(s), M on".
@@ -14,4 +14,4 @@ std::string WithUpdate(std::string line, const std::string& latest);
 std::string WithLiveStatus(std::string counts, const std::string& who, const std::string& text);
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

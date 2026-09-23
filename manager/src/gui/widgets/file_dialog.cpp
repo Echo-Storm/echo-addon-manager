@@ -4,7 +4,7 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "uuid.lib")
 
-namespace lsproxy {
+namespace eam {
 namespace widgets {
 
 static bool Pick(bool save, const wchar_t* title, const wchar_t* defaultName, const wchar_t* filterName, const wchar_t* filterSpec, std::wstring& out) {
@@ -38,4 +38,4 @@ bool PickOpenFile(const wchar_t* title, const wchar_t* filterName, const wchar_t
 bool PickSaveFile(const wchar_t* title, const wchar_t* defaultName, const wchar_t* filterName, const wchar_t* filterSpec, std::wstring& out) { return Pick(true, title, defaultName, filterName, filterSpec, out); }
 
 } // namespace widgets
-} // namespace lsproxy
+} // namespace eam

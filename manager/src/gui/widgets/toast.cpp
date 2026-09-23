@@ -1,9 +1,9 @@
 #include "toast.h"
 #include "../gui_scale.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include <deque>
 
-namespace lsproxy {
+namespace eam {
 namespace widgets {
 
 namespace {
@@ -24,7 +24,7 @@ constexpr float kFadeOut = 0.5f;
 struct Colours { ImVec4 fill, edge; };
 
 Colours ColoursFor(ToastType type, float alpha) {
-    using namespace lsp::theme;
+    using namespace eam::ui::theme;
     switch (type) {
         case ToastType::Success: return { ImVec4(0.243f, 0.353f, 0.180f, 0.95f * alpha), V(kAccent, alpha) };
         case ToastType::Warning: return { ImVec4(0.42f, 0.32f, 0.10f, 0.95f * alpha), V(kWarn, alpha) };
@@ -82,4 +82,4 @@ void ToastRender() {
 }
 
 } // namespace widgets
-} // namespace lsproxy
+} // namespace eam

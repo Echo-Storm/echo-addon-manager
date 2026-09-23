@@ -1,12 +1,12 @@
 # Sample addon
 
-The smallest addon that does what addons usually do. Copy this folder and build on it. It is tested against the real manager (`lsproxy_sampletest`), so it stays working.
+The smallest addon that does what addons usually do. Copy this folder and build on it. It is tested against the real manager (`eam_sampletest`), so it stays working.
 
 What it shows, all in [`SampleAddon.cpp`](SampleAddon.cpp) (about 100 lines, commented):
 
 - the **exports** the manager looks for, and the optional ones for a name, a version and a settings panel;
 - reading and writing **settings** (`GetConfig`, `SetConfig`, `SaveConfig`), which the manager keeps in `addons\config.json`;
-- a **settings panel** in the manager's own look, using `lsp_widgets.h`: section labels, a slider with a default (double-click resets it), buttons with icons;
+- a **settings panel** in the manager's own look, using `widgets.h`: section labels, a slider with a default (double-click resets it), buttons with icons;
 - a live **status** line (`SetStatus`) and a number for the Performance tab (`PublishMetric`).
 
 It needs no GPU access, starts no threads and asks for no restart.

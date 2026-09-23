@@ -1,6 +1,6 @@
 #pragma once
 
-namespace lsproxy {
+namespace eam {
 class AddonManager;
 
 namespace window {
@@ -11,4 +11,4 @@ namespace window {
 void RenderMainFrame(AddonManager* manager, bool& bringAddonsForward);
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

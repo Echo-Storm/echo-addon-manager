@@ -2,7 +2,7 @@
 #include "../../addon/addon_info.h"
 #include "imgui.h"
 
-namespace lsproxy {
+namespace eam {
 namespace widgets {
 
 // Renders a single addon card. Returns true if the card was clicked (selected).
@@ -12,4 +12,4 @@ namespace widgets {
 bool AddonCard(AddonInfo& addon, int index, bool isSelected, bool* toggled = nullptr);
 
 } // namespace widgets
-} // namespace lsproxy
+} // namespace eam

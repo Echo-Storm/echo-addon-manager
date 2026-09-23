@@ -8,7 +8,7 @@
 
 namespace fs = std::filesystem;
 
-namespace lsproxy {
+namespace eam {
 
 std::string WideToUtf8(const std::wstring& text) {
     if (text.empty()) return {};
@@ -86,4 +86,4 @@ bool DiscoverAddon(const fs::path& folder, AddonInfo& info) {
     return true;
 }
 
-} // namespace lsproxy
+} // namespace eam

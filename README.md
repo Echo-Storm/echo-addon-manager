@@ -138,7 +138,7 @@ Setup does exactly this, with backups. If you would rather copy files yourself:
 
 1. Close Lossless Scaling. Open its folder (for a Steam install, for example `C:\Program Files (x86)\Steam\steamapps\common\Lossless Scaling`).
 2. **First time only:** rename the original `Lossless.dll` to `Lossless_original.dll`. Keep it: the manager forwards to it.
-3. Copy `Lossless.dll`, the two `LP-icon` files and the `addons` folder from the zip into that folder.
+3. Copy `Lossless.dll`, the two `manager-icon` files (`.ico` and `.png`) and the `addons` folder from the zip into that folder.
 4. Start Lossless Scaling. For Neural Rendering, also put your `nvngx_dlssnr.dll` next to `LosslessScaling.exe`.
 
 **Updating by hand:** close Lossless Scaling and copy the new `Lossless.dll` and `addons` over the old ones.

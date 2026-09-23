@@ -4,7 +4,7 @@
 struct IHost;
 struct ImGuiContext;
 
-namespace lsproxy {
+namespace eam {
 
 // Looks up every export the addon API defines in a loaded addon DLL. Missing ones stay null; AddonInitialize is also accepted as AddonInit.
 void BindExports(HMODULE module, AddonExports& out);
@@ -22,4 +22,4 @@ const char* Text(const char* (*getter)());   // nullptr when the getter is missi
 
 } // namespace guarded
 
-} // namespace lsproxy
+} // namespace eam

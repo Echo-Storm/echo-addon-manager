@@ -6,7 +6,7 @@
 // without a new host interface. Include it after imgui.h. The manager applies the colours through the ImGui style
 // (gui_style.cpp); this file adds what the style cannot express.
 #include "imgui.h"
-#include "lsp_icons.h"
+#include "icons.h"
 #include "imgui_internal.h"   // ImGui::GetActiveID: tells a slider whose value is being typed from one that is only shown
 #include <algorithm>
 #include <cmath>
@@ -18,7 +18,7 @@
 // imgui_internal.h.
 void ImTextInitClassifiers();
 
-namespace lsp {
+namespace eam::ui {
 
 // Call from AddonInitialize right after ImGui::SetCurrentContext / SetAllocatorFunctions. Each addon carries its own copy of
 // ImGui, and the word-wrap character classes are file-scope tables that ImGui only fills when it builds a font atlas (in the
@@ -188,7 +188,7 @@ inline void SectionLabel(const char* text) {
 //   * double-click resets the value to the default;
 // and always:
 //   * Ctrl + mouse wheel over the slider nudges the value (1% of the range per notch, Shift = 0.1%; whole steps for integers);
-//   * lsp::SliderHint() returns the one-line "how to use it" text for the slider just submitted, so a tooltip helper can append it.
+//   * eam::ui::SliderHint() returns the one-line "how to use it" text for the slider just submitted, so a tooltip helper can append it.
 namespace detail {
 
 struct HintSlot { ImGuiID id = 0; char text[160] = {}; };
@@ -434,4 +434,4 @@ inline void LineGraph(const char* id, const ImVec2* pts, int n, ImVec2 size, flo
     ImGui::PopID();
 }
 
-} // namespace lsp
+} // namespace eam::ui

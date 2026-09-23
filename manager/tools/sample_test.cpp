@@ -1,7 +1,7 @@
 // Offline test of the sample addon (examples/SampleAddon): the addon that docs/addon-authors.md points people to must keep working against the manager
 // as it is now. It is copied into a throw-away addons folder, found, loaded and started by the real AddonManager, its settings panel is drawn for a frame
 // and its settings are checked: what it publishes (status, a metric), what it reads from the settings file and what it writes back.
-//   lsproxy_sampletest.exe        (SampleAddon.dll must sit beside it; the build puts it there; addon.json comes from examples/SampleAddon)
+//   eam_sampletest.exe        (SampleAddon.dll must sit beside it; the build puts it there; addon.json comes from examples/SampleAddon)
 #include "src/addon/addon_manager.h"
 #include "src/config/config_manager.h"
 #include "src/host/host_impl.h"
@@ -15,7 +15,7 @@
 #include <string>
 
 namespace fs = std::filesystem;
-using namespace lsproxy;
+using namespace eam;
 
 static int g_failed = 0;
 static void Check(const char* what, bool ok, const std::string& detail = "") {
@@ -57,7 +57,7 @@ int main() {
     const fs::path manifest = fs::path(SAMPLE_ADDON_DIR) / "addon.json";
     if (!fs::exists(dll) || !fs::exists(manifest)) { printf("FAIL  SampleAddon.dll or its addon.json is missing (%ls, %ls)\n", dll.c_str(), manifest.c_str()); return 1; }
 
-    const fs::path T = fs::temp_directory_path() / ("lsp_sampletest_" + std::to_string(GetCurrentProcessId()));
+    const fs::path T = fs::temp_directory_path() / ("eam_sampletest_" + std::to_string(GetCurrentProcessId()));
     std::error_code ec;
     fs::remove_all(T, ec);
     const fs::path A = T / "addons";
@@ -87,7 +87,7 @@ int main() {
         Check("it loads", a->IsLoaded(), a->errorMessage);
         mgr.InitializeAddons(ctx);
         Check("it starts without a fault", !a->faulted && a->errorMessage.empty(), a->errorMessage);
-        Check("it reports having a settings panel and needing no restart", a->exports.renderSettings != nullptr && (a->capabilities & LSPROXY_CAP_HAS_SETTINGS) != 0 && !a->RequiresRestart());
+        Check("it reports having a settings panel and needing no restart", a->exports.renderSettings != nullptr && (a->capabilities & EAM_CAP_HAS_SETTINGS) != 0 && !a->RequiresRestart());
 
         const Metrics::Status st = Metrics::Instance().GetStatus("SampleAddon");
         Check("it publishes a green status built from the settings it read (greeting, volume, counter)", st.text == "Howdy: volume 25%, clicked 7 times" && st.level == 1, st.text);

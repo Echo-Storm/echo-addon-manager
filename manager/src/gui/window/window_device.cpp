@@ -1,7 +1,7 @@
 #include "window_device.h"
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 
 namespace {
@@ -78,4 +78,4 @@ void WindowDevice::Destroy() {
 }
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

@@ -177,8 +177,11 @@ Result Install(const std::wstring& lsDir, const std::wstring& payloadDir) {
         }
 
         Place(j, JoinPath(payloadDir, L"Lossless.dll"), lossless, backupDir, L"Lossless.dll.ours");
-        for (const wchar_t* icon : { L"LP-icon.ico", L"LP-icon.png" })
+        for (const wchar_t* icon : { L"manager-icon.ico", L"manager-icon.png" })
             if (Exists(JoinPath(payloadDir, icon))) Place(j, JoinPath(payloadDir, icon), JoinPath(lsDir, icon), backupDir, icon);
+        // the icons under the names they had up to 0.7.4
+        for (const wchar_t* icon : { L"LP-icon.ico", L"LP-icon.png" })
+            if (Exists(JoinPath(lsDir, icon))) Rename(j, JoinPath(lsDir, icon), JoinPath(backupDir, icon), "moved an icon file under its old name to the backups");
         if (Exists(JoinPath(payloadDir, L"addons"))) CopyTree(j, JoinPath(payloadDir, L"addons"), JoinPath(lsDir, L"addons"), backupDir, L"addons");
 
         // a helper DLL an earlier version left behind under its old name

@@ -1,7 +1,7 @@
 #include "update_check.h"
 #include "../config/config_manager.h"
 #include "../log/logger.h"
-#include "../../sdk/include/lsproxy/version.h"
+#include "../../sdk/include/eam/version.h"
 #include <windows.h>
 #include <winhttp.h>
 #include <atomic>
@@ -13,7 +13,7 @@
 
 #pragma comment(lib, "winhttp.lib")
 
-namespace lsproxy {
+namespace eam {
 namespace update {
 
 const wchar_t* const kLatestReleaseUrl = L"https://api.github.com/repos/Echo-Storm/echo-addon-manager/releases/latest";
@@ -109,7 +109,7 @@ struct Handle {
 
 std::wstring UserAgent() {
     std::wstring ua = L"EchoAddonManager/";
-    for (const char* c = LSPROXY_VERSION_STRING; *c; ++c) ua += static_cast<wchar_t>(*c);
+    for (const char* c = EAM_VERSION_STRING; *c; ++c) ua += static_cast<wchar_t>(*c);
     return ua + L" (update check)";
 }
 
@@ -216,7 +216,7 @@ void StartCheckAsync() {
     }
     std::thread([url] {
         try {
-            const Status s = Check(LSPROXY_VERSION_STRING, url);
+            const Status s = Check(EAM_VERSION_STRING, url);
             if (s.state == State::Failed) LOG_INFO("Update", "The update check failed: %s", s.error.c_str());
             else LOG_INFO("Update", "The update check found %s (this is %s)", s.latest.c_str(), s.current.c_str());
             {
@@ -270,4 +270,4 @@ std::string DescribeStatus(const Status& s) {
 }
 
 } // namespace update
-} // namespace lsproxy
+} // namespace eam

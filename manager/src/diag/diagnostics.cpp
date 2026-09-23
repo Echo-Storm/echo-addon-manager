@@ -5,7 +5,7 @@
 
 namespace fs = std::filesystem;
 
-namespace lsproxy {
+namespace eam {
 
 static constexpr uintmax_t kMaxLog = 3u * 1024 * 1024;
 
@@ -46,7 +46,7 @@ DiagResult CreateDiagnosticsZip(const fs::path& lsDir, const std::string& summar
     SYSTEMTIME t; GetLocalTime(&t);
     wchar_t stamp[32]; swprintf(stamp, 32, L"%04d%02d%02d-%02d%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     wchar_t tmp[MAX_PATH]; GetTempPathW(MAX_PATH, tmp);
-    const fs::path stage = fs::path(tmp) / (L"lsp-diag-" + std::wstring(stamp) + L"-" + std::to_wstring(GetTickCount64()));
+    const fs::path stage = fs::path(tmp) / (L"eam-diag-" + std::wstring(stamp) + L"-" + std::to_wstring(GetTickCount64()));
     const fs::path bundle = stage / L"EchoAddonManager-diagnostics";
     fs::create_directories(bundle, ec);
     if (ec) { r.message = "Could not create a temporary folder: " + ec.message(); return r; }
@@ -83,4 +83,4 @@ DiagResult CreateDiagnosticsZip(const fs::path& lsDir, const std::string& summar
     return r;
 }
 
-} // namespace lsproxy
+} // namespace eam

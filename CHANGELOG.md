@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.5 (internal, 2026-09-23)
+
+Not a public release (the manager still shows 0.7.0).
+
+- **Neural Rendering's bridge and hooks rewritten as our own code.** The bridge hands frames to the model and results back to Lossless Scaling; the hooks watch Lossless Scaling's compute passes and presents. The
+  original DLSS 5 plugin is now an inspiration for these, not their source.
+- **Fixed: Neural Rendering could stop for good after one failed run.** If a run was never queued (the model was not ready at that moment), the bridge still waited for it to finish. Since it never did, every
+  later frame was skipped, silently. A run that is never queued is now simply forgotten.
+- **Fixed: a race when the hooks are removed.** The dispatch hook read its callback twice, so removing it at the wrong moment could call a null function. Both hooks now read the callback once, atomically.
+  The present hook's hit count is atomic too.
+- **Old "LosslessProxy" names removed** (`lsproxy`, `LSPROXY_`, `LsProxy`, `lsp::`, `LP-icon`):
+  - The addon SDK now lives in `manager/sdk/include/eam/` (`addon_sdk.h`, `widgets.h`, `icons.h` and the rest), with `EAM_*` macros, `Eam*` types and the `eam::ui` widget namespace. Only source code
+    names changed: the functions an addon exports and the layout of everything passed between the manager and an addon are the same, so addons already built keep working. An addon's source needs its
+    includes and names updated to match.
+  - The icons are `manager-icon.ico` and `manager-icon.png`. The installer (and `tools/deploy.ps1`) moves `LP-icon.*` from an earlier install to the backups.
+  - ReShade passthrough and Windowed mode keep their settings under `ReShadePassthrough` and `WindowedMode`. Settings saved under the old ids move across by themselves the first time the manager starts,
+    never over settings already there. Old standalone addon folders with those names are still recognised and ignored.
+  - Settings backups are marked `eam_settings_backup`; backups made by earlier versions still import.
+  - The test programs are `eam_coretest`, `eam_guitest` and so on.
+- New tests for all three: the settings move, old backups, and the old icon files moved aside.
+
 ## 0.7.4 (internal, 2026-09-23)
 
 Not a public release (the manager still shows 0.7.0).

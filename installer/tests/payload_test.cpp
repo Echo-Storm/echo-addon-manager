@@ -62,7 +62,7 @@ int wmain() {
     // 1. A folder like the release: pack, validate, unpack, compare
     const fs::path src = root / L"src";
     Write(src / L"Lossless.dll", std::string("MZ\0real dll bytes", 17) + std::string(70000, 'x'));
-    Write(src / L"LP-icon.ico", "icon");
+    Write(src / L"manager-icon.ico", "icon");
     Write(src / L"addons" / L"DLSS5NR01" / L"DLSS5NR01.dll", std::string(3000, 'a'));
     Write(src / L"addons" / L"DLSS5NR01" / L"addon.json", "{ \"id\": \"DLSS5NR01\" }");
     Write(src / L"addons" / L"empty.bin", "");

@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 if (-not $Version) {   # default: the release number in version.h
-    $Version = (Select-String -Path "$root\manager\sdk\include\lsproxy\version.h" -Pattern 'LSPROXY_VERSION_STRING "([^"]+)"').Matches[0].Groups[1].Value
+    $Version = (Select-String -Path "$root\manager\sdk\include\eam\version.h" -Pattern 'EAM_VERSION_STRING "([^"]+)"').Matches[0].Groups[1].Value
 }
 if (-not $SkipBuild) {
     & powershell -NoProfile -File "$PSScriptRoot\build_all.ps1" -Only host,nr
@@ -25,7 +25,7 @@ New-Item -ItemType Directory -Force "$stage\addons" | Out-Null
 function Need($path, $what) { if (-not (Test-Path $path)) { throw "missing build output: $what ($path)" } }
 Need "$root\manager\build\Release\Lossless.dll" 'the manager'
 Copy-Item "$root\manager\build\Release\Lossless.dll" $stage
-Copy-Item "$root\manager\LP-icon.ico", "$root\manager\LP-icon.png" $stage
+Copy-Item "$root\manager\manager-icon.ico", "$root\manager\manager-icon.png" $stage
 
 $addons = @(
     @{ Id = 'DLSS5NR01'; Dir = "$root\addons\DLSS5NR01"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS5NR01.dll', 'nvngx.dll_dlss5nr01.dll', 'nr_selftest.exe') }
@@ -50,7 +50,7 @@ $setupBuild = "$root\installer\build_setup"
 $payloadDir = "$dist\payload-$Version"
 if (Test-Path $payloadDir) { Remove-Item -Recurse -Force $payloadDir }
 New-Item -ItemType Directory -Force $payloadDir | Out-Null
-Copy-Item "$stage\Lossless.dll", "$stage\LP-icon.ico", "$stage\LP-icon.png" $payloadDir
+Copy-Item "$stage\Lossless.dll", "$stage\manager-icon.ico", "$stage\manager-icon.png" $payloadDir
 Copy-Item "$stage\addons" "$payloadDir\addons" -Recurse
 if (-not (Test-Path "$setupBuild\CMakeCache.txt")) { & cmake -S "$root\installer" -B $setupBuild -G 'Visual Studio 17 2022' -A x64 | Out-Null }
 & cmake --build $setupBuild --config Release --target pack_payload | Out-Null
@@ -124,7 +124,7 @@ Install by hand (Lossless Scaling 3.2.2.0 was the tested version)
 1. Close Lossless Scaling and open its folder, for example
    C:\Program Files (x86)\Steam\steamapps\common\Lossless Scaling
 2. First time only: rename the original Lossless.dll to Lossless_original.dll. Keep it: the manager forwards to it.
-3. Copy Lossless.dll, LP-icon.ico, LP-icon.png and the addons folder from this zip into that folder.
+3. Copy Lossless.dll, manager-icon.ico, manager-icon.png and the addons folder from this zip into that folder.
 4. Start Lossless Scaling. The manager window opens by itself.
 5. DLSS 5 Neural Rendering also needs nvngx_dlssnr.dll next to LosslessScaling.exe. It is not included and this project does not say where to
    find it. ReShade input passthrough and Windowed mode are built into the manager (its Features tab); they arrive switched off.

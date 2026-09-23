@@ -2,7 +2,7 @@
 #include <mutex>
 #include <windows.h>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 namespace windowed {
 
@@ -37,4 +37,4 @@ void UpdateTargetRect();
 
 } // namespace windowed
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

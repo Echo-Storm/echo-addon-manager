@@ -11,7 +11,7 @@
 #include "../gui/icon_loader.h"
 #include "../host/host_impl.h"
 #include "../log/logger.h"
-#include "../../sdk/include/lsproxy/version.h"
+#include "../../sdk/include/eam/version.h"
 #include "imgui.h"
 #include <algorithm>
 #include <system_error>
@@ -20,7 +20,7 @@
 
 namespace fs = std::filesystem;
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 
@@ -28,7 +28,7 @@ namespace {
 int SecurityLevel() { return ConfigManager::Instance().GlobalGetOr<int>(nullptr, "security_level", 0); }
 
 void Announce(uint32_t event, const AddonInfo& addon) {
-    LsProxyAddonEventData data;
+    EamAddonEventData data;
     data.addonName = addon.GetDisplayName().c_str();
     data.addonVersion = addon.GetDisplayVersion().c_str();
     EventBus::Instance().Publish(event, &data, sizeof data);
@@ -192,9 +192,9 @@ AddonManager::InstallResult AddonManager::RemoveAddon(int index) {
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 std::string AddonManager::WhyNotLoadable(const AddonInfo& addon) {
-    if (!addon.manifest.minHostVersion.empty() && ParseApiVersion(addon.manifest.minHostVersion) > (uint32_t)LSPROXY_API_VERSION_INT) {
-        const std::string why = "Needs a newer " LSPROXY_PRODUCT_NAME " (addon API " + addon.manifest.minHostVersion +
-                                " or newer; this one provides " LSPROXY_API_VERSION_STRING ")";
+    if (!addon.manifest.minHostVersion.empty() && ParseApiVersion(addon.manifest.minHostVersion) > (uint32_t)EAM_API_VERSION_INT) {
+        const std::string why = "Needs a newer " EAM_PRODUCT_NAME " (addon API " + addon.manifest.minHostVersion +
+                                " or newer; this one provides " EAM_API_VERSION_STRING ")";
         LOG_ERROR("AddonManager", "Not loading '%s': %s", addon.id.c_str(), why.c_str());
         return why;
     }
@@ -260,14 +260,14 @@ bool AddonManager::StartAddon(AddonInfo& addon, ImGuiContext* ctx) {
         LOG_ERROR("AddonManager", "Addon '%s' crashed during init!", addon.id.c_str());
         return false;
     }
-    Announce(LSPROXY_EVENT_ADDON_LOADED, addon);
+    Announce(EAM_EVENT_ADDON_LOADED, addon);
     return true;
 }
 
 void AddonManager::UnloadModule(AddonInfo& addon) {
     if (!addon.IsLoaded()) return;
     guarded::Shutdown(addon.exports);
-    Announce(LSPROXY_EVENT_ADDON_UNLOADED, addon);
+    Announce(EAM_EVENT_ADDON_UNLOADED, addon);
     // Whatever the addon left registered would point into freed code once its DLL is gone (a dispatch callback on Lossless Scaling's render
     // thread): take back every event subscription and dispatch callback whose code lies in the DLL's image.
     const auto base = reinterpret_cast<uintptr_t>(addon.hModule);
@@ -368,4 +368,4 @@ void AddonManager::LoadAddonIcons() {
 std::vector<AddonInfo>& AddonManager::GetAddons() { return m_addons; }
 std::mutex& AddonManager::GetMutex() { return m_mutex; }
 
-} // namespace lsproxy
+} // namespace eam

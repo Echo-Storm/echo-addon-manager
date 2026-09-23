@@ -5,7 +5,7 @@
 
 namespace fs = std::filesystem;
 
-namespace lsproxy {
+namespace eam {
 
 static std::string Utf8(const std::wstring& w) {
     if (w.empty()) return {};
@@ -124,4 +124,4 @@ RemoveResult MoveAddonToRemoved(const fs::path& folder, const fs::path& addonsDi
     return r;
 }
 
-} // namespace lsproxy
+} // namespace eam

@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-namespace lsp {
+namespace eam::ui {
 namespace svg {
 
 struct SubPath { std::vector<ImVec2> pts; bool closed = false; };
@@ -206,4 +206,4 @@ inline constexpr const char* kPlay       = "M6 3 20 12 6 21Z";
 inline constexpr const char* kEye        = "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z";
 } // namespace icons
 
-} // namespace lsp
+} // namespace eam::ui

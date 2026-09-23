@@ -1,9 +1,9 @@
 #include "toggle_switch.h"
 #include "imgui_internal.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include <unordered_map>
 
-namespace lsproxy {
+namespace eam {
 namespace widgets {
 
 namespace {
@@ -43,7 +43,7 @@ bool ToggleSwitch(const char* id, bool* value) {
     float& travel = g_knobTravel[key];
     travel = MoveToward(travel, *value ? 1.0f : 0.0f, g.IO.DeltaTime * 8.0f);
 
-    using namespace lsp::theme;
+    using namespace eam::ui::theme;
     const ImU32 fill = *value ? U(hovered ? kAccent : kAccentDim) : U(hovered ? kBorderBright : kButtonHover);
     const ImU32 outline = *value ? U(kAccent) : U(kBorderBright);
     const ImU32 knobColour = *value ? U(kText) : U(kMuted);
@@ -60,4 +60,4 @@ bool ToggleSwitch(const char* id, bool* value) {
 }
 
 } // namespace widgets
-} // namespace lsproxy
+} // namespace eam

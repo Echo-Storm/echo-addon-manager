@@ -1,5 +1,5 @@
 // Offscreen preview of the manager's look: builds the real theme (gui_style.cpp), the real toggle switch, addon card, status bar
-// and About tab, the shared lsp_widgets.h controls (sliders with defaults, section headers, buttons, SVG icons), and renders them to
+// and About tab, the shared widgets.h controls (sliders with defaults, section headers, buttons, SVG icons), and renders them to
 // BMP files. No window is created and nothing is drawn on anyone's screen.
 //   ui_preview.exe [outDir] [scale] [addon.dll ...]
 // Each addon DLL is loaded against a fake host and its settings panel is rendered to preview_<dll name>.bmp, so a panel can
@@ -25,17 +25,17 @@
 #include "src/config/config_manager.h"
 #include "src/gui/tabs/tab_logs.h"
 #include "src/log/logger.h"
-#include "lsproxy/version.h"
+#include "eam/version.h"
 #include "src/gui/tabs/tab_performance.h"
 #include "src/gui/tabs/tab_settings.h"
 #include "src/gui/gui_manager.h"
 #include "src/addon/addon_manager.h"
 #include "src/host/metrics.h"
 #include "src/host/gpu_stats.h"
-#include "lsproxy/lsp_widgets.h"
-#include "lsproxy/addon_sdk.h"
+#include "eam/widgets.h"
+#include "eam/addon_sdk.h"
 
-using namespace lsproxy;
+using namespace eam;
 
 // The preview does not link the real manager window or addon manager: the few things the Settings tab touches are stubbed.
 void GuiManager::ApplyHotkey() {}
@@ -63,18 +63,18 @@ static void Shell(const char* active, const std::string& status, const std::func
 
 struct FakeHost : IHost {
     std::map<std::string, std::string> cfg;
-    void Log(LsProxyLogLevel, const char* m) override { printf("[addon] %s\n", m); }
+    void Log(EamLogLevel, const char* m) override { printf("[addon] %s\n", m); }
     const char* GetConfig(const char* id, const char* k, const char* d) override { auto it = cfg.find(std::string(id) + "/" + k); return it == cfg.end() ? d : it->second.c_str(); }
     void SetConfig(const char* id, const char* k, const char* v) override { cfg[std::string(id) + "/" + k] = v; }
     void SaveConfig() override {}
     uint32_t GetHostVersion() override { return 0x10000; }
-    void SubscribeEvent(uint32_t, LsProxyEventCallback, void*) override {}
-    void UnsubscribeEvent(uint32_t, LsProxyEventCallback) override {}
+    void SubscribeEvent(uint32_t, EamEventCallback, void*) override {}
+    void UnsubscribeEvent(uint32_t, EamEventCallback) override {}
     void PublishEvent(uint32_t, const void*, uint32_t) override {}
     void* GetD3D11Device() override { return nullptr; }
     void* GetD3D11DeviceContext() override { return nullptr; }
-    void SetPreDispatchCallback(LsProxyPreDispatchCallback, void*) override {}
-    void SetPostDispatchCallback(LsProxyPostDispatchCallback, void*) override {}
+    void SetPreDispatchCallback(EamPreDispatchCallback, void*) override {}
+    void SetPostDispatchCallback(EamPostDispatchCallback, void*) override {}
     void* GetCurrentComputeShader() override { return nullptr; }
     uint32_t GetDispatchCount() override { return 0; }
     void SetStatus(const char*, const char*, int) override {}
@@ -92,12 +92,12 @@ int main(int argc, char** argv) {
     const int W = (int)(620 * scale), H = (int)(1000 * scale);
     if (!shot.Init(W, H)) { printf("device init failed\n"); return 1; }
 
-    // LSP_PREVIEW_CLEAN=1 draws the tidy scene used for the README screenshots: no toast, only the first addon on, no error chips.
-    char* cleanEnv = nullptr; size_t cleanLen = 0; _dupenv_s(&cleanEnv, &cleanLen, "LSP_PREVIEW_CLEAN");
+    // EAM_PREVIEW_CLEAN=1 draws the tidy scene used for the README screenshots: no toast, only the first addon on, no error chips.
+    char* cleanEnv = nullptr; size_t cleanLen = 0; _dupenv_s(&cleanEnv, &cleanLen, "EAM_PREVIEW_CLEAN");
     const bool clean = cleanEnv != nullptr; free(cleanEnv);
     AddonInfo a, b, c;
     a.id = "DLSS5NR01"; a.manifest.name = "DLSS 5 Neural Rendering"; a.manifest.version = "0.7.0"; a.manifest.author = "andreiday / Echo-Storm"; a.hModule = (HMODULE)1; a.enabled = true;
-    b.id = "sample-a"; b.manifest.name = "Sample addon A"; b.manifest.version = "1.0.0"; b.manifest.author = "Someone"; b.enabled = !clean; b.capabilities = clean ? 0 : LSPROXY_CAP_REQUIRES_RESTART;   // enabled, needs a restart
+    b.id = "sample-a"; b.manifest.name = "Sample addon A"; b.manifest.version = "1.0.0"; b.manifest.author = "Someone"; b.enabled = !clean; b.capabilities = clean ? 0 : EAM_CAP_REQUIRES_RESTART;   // enabled, needs a restart
     c.id = "sample-b"; c.manifest.name = "Sample addon B"; c.manifest.version = "1.0.0"; c.manifest.author = "Someone else"; c.enabled = !clean; c.faulted = !clean;   // shows the ERROR chip
 
     float model = 0.5f, sharpen = 0.0f, vib = 1.2f, blend = 0.72f, gamma = 1.0f; int passes = 1, grain = 2; bool sw = true, sw2 = false; int sel = 0;
@@ -135,8 +135,8 @@ int main(int argc, char** argv) {
     shot.Frame([&] {
         Shell("Addons", status, [&] {
             ImGui::Dummy(ImVec2(0, 5));
-            lsp::Button("Install addon", lsp::icons::kDownload, lsp::ButtonKind::Primary); ImGui::SameLine();
-            lsp::Button("Open addons folder", lsp::icons::kFolder);
+            eam::ui::Button("Install addon", eam::ui::icons::kDownload, eam::ui::ButtonKind::Primary); ImGui::SameLine();
+            eam::ui::Button("Open addons folder", eam::ui::icons::kFolder);
             ImGui::Dummy(ImVec2(0, 6));
             if (widgets::AddonCard(a, 0, sel == 0)) sel = 0;
             if (!clean && widgets::AddonCard(b, 1, sel == 1)) sel = 1;
@@ -149,8 +149,8 @@ int main(int argc, char** argv) {
     shot.Frame([&] {
         Shell("Addons", status, [&] {
             ImGui::Dummy(ImVec2(0, 5));
-            lsp::Button("Install addon", lsp::icons::kDownload, lsp::ButtonKind::Primary); ImGui::SameLine();
-            lsp::Button("Open addons folder", lsp::icons::kFolder);
+            eam::ui::Button("Install addon", eam::ui::icons::kDownload, eam::ui::ButtonKind::Primary); ImGui::SameLine();
+            eam::ui::Button("Open addons folder", eam::ui::icons::kFolder);
             ImGui::Dummy(ImVec2(0, 6));
             widgets::AddonCard(a, 0, true); widgets::AddonCard(b, 1, false);
             static bool opened = false;
@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
                 ImGui::TextWrapped("It is switched off and its folder is moved to addons/.removed (nothing is erased; move the folder back to restore it). Its settings are kept, so installing it again brings them back.");
                 ImGui::PopTextWrapPos();
                 ImGui::Dummy(ImVec2(0, 6));
-                lsp::Button("Remove", lsp::icons::kTrash, lsp::ButtonKind::Danger); ImGui::SameLine(); lsp::Button("Cancel", lsp::icons::kClose);
+                eam::ui::Button("Remove", eam::ui::icons::kTrash, eam::ui::ButtonKind::Danger); ImGui::SameLine(); eam::ui::Button("Cancel", eam::ui::icons::kClose);
                 ImGui::EndPopup();
             }
         });
@@ -171,8 +171,8 @@ int main(int argc, char** argv) {
     shot.Frame([&] {
         Shell("Addons", status, [&] {
             ImGui::Dummy(ImVec2(0, 5));
-            lsp::Button("Install addon", lsp::icons::kDownload, lsp::ButtonKind::Primary); ImGui::SameLine();
-            lsp::Button("Open addons folder", lsp::icons::kFolder);
+            eam::ui::Button("Install addon", eam::ui::icons::kDownload, eam::ui::ButtonKind::Primary); ImGui::SameLine();
+            eam::ui::Button("Open addons folder", eam::ui::icons::kFolder);
             ImGui::Dummy(ImVec2(0, 6));
             ImGui::BeginChild("AddonList", ImVec2(260 * ImGui::GetStyle().FontScaleDpi, -1), false);
             widgets::EmptyState(260 * ImGui::GetStyle().FontScaleDpi, "No addons installed yet", "Use Install addon above, or drop a folder, .zip or .dll onto this window.");
@@ -186,38 +186,38 @@ int main(int argc, char** argv) {
     auto controls = [&] {
         Shell("Settings", status, [&] {
             ImGui::Dummy(ImVec2(0, 5));
-            if (lsp::SectionHeader("Quality and performance", true)) {
-                lsp::SliderFloat("Model resolution", &model, 0.25f, 1.0f, "%.2f x the frame", 0, &dModel);
-                lsp::SliderInt("Model passes", &passes, 1, 4, "%d", 0, &dPasses);
-                lsp::SliderFloat("Blend amount", &blend, 0.0f, 2.0f, "%.2f", 0, &dBlend);
+            if (eam::ui::SectionHeader("Quality and performance", true)) {
+                eam::ui::SliderFloat("Model resolution", &model, 0.25f, 1.0f, "%.2f x the frame", 0, &dModel);
+                eam::ui::SliderInt("Model passes", &passes, 1, 4, "%d", 0, &dPasses);
+                eam::ui::SliderFloat("Blend amount", &blend, 0.0f, 2.0f, "%.2f", 0, &dBlend);
                 hoverAt = ImVec2(ImGui::GetItemRectMin().x + 160.0f * ImGui::GetStyle().FontScaleDpi, ImGui::GetItemRectMin().y + ImGui::GetFrameHeight() * 0.5f);
-                lsp::SliderFloat("Sharpen", &sharpen, 0.0f, 1.0f, sharpen <= 0.001f ? "off" : "%.2f", 0, &dSharpen);
+                eam::ui::SliderFloat("Sharpen", &sharpen, 0.0f, 1.0f, sharpen <= 0.001f ? "off" : "%.2f", 0, &dSharpen);
             }
-            if (lsp::SectionHeader("Picture (sharpness, tone, colour, grain)", true)) {
-                lsp::SliderFloat("Vibrance", &vib, 0.0f, 2.0f, "%.2f", 0, &dVib);
-                lsp::SliderFloat("Gamma", &gamma, 0.5f, 2.0f, fabsf(gamma - 1.0f) < 0.002f ? "unchanged" : "%.2f", 0, &dGamma);
-                lsp::SliderInt("Grain size", &grain, 1, 4, "%d px", 0, &dGrain);
+            if (eam::ui::SectionHeader("Picture (sharpness, tone, colour, grain)", true)) {
+                eam::ui::SliderFloat("Vibrance", &vib, 0.0f, 2.0f, "%.2f", 0, &dVib);
+                eam::ui::SliderFloat("Gamma", &gamma, 0.5f, 2.0f, fabsf(gamma - 1.0f) < 0.002f ? "unchanged" : "%.2f", 0, &dGamma);
+                eam::ui::SliderInt("Grain size", &grain, 1, 4, "%d px", 0, &dGrain);
             }
-            lsp::SectionHeader("Keep the HUD untouched");
-            lsp::SectionHeader("Games (a look per program)");
+            eam::ui::SectionHeader("Keep the HUD untouched");
+            eam::ui::SectionHeader("Games (a look per program)");
             ImGui::Dummy(ImVec2(0, 8));
-            lsp::SectionLabel("Buttons and icons");
-            lsp::Button("Save preset", lsp::icons::kCheck, lsp::ButtonKind::Primary); ImGui::SameLine();
-            lsp::Button("Restore defaults", lsp::icons::kReset); ImGui::SameLine();
-            lsp::Button("Remove", lsp::icons::kClose, lsp::ButtonKind::Danger); ImGui::SameLine();
-            lsp::Button("Learn more", lsp::icons::kExternal, lsp::ButtonKind::Flat);
+            eam::ui::SectionLabel("Buttons and icons");
+            eam::ui::Button("Save preset", eam::ui::icons::kCheck, eam::ui::ButtonKind::Primary); ImGui::SameLine();
+            eam::ui::Button("Restore defaults", eam::ui::icons::kReset); ImGui::SameLine();
+            eam::ui::Button("Remove", eam::ui::icons::kClose, eam::ui::ButtonKind::Danger); ImGui::SameLine();
+            eam::ui::Button("Learn more", eam::ui::icons::kExternal, eam::ui::ButtonKind::Flat);
             ImGui::Dummy(ImVec2(0, 4));
-            for (const char* ic : { lsp::icons::kHeart, lsp::icons::kPlus, lsp::icons::kDownload, lsp::icons::kFolder, lsp::icons::kReset, lsp::icons::kCheck,
-                                    lsp::icons::kClose, lsp::icons::kExternal, lsp::icons::kInfo, lsp::icons::kCoffee, lsp::icons::kPower, lsp::icons::kPackage,
-                                    lsp::icons::kSliders, lsp::icons::kEye }) {
-                ImGui::PushID(ic); lsp::IconButton("##i", ic, ImGui::GetFrameHeight() * 1.2f); ImGui::PopID(); ImGui::SameLine();
+            for (const char* ic : { eam::ui::icons::kHeart, eam::ui::icons::kPlus, eam::ui::icons::kDownload, eam::ui::icons::kFolder, eam::ui::icons::kReset, eam::ui::icons::kCheck,
+                                    eam::ui::icons::kClose, eam::ui::icons::kExternal, eam::ui::icons::kInfo, eam::ui::icons::kCoffee, eam::ui::icons::kPower, eam::ui::icons::kPackage,
+                                    eam::ui::icons::kSliders, eam::ui::icons::kEye }) {
+                ImGui::PushID(ic); eam::ui::IconButton("##i", ic, ImGui::GetFrameHeight() * 1.2f); ImGui::PopID(); ImGui::SameLine();
             }
             ImGui::NewLine();
             {   // filled hearts at three sizes (the Ko-fi heart is a filled path)
                 const ImVec2 hp = ImGui::GetCursorScreenPos();
                 for (int i = 0; i < 3; ++i) {
                     const float sz = i == 0 ? 15.0f : (i == 1 ? 32.0f : 64.0f) ;
-                    lsp::svg::Draw(ImGui::GetWindowDrawList(), lsp::icons::kHeart, ImVec2(hp.x + i * 90.0f, hp.y), sz * ImGui::GetStyle().FontScaleDpi, lsp::theme::U(lsp::theme::kAccent), 0.0f, lsp::theme::U(lsp::theme::kAccent));
+                    eam::ui::svg::Draw(ImGui::GetWindowDrawList(), eam::ui::icons::kHeart, ImVec2(hp.x + i * 90.0f, hp.y), sz * ImGui::GetStyle().FontScaleDpi, eam::ui::theme::U(eam::ui::theme::kAccent), 0.0f, eam::ui::theme::U(eam::ui::theme::kAccent));
                 }
                 ImGui::Dummy(ImVec2(10, 70.0f * ImGui::GetStyle().FontScaleDpi));
             }
@@ -246,8 +246,8 @@ int main(int argc, char** argv) {
     {
         ConfigManager& cfg = ConfigManager::Instance();
         cfg.Load((std::filesystem::path(out) / "preview_config.json").wstring());
-        cfg.SetAddonEnabled("LSP-ReShade", true);
-        cfg.SetAddonEnabled("LSP-Windowed", !clean);
+        cfg.SetAddonEnabled("ReShadePassthrough", true);
+        cfg.SetAddonEnabled("WindowedMode", !clean);
         shot.Frame([&] { Shell("Features", status, [&] { RenderTabFeatures(); }); }, 12);
         shot.Save((out + "/preview_features.bmp").c_str());
     }
@@ -258,7 +258,7 @@ int main(int argc, char** argv) {
 
     // 4. Logs tab, with a few typical lines (sample data, like the rest of the preview)
     {
-        LOG_INFO("Core", "%s v%s starting...", LSPROXY_PRODUCT_NAME, LSPROXY_VERSION_STRING);
+        LOG_INFO("Core", "%s v%s starting...", EAM_PRODUCT_NAME, EAM_VERSION_STRING);
         LOG_INFO("GUI", "Tray icon added");
         LOG_INFO("AddonManager", "Found 1 addons in addons");
         LOG_INFO("AddonManager", "Loaded 'DLSS5NR01' %s", "0.7.0");
@@ -283,7 +283,7 @@ int main(int argc, char** argv) {
         shot.Frame([&] {
             ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
             ImGui::Begin("##addon", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-            lsp::SectionLabel(title.c_str()); render(); ImGui::End();
+            eam::ui::SectionLabel(title.c_str()); render(); ImGui::End();
         }, 12);
         std::string base = argv[i]; const size_t sl = base.find_last_of("/\\"); if (sl != std::string::npos) base = base.substr(sl + 1);
         const std::string file = out + "/preview_" + base + ".bmp";

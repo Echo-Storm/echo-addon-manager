@@ -5,7 +5,7 @@
 // one sees it taken and only forwards to Lossless_original.dll.
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace instance {
 
 // True when this process now owns the folder (it is the first). The same folder written another way (case, a trailing separator) is the same folder.
@@ -16,4 +16,4 @@ void Release();
 std::wstring MutexName(const std::wstring& folder);
 
 } // namespace instance
-} // namespace lsproxy
+} // namespace eam

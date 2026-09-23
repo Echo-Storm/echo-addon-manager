@@ -5,7 +5,7 @@ param([string[]]$Only = @())
 $Only = @($Only | ForEach-Object { $_ -split "," } | Where-Object { $_ })   # accepts -Only a,b when started with -File
 $root = Split-Path $PSScriptRoot -Parent   # the repository folder
 $targets = @(
-    @{ Name = 'host';     Dir = "$root\manager\build";                 Args = @('--target', 'Lossless', '--target', 'lsproxy_uipreview') },
+    @{ Name = 'host';     Dir = "$root\manager\build";                 Args = @('--target', 'Lossless', '--target', 'eam_uipreview') },
     @{ Name = 'nr';       Dir = "$root\addons\DLSS5NR01\build";                            Args = @() }
 )
 $failed = 0

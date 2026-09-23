@@ -7,7 +7,7 @@
 
 struct ImGuiContext;
 
-namespace lsproxy {
+namespace eam {
 
 class HostImpl;
 
@@ -63,4 +63,4 @@ private:
     bool m_settingsMoved = false;   // a rename carried settings over during this scan and they still need saving
 };
 
-} // namespace lsproxy
+} // namespace eam

@@ -2,7 +2,7 @@
 #include <d3d11.h>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 // Set the D3D11 device used for texture creation (call once during GUI init)
 void IconLoader_SetDevice(ID3D11Device* device);
@@ -11,4 +11,4 @@ void IconLoader_SetDevice(ID3D11Device* device);
 // Returns nullptr on failure. Caller must Release() the returned texture.
 ID3D11ShaderResourceView* IconLoader_LoadFromFile(const std::wstring& path);
 
-} // namespace lsproxy
+} // namespace eam

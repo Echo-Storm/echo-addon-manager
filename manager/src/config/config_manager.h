@@ -3,7 +3,7 @@
 #include <string>
 #include "../../third_party/nlohmann/json.hpp"
 
-namespace lsproxy {
+namespace eam {
 
 // The settings file, addons\config.json:
 //   { "addons": { "<addon id>": { "_enabled": true, "<key>": "<value>", ... } },
@@ -66,4 +66,4 @@ private:
     bool Frozen();               // true (and logged once) when a write must be dropped; call with m_mutex held
 };
 
-} // namespace lsproxy
+} // namespace eam

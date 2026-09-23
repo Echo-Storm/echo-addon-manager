@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <fstream>
 
-namespace lsproxy {
+namespace eam {
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -15,7 +15,7 @@ static std::string Timestamp() {
 
 std::string MakeSettingsBackupText(const json& config, const char* proxyVersion) {
     json j;
-    j["lsproxy_settings_backup"] = 1;
+    j["eam_settings_backup"] = 1;
     j["proxy_version"] = proxyVersion ? proxyVersion : "";
     j["created"] = Timestamp();
     j["config"] = config;
@@ -31,7 +31,8 @@ BackupParse ParseSettingsBackup(const std::string& text) {
     catch (const std::exception&) { r.message = "That file is not valid settings data (it could not be read as JSON)."; return r; }
     if (!j.is_object()) { r.message = "That file is not a settings backup."; return r; }
     json cfg;
-    if (j.contains("lsproxy_settings_backup") && j.contains("config")) cfg = j["config"];
+    const bool marked = j.contains("eam_settings_backup") || j.contains("lsproxy_settings_backup");   // the second: backups made up to 0.7.4
+    if (marked && j.contains("config")) cfg = j["config"];
     else if (j.contains("addons") || j.contains("global")) cfg = j;   // a plain config.json copied by hand
     else { r.message = "That file is not a settings backup (no addon settings found)."; return r; }
     if (!cfg.is_object()) { r.message = "That backup is damaged: its settings are not in the expected form."; return r; }
@@ -69,4 +70,4 @@ ImportResult ImportSettings(const std::string& text, const json& current, const 
     return r;
 }
 
-} // namespace lsproxy
+} // namespace eam

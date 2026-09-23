@@ -16,7 +16,7 @@
 #include "../host/gpu_stats.h"
 #include "../log/logger.h"
 #include "../update/update_check.h"
-#include "../../sdk/include/lsproxy/version.h"
+#include "../../sdk/include/eam/version.h"
 #include "imgui.h"
 #include "imgui_internal.h"   // ImGui::ErrorRecoveryStoreState / ErrorRecoveryTryToRecoverState
 #include "imgui_impl_dx11.h"
@@ -32,7 +32,7 @@
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 
@@ -84,8 +84,8 @@ void PersistPlacement() {
 float TotalScale() { return g.displayScale * window::UserScale(); }
 
 std::wstring WindowTitle() {
-    std::wstring title = LSPROXY_PRODUCT_NAME_W L" v";
-    for (const char* c = LSPROXY_VERSION_STRING; *c; ++c) title += static_cast<wchar_t>(*c);
+    std::wstring title = EAM_PRODUCT_NAME_W L" v";
+    for (const char* c = EAM_VERSION_STRING; *c; ++c) title += static_cast<wchar_t>(*c);
     return title;
 }
 
@@ -372,4 +372,4 @@ DWORD WINAPI GuiManager::GuiThread(LPVOID /*lpParam*/) {
     return 0;
 }
 
-} // namespace lsproxy
+} // namespace eam

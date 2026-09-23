@@ -1,5 +1,5 @@
 // Offline test for PlaceAddon (installing an addon from a folder, a zip or a lone DLL). Works in a temporary folder; touches nothing else.
-//   lsproxy_installtest.exe
+//   eam_installtest.exe
 #include "src/addon/addon_install.h"
 #include "src/host/metrics.h"
 #include "src/host/gpu_stats.h"
@@ -13,7 +13,7 @@
 #include <string>
 
 namespace fs = std::filesystem;
-using namespace lsproxy;
+using namespace eam;
 
 static int g_fail = 0;
 static void Check(const char* what, bool ok) { printf("%s  %s\n", ok ? "PASS" : "FAIL", what); if (!ok) g_fail++; }
@@ -21,7 +21,7 @@ static void Touch(const fs::path& p, const char* text = "x") { fs::create_direct
 
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
-    const fs::path base = fs::temp_directory_path() / ("lsp_install_test_" + std::to_string(GetTickCount64()));
+    const fs::path base = fs::temp_directory_path() / ("eam_install_test_" + std::to_string(GetTickCount64()));
     const fs::path addons = base / "addons", src = base / "src";
     fs::create_directories(addons);
 
@@ -154,12 +154,15 @@ int main() {
     // ---- settings backup and restore
     {
         using nlohmann::json;
-        json cfg = { { "addons", { { "DLSS5NR01", { { "_enabled", true }, { "workingScale", "0.5" } } }, { "LSP-ReShade", { { "_enabled", false } } } } }, { "global", { { "log_level", 2 } } } };
+        json cfg = { { "addons", { { "DLSS5NR01", { { "_enabled", true }, { "workingScale", "0.5" } } }, { "ReShadePassthrough", { { "_enabled", false } } } } }, { "global", { { "log_level", 2 } } } };
         const std::string text = MakeSettingsBackupText(cfg, "0.5.0-test");
         BackupParse ok = ParseSettingsBackup(text);
         Check("backup: what is written reads back identically", ok.ok && ok.config == cfg && ok.addonCount == 2);
         BackupParse bare = ParseSettingsBackup(cfg.dump());
         Check("backup: a plain config.json copied by hand is accepted too", bare.ok && bare.config == cfg);
+        const json older = { { "lsproxy_settings_backup", 1 }, { "config", cfg } };
+        BackupParse old = ParseSettingsBackup(older.dump());
+        Check("backup: one made by 0.7.4 or earlier (its old marker) is accepted too", old.ok && old.config == cfg);
         Check("backup: empty, garbage and unrelated JSON are refused",
               !ParseSettingsBackup("").ok && !ParseSettingsBackup("not json at all").ok && !ParseSettingsBackup("[1,2,3]").ok && !ParseSettingsBackup("{\"hello\":1}").ok);
         Check("backup: damaged shapes are refused", !ParseSettingsBackup("{\"addons\":[1]}").ok && !ParseSettingsBackup("{\"addons\":{\"x\":5}}").ok && !ParseSettingsBackup("{\"global\":7}").ok);
@@ -198,8 +201,8 @@ int main() {
                   all.find("EchoAddonManager.log") != std::string::npos && all.find("DLSS5NR01.log") != std::string::npos && all.find("nvngx.log") != std::string::npos);
         }
         Check("diagnostics: the temporary staging folder is gone", true);
-        int leftovers = 0; { wchar_t tp[MAX_PATH]; GetTempPathW(MAX_PATH, tp); for (const auto& e : fs::directory_iterator(tp)) if (e.path().filename().wstring().rfind(L"lsp-diag-", 0) == 0) ++leftovers; }
-        Check("diagnostics: no lsp-diag-* staging folders left in %TEMP%", leftovers == 0);
+        int leftovers = 0; { wchar_t tp[MAX_PATH]; GetTempPathW(MAX_PATH, tp); for (const auto& e : fs::directory_iterator(tp)) if (e.path().filename().wstring().rfind(L"eam-diag-", 0) == 0) ++leftovers; }
+        Check("diagnostics: no eam-diag-* staging folders left in %TEMP%", leftovers == 0);
         DiagResult none = CreateDiagnosticsZip(base / "no-such-install", "summary", out);
         Check("diagnostics: with nothing to collect it still makes a zip with the summary", none.ok);
     }

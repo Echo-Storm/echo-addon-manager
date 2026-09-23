@@ -1,6 +1,6 @@
 #include "placement.h"
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 
 Placement InitialPlacement(const nlohmann::json& saved, float displayScale, const OnScreenFn& onScreen) {
@@ -43,4 +43,4 @@ nlohmann::json ToJson(const SavedPlacement& p) {
 }
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

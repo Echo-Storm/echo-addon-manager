@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace widgets {
 
 // The author's Ko-fi page (the same address the other apps use).
@@ -16,4 +16,4 @@ void StatusBar(const std::string& left);
 float StatusBarHeight();
 
 } // namespace widgets
-} // namespace lsproxy
+} // namespace eam

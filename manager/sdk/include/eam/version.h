@@ -1,20 +1,20 @@
 #pragma once
 
 // The name the user sees (tray, window title, status bar, About, file names). Change it here and everywhere follows.
-#define LSPROXY_PRODUCT_NAME "Echo Addon Manager"
-#define LSPROXY_PRODUCT_NAME_W L"Echo Addon Manager"
-#define LSPROXY_PRODUCT_FILE "EchoAddonManager"   // used in file names (log, backups, diagnostics)
-#define LSPROXY_PRODUCT_LOGFILE_W L"EchoAddonManager.log"
+#define EAM_PRODUCT_NAME "Echo Addon Manager"
+#define EAM_PRODUCT_NAME_W L"Echo Addon Manager"
+#define EAM_PRODUCT_FILE "EchoAddonManager"   // used in file names (log, backups, diagnostics)
+#define EAM_PRODUCT_LOGFILE_W L"EchoAddonManager.log"
 
 // The release the user installs. Free-form text: "0.1.0", "0.2.0-beta.1".
-#define LSPROXY_VERSION_STRING "0.7.0"
+#define EAM_VERSION_STRING "0.7.0"
 
 // The addon API: what an addon can rely on. This is what IHost::GetHostVersion() reports and what an addon's
 // "min_host_version" is compared with (0x00MMmmpp). Bump the minor number when calls are added to IHost (always
 // appended at the end, so older addons keep working); bump the major number only for a break. It moves on its own,
 // not with the release number above.
-#define LSPROXY_API_VERSION_MAJOR 1
-#define LSPROXY_API_VERSION_MINOR 0
-#define LSPROXY_API_VERSION_PATCH 0
-#define LSPROXY_API_VERSION_STRING "1.0.0"
-#define LSPROXY_API_VERSION_INT ((LSPROXY_API_VERSION_MAJOR << 16) | (LSPROXY_API_VERSION_MINOR << 8) | LSPROXY_API_VERSION_PATCH)
+#define EAM_API_VERSION_MAJOR 1
+#define EAM_API_VERSION_MINOR 0
+#define EAM_API_VERSION_PATCH 0
+#define EAM_API_VERSION_STRING "1.0.0"
+#define EAM_API_VERSION_INT ((EAM_API_VERSION_MAJOR << 16) | (EAM_API_VERSION_MINOR << 8) | EAM_API_VERSION_PATCH)

@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace lsproxy {
+namespace eam {
 
 enum class LogLevel : uint8_t { Trace, Debug, Info, Warn, Error };
 
@@ -78,10 +78,10 @@ void InstallCrashLogging();
 uint32_t InvalidParameterCount();
 
 // Convenience macros
-#define LOG_TRACE(src, fmt, ...) ::lsproxy::Logger::Instance().Log(::lsproxy::LogLevel::Trace, src, fmt, ##__VA_ARGS__)
-#define LOG_DEBUG(src, fmt, ...) ::lsproxy::Logger::Instance().Log(::lsproxy::LogLevel::Debug, src, fmt, ##__VA_ARGS__)
-#define LOG_INFO(src, fmt, ...)  ::lsproxy::Logger::Instance().Log(::lsproxy::LogLevel::Info, src, fmt, ##__VA_ARGS__)
-#define LOG_WARN(src, fmt, ...)  ::lsproxy::Logger::Instance().Log(::lsproxy::LogLevel::Warn, src, fmt, ##__VA_ARGS__)
-#define LOG_ERROR(src, fmt, ...) ::lsproxy::Logger::Instance().Log(::lsproxy::LogLevel::Error, src, fmt, ##__VA_ARGS__)
+#define LOG_TRACE(src, fmt, ...) ::eam::Logger::Instance().Log(::eam::LogLevel::Trace, src, fmt, ##__VA_ARGS__)
+#define LOG_DEBUG(src, fmt, ...) ::eam::Logger::Instance().Log(::eam::LogLevel::Debug, src, fmt, ##__VA_ARGS__)
+#define LOG_INFO(src, fmt, ...)  ::eam::Logger::Instance().Log(::eam::LogLevel::Info, src, fmt, ##__VA_ARGS__)
+#define LOG_WARN(src, fmt, ...)  ::eam::Logger::Instance().Log(::eam::LogLevel::Warn, src, fmt, ##__VA_ARGS__)
+#define LOG_ERROR(src, fmt, ...) ::eam::Logger::Instance().Log(::eam::LogLevel::Error, src, fmt, ##__VA_ARGS__)
 
-} // namespace lsproxy
+} // namespace eam

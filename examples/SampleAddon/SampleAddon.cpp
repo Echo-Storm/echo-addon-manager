@@ -2,13 +2,13 @@
 //
 //   * the required exports (and the optional ones for a name, a version and a settings panel)
 //   * reading and writing its own settings, which the manager keeps in addons\config.json under this addon's id
-//   * a settings panel drawn in the manager's own look (lsp_widgets.h)
+//   * a settings panel drawn in the manager's own look (widgets.h)
 //   * a live status line and a number for the Performance tab
 //
 // It needs no GPU access and starts no threads. See docs/addon-authors.md for the rules, and docs/api-compatibility.md for what stays stable.
-#include <lsproxy/addon_sdk.h>
-#include <lsproxy/lsp_widgets.h>
-#include <lsproxy/version.h>
+#include <eam/addon_sdk.h>
+#include <eam/widgets.h>
+#include <eam/version.h>
 #include <windows.h>
 #include <cstdio>
 #include <string>
@@ -57,55 +57,55 @@ void ShowStatus() {
 
 // ---- required exports -------------------------------------------------------------------------------------------------------------------------
 
-LSPROXY_EXPORT void AddonInitialize(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void* userData) {
+EAM_EXPORT void AddonInitialize(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void* userData) {
     // The manager and every addon share one Dear ImGui context: use it, and its allocator, instead of making your own.
     ImGui::SetCurrentContext(ctx);
     ImGui::SetAllocatorFunctions(reinterpret_cast<ImGuiMemAllocFunc>(allocFunc), reinterpret_cast<ImGuiMemFreeFunc>(freeFunc), userData);
-    lsp::InitAddonImGui();   // needed because this DLL carries its own copy of ImGui's code (see the CMakeLists)
+    eam::ui::InitAddonImGui();   // needed because this DLL carries its own copy of ImGui's code (see the CMakeLists)
     g_host = host;
     Load();
-    host->Log(LSPROXY_LOG_INFO, "SampleAddon started");
+    host->Log(EAM_LOG_INFO, "SampleAddon started");
     ShowStatus();
 }
 
-LSPROXY_EXPORT void AddonShutdown() {
+EAM_EXPORT void AddonShutdown() {
     if (g_host) { Save(); g_host->SetStatus(kId, "", 0); }   // an empty status clears the line
     g_host = nullptr;
 }
 
-LSPROXY_EXPORT uint32_t GetAddonCapabilities() { return LSPROXY_CAP_HAS_SETTINGS; }   // we have a settings panel; no GPU access, no restart needed
+EAM_EXPORT uint32_t GetAddonCapabilities() { return EAM_CAP_HAS_SETTINGS; }   // we have a settings panel; no GPU access, no restart needed
 
 // ---- optional exports: what the manager shows on the card (addon.json can say the same; the manifest wins) --------------------------------------
 
-LSPROXY_EXPORT const char* GetAddonName() { return "Sample Addon"; }
-LSPROXY_EXPORT const char* GetAddonVersion() { return "1.0.0"; }
-LSPROXY_EXPORT const char* GetAddonAuthor() { return "Echo Addon Manager project"; }
-LSPROXY_EXPORT const char* GetAddonDescription() { return "A small example addon: settings, a settings panel, a status line and a metric."; }
+EAM_EXPORT const char* GetAddonName() { return "Sample Addon"; }
+EAM_EXPORT const char* GetAddonVersion() { return "1.0.0"; }
+EAM_EXPORT const char* GetAddonAuthor() { return "Echo Addon Manager project"; }
+EAM_EXPORT const char* GetAddonDescription() { return "A small example addon: settings, a settings panel, a status line and a metric."; }
 
 // ---- the settings panel: called by the manager, once per frame, while this addon's page is open -----------------------------------------------
 
-LSPROXY_EXPORT void AddonRenderSettings() {
+EAM_EXPORT void AddonRenderSettings() {
     if (!g_host) return;
     bool changed = false;
 
-    lsp::SectionLabel("Greeting");
+    eam::ui::SectionLabel("Greeting");
     ImGui::SetNextItemWidth(220.0f);
     changed |= ImGui::InputText("##greeting", g_s.greeting, sizeof g_s.greeting);
     ImGui::SameLine();
     ImGui::TextDisabled("what the status line says");
 
-    lsp::SectionLabel("Volume");
+    eam::ui::SectionLabel("Volume");
     // A slider with a default: it shows a tick where the default is, and a double-click puts the value back.
-    changed |= lsp::SliderFloat("Volume", &g_s.volume, 0.0f, 1.0f, "%.2f", 0, &kDefaultVolume);
+    changed |= eam::ui::SliderFloat("Volume", &g_s.volume, 0.0f, 1.0f, "%.2f", 0, &kDefaultVolume);
 
-    lsp::SectionLabel("Counter");
-    if (lsp::Button("Count a click", lsp::icons::kPlus, lsp::ButtonKind::Primary)) {
+    eam::ui::SectionLabel("Counter");
+    if (eam::ui::Button("Count a click", eam::ui::icons::kPlus, eam::ui::ButtonKind::Primary)) {
         ++g_s.clicks;
         changed = true;
-        g_host->Log(LSPROXY_LOG_INFO, "clicked");
+        g_host->Log(EAM_LOG_INFO, "clicked");
     }
     ImGui::SameLine();
-    if (lsp::Button("Reset", lsp::icons::kReset)) { g_s.clicks = 0; changed = true; }
+    if (eam::ui::Button("Reset", eam::ui::icons::kReset)) { g_s.clicks = 0; changed = true; }
 
     // A number for the Performance tab: one series per (addon, key). Cheap enough to publish every frame.
     g_host->PublishMetric(kId, "clicks", g_s.clicks, "clicks");

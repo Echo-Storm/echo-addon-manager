@@ -1,11 +1,11 @@
-// A small addon for the offline manager tests (lsproxy_coretest). It does nothing useful: it records what the manager asks of it in
+// A small addon for the offline manager tests (eam_coretest). It does nothing useful: it records what the manager asks of it in
 // "calls.txt" beside its DLL, and its behaviour is chosen by a one-word "mode.txt" beside it:
 //   (none)          normal
 //   restart         asks for a restart to be enabled or disabled
 //   crash_init      faults in AddonInitialize
 //   crash_shutdown  faults in AddonShutdown
 //   leaky           subscribes to event 0x7E57 and sets a pre-dispatch callback, and leaves both registered when it is shut down
-#include <lsproxy/addon_sdk.h>
+#include <eam/addon_sdk.h>
 #include <windows.h>
 #include <fstream>
 #include <string>
@@ -39,7 +39,7 @@ static void Fault() {
 static void OnTestEvent(uint32_t, const void*, uint32_t, void*) { Note("event"); }
 static bool OnTestPreDispatch(uint32_t, uint32_t, uint32_t, void*) { Note("dispatch"); return false; }
 
-LSPROXY_EXPORT void AddonInitialize(IHost* host, ImGuiContext*, void*, void*, void*) {
+EAM_EXPORT void AddonInitialize(IHost* host, ImGuiContext*, void*, void*, void*) {
     Note("init");
     if (Mode() == "crash_init") Fault();
     if (Mode() == "leaky" && host) {   // registers callbacks and never clears them (AddonShutdown below does not): the manager has to
@@ -48,18 +48,18 @@ LSPROXY_EXPORT void AddonInitialize(IHost* host, ImGuiContext*, void*, void*, vo
     }
 }
 
-LSPROXY_EXPORT void AddonShutdown() {
+EAM_EXPORT void AddonShutdown() {
     Note("shutdown");
     if (Mode() == "crash_shutdown") Fault();
 }
 
-LSPROXY_EXPORT uint32_t GetAddonCapabilities() {
-    return LSPROXY_CAP_HAS_SETTINGS | (Mode() == "restart" ? LSPROXY_CAP_REQUIRES_RESTART : 0);
+EAM_EXPORT uint32_t GetAddonCapabilities() {
+    return EAM_CAP_HAS_SETTINGS | (Mode() == "restart" ? EAM_CAP_REQUIRES_RESTART : 0);
 }
 
-LSPROXY_EXPORT void AddonRenderSettings() { Note("settings"); }
+EAM_EXPORT void AddonRenderSettings() { Note("settings"); }
 
-LSPROXY_EXPORT bool AddonInterceptResource(const wchar_t* name, const wchar_t*, const void** outData, uint32_t* outSize) {
+EAM_EXPORT bool AddonInterceptResource(const wchar_t* name, const wchar_t*, const void** outData, uint32_t* outSize) {
     if (name && std::wstring(name) == L"test.shader") {
         static const char kData[] = "HELLO";
         *outData = kData;
@@ -69,7 +69,7 @@ LSPROXY_EXPORT bool AddonInterceptResource(const wchar_t* name, const wchar_t*, 
     return false;
 }
 
-LSPROXY_EXPORT const char* GetAddonName()        { return "Test Addon"; }
-LSPROXY_EXPORT const char* GetAddonVersion()     { return "9.9.9"; }
-LSPROXY_EXPORT const char* GetAddonAuthor()      { return "Tester"; }
-LSPROXY_EXPORT const char* GetAddonDescription() { return "For the offline tests"; }
+EAM_EXPORT const char* GetAddonName()        { return "Test Addon"; }
+EAM_EXPORT const char* GetAddonVersion()     { return "9.9.9"; }
+EAM_EXPORT const char* GetAddonAuthor()      { return "Tester"; }
+EAM_EXPORT const char* GetAddonDescription() { return "For the offline tests"; }

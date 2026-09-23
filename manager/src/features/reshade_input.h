@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 namespace reshade {
 
@@ -12,4 +12,4 @@ void PressCombo(int vk, bool ctrl, bool alt, bool shift);       // holds the mod
 
 } // namespace reshade
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

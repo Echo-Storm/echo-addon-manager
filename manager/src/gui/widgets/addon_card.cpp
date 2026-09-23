@@ -3,11 +3,11 @@
 #include "tooltip.h"
 #include "../gui_scale.h"
 #include "../../host/metrics.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include <cstdio>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace widgets {
 
 namespace {
@@ -18,7 +18,7 @@ const ImU32 kChipRed = IM_COL32(208, 128, 128, 255);
 
 // The dot on the icon's corner: red for trouble, amber when it is on but unchecked, green when it is running, grey otherwise.
 ImU32 DotColour(const AddonInfo& a) {
-    using namespace lsp::theme;
+    using namespace eam::ui::theme;
     if (a.faulted || a.security == SecurityVerdict::Tampered) return kRed;
     if (a.security == SecurityVerdict::Unknown && a.enabled) return U(kWarn);
     if (a.IsLoaded()) return U(kAccent);
@@ -29,7 +29,7 @@ ImU32 DotColour(const AddonInfo& a) {
 struct Chip { const char* text = nullptr; ImU32 colour = 0; };
 
 Chip ChipFor(const AddonInfo& a) {
-    using namespace lsp::theme;
+    using namespace eam::ui::theme;
     if (a.faulted) return { "ERROR", kChipRed };
     if (a.security == SecurityVerdict::Tampered) return { "TAMPERED", kChipRed };
     if (a.enabled && !a.IsLoaded()) return { a.RequiresRestart() ? "RESTART TO APPLY" : "NOT LOADED", U(kWarn) };
@@ -37,7 +37,7 @@ Chip ChipFor(const AddonInfo& a) {
 }
 
 const float* LiveColour(int level) {
-    using namespace lsp::theme;
+    using namespace eam::ui::theme;
     switch (level) {
         case 1: return kAccent;
         case 2: return kWarn;
@@ -48,7 +48,7 @@ const float* LiveColour(int level) {
 
 // The addon's own icon, or a package glyph on a dark tile when it ships none (vector, so it stays crisp at any scale).
 void DrawIcon(ImDrawList* draw, ImVec2 at, float size, const AddonInfo& a) {
-    using namespace lsp::theme;
+    using namespace eam::ui::theme;
     const ImVec2 bottomRight(at.x + size, at.y + size);
     if (a.iconTexture) {
         draw->AddImageRounded((ImTextureID)a.iconTexture, at, bottomRight, ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 255), S(4.0f));
@@ -57,7 +57,7 @@ void DrawIcon(ImDrawList* draw, ImVec2 at, float size, const AddonInfo& a) {
     draw->AddRectFilled(at, bottomRight, U(kPanelAlt), S(4.0f));
     draw->AddRect(at, bottomRight, U(kBorderBright), S(4.0f), 0, 1.0f);
     const float glyph = size * 0.60f, inset = (size - glyph) * 0.5f;
-    lsp::svg::Draw(draw, lsp::icons::kPackage, ImVec2(at.x + inset, at.y + inset), glyph, U(kAccent), 1.7f);
+    eam::ui::svg::Draw(draw, eam::ui::icons::kPackage, ImVec2(at.x + inset, at.y + inset), glyph, U(kAccent), 1.7f);
 }
 
 void DrawChip(const Chip& chip) {
@@ -82,7 +82,7 @@ std::string SwitchTooltip(const AddonInfo& a) {
 } // namespace
 
 bool AddonCard(AddonInfo& addon, int index, bool isSelected, bool* toggled) {
-    using namespace lsp::theme;
+    using namespace eam::ui::theme;
     bool clicked = false;
     if (toggled) *toggled = false;
     ImGui::PushID(index);
@@ -145,4 +145,4 @@ bool AddonCard(AddonInfo& addon, int index, bool isSelected, bool* toggled) {
 }
 
 } // namespace widgets
-} // namespace lsproxy
+} // namespace eam

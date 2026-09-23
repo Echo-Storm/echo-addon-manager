@@ -8,7 +8,7 @@
 
 namespace D3D11Hook {
 
-static lsproxy::HostImpl* g_host = nullptr;
+static eam::HostImpl* g_host = nullptr;
 static bool g_installed = false;
 
 // Original D3D11CreateDevice function pointer
@@ -132,15 +132,15 @@ static HRESULT WINAPI HookedD3D11CreateDevice(
             InstallDispatchHook(context);
 
             if (deviceChanged) {
-                lsproxy::EventBus::Instance().Publish(LSPROXY_EVENT_D3D11_DEVICE_CHANGED);
+                eam::EventBus::Instance().Publish(EAM_EVENT_D3D11_DEVICE_CHANGED);
             }
-            lsproxy::EventBus::Instance().Publish(LSPROXY_EVENT_D3D11_DEVICE_READY);
+            eam::EventBus::Instance().Publish(EAM_EVENT_D3D11_DEVICE_READY);
         }
     }
     return hr;
 }
 
-void Initialize(lsproxy::HostImpl* host) {
+void Initialize(eam::HostImpl* host) {
     g_host = host;
     if (g_installed) return;
 

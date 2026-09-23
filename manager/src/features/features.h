@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 
 // The features that are part of the manager itself: things a person switches on if they need them, not separate addons. Each has one switch
@@ -24,12 +24,13 @@ bool NeedsRestart(int index);           // it is switched on but cannot start un
 std::string Status(int index);          // a short live line ("Passthrough ON"), or empty
 void RenderOptions(int index);          // the feature's own options, drawn in the manager's window
 
-void Start();                           // Lossless Scaling start-up: start every feature that is switched on
+void MoveOldSettings();                 // settings saved under a feature's id up to 0.7.4 move to its id now (once; Start does it)
+void Start();                           // Lossless Scaling start-up: move settings saved under an old name, then start every feature that is switched on
 void Stop();                            // shutdown
 
-// The retired standalone addons had these ids. A folder with one of them in the addons folder is not listed or loaded, so the old and
-// the built-in version can never both run.
+// The folders of the standalone addons these features once were. Such a folder in the addons folder is not listed or loaded, so the old
+// and the built-in version can never both run.
 bool IsRetiredAddonId(const std::string& folderName);
 
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

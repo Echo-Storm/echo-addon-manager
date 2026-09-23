@@ -5,7 +5,7 @@
 #include "../log/logger.h"
 #include <cstring>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 
 namespace {
@@ -69,7 +69,17 @@ void RenderOptions(int index) {
     }
 }
 
+// Up to 0.7.4 the features kept their settings under the ids of the standalone addons they came from; move them once.
+void MoveOldSettings() {
+    const char* const oldIds[kCount] = { reshade::kOldId, windowed::kOldId };
+    bool moved = false;
+    for (int i = 0; i < kCount; ++i)
+        if (Cfg().RenameAddonSection(oldIds[i], kInfo[i].id)) { moved = true; LOG_INFO("Features", "%s: settings moved from %s to %s", kInfo[i].title, oldIds[i], kInfo[i].id); }
+    if (moved) Cfg().Save();
+}
+
 void Start() {
+    MoveOldSettings();
     if (IsOn(kReShade)) reshade::Start();
     if (IsOn(kWindowed)) windowed::Start();
 }
@@ -80,10 +90,8 @@ void Stop() {
 }
 
 bool IsRetiredAddonId(const std::string& folderName) {
-    for (const Info& f : kInfo)
-        if (folderName == f.id) return true;
-    return false;
+    return folderName == reshade::kOldId || folderName == windowed::kOldId;
 }
 
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

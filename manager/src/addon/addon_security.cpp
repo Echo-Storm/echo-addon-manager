@@ -14,7 +14,7 @@
 
 namespace fs = std::filesystem;
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 
@@ -114,4 +114,4 @@ void AddonSecurity::LoadTrustedHashes(const std::wstring& basePath) {
     g_trusted = std::move(loaded);
 }
 
-} // namespace lsproxy
+} // namespace eam

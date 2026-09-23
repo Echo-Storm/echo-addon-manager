@@ -7,7 +7,7 @@
 #include "../log/logger.h"
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 static ID3D11Device* g_iconDevice = nullptr;
 
@@ -79,4 +79,4 @@ ID3D11ShaderResourceView* IconLoader_LoadFromFile(const std::wstring& path) {
     return pSRV;
 }
 
-} // namespace lsproxy
+} // namespace eam

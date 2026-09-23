@@ -25,7 +25,7 @@ new. The original copyright and licence are in [LICENSE](LICENSE), which must st
 | [nlohmann/json](https://github.com/nlohmann/json) | MIT | `manager/third_party/nlohmann` |
 | [stb_image](https://github.com/nothings/stb) | public domain / MIT | `manager/third_party/stb_image.h` |
 | [MinHook](https://github.com/TsudaKageyu/minhook) | BSD-2-Clause | fetched by CMake for the manager's Windowed feature and for the Neural Rendering addon |
-| Icon shapes | drawn in the manner of the [Lucide](https://lucide.dev) set (ISC) | `manager/sdk/include/lsproxy/lsp_icons.h` |
+| Icon shapes | drawn in the manner of the [Lucide](https://lucide.dev) set (ISC) | `manager/sdk/include/eam/icons.h` |
 
 ## Not part of this repository
 

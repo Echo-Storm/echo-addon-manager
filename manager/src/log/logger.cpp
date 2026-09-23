@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <windows.h>
 
-namespace lsproxy {
+namespace eam {
 
 Logger& Logger::Instance() {
     static Logger instance;
@@ -262,4 +262,4 @@ void InstallCrashLogging() {
     _set_invalid_parameter_handler(OnInvalidParameter);
 }
 
-} // namespace lsproxy
+} // namespace eam

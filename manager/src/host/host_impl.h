@@ -1,11 +1,11 @@
 #pragma once
-#include "../../sdk/include/lsproxy/ihost.h"
+#include "../../sdk/include/eam/ihost.h"
 #include <deque>
 #include <mutex>
 #include <string>
 #include <vector>
 
-namespace lsproxy {
+namespace eam {
 
 // The host as an addon sees it: settings, events, logging, Direct3D 11 access, dispatch callbacks, and live status and metrics. Every
 // call may come from any thread. Most of it hands straight to the registry that owns the data (settings, events, metrics).
@@ -14,15 +14,15 @@ public:
     HostImpl() = default;
     ~HostImpl() override = default;
 
-    void Log(LsProxyLogLevel level, const char* message) override;
+    void Log(EamLogLevel level, const char* message) override;
 
     const char* GetConfig(const char* addonId, const char* key, const char* defaultVal) override;
     void SetConfig(const char* addonId, const char* key, const char* value) override;
     void SaveConfig() override;
     uint32_t GetHostVersion() override;
 
-    void SubscribeEvent(uint32_t eventId, LsProxyEventCallback callback, void* userData) override;
-    void UnsubscribeEvent(uint32_t eventId, LsProxyEventCallback callback) override;
+    void SubscribeEvent(uint32_t eventId, EamEventCallback callback, void* userData) override;
+    void UnsubscribeEvent(uint32_t eventId, EamEventCallback callback) override;
     void PublishEvent(uint32_t eventId, const void* data, uint32_t dataSize) override;
 
     void* GetD3D11Device() override;
@@ -30,8 +30,8 @@ public:
     void SetD3D11Device(void* device, void* context);   // the device capture hook hands these over
 
     // One callback per owner (the userData): setting one again replaces it, and passing no callback removes it.
-    void SetPreDispatchCallback(LsProxyPreDispatchCallback callback, void* userData) override;
-    void SetPostDispatchCallback(LsProxyPostDispatchCallback callback, void* userData) override;
+    void SetPreDispatchCallback(EamPreDispatchCallback callback, void* userData) override;
+    void SetPostDispatchCallback(EamPostDispatchCallback callback, void* userData) override;
     void* GetCurrentComputeShader() override;
     uint32_t GetDispatchCount() override;
 
@@ -61,8 +61,8 @@ private:
     void* m_d3d11Context = nullptr;
 
     std::mutex m_dispatchMutex;
-    std::vector<Hook<LsProxyPreDispatchCallback>> m_preHooks;
-    std::vector<Hook<LsProxyPostDispatchCallback>> m_postHooks;
+    std::vector<Hook<EamPreDispatchCallback>> m_preHooks;
+    std::vector<Hook<EamPostDispatchCallback>> m_postHooks;
 };
 
-} // namespace lsproxy
+} // namespace eam

@@ -1,7 +1,7 @@
 // Offline test of the manager's addon handling: finding addons in a folder, reading their manifests, loading, initialising, switching on and
 // off, removing and installing them, the security levels, and a faulting addon. It runs against a throw-away folder in %TEMP% with copies of
 // a small test addon (test_addon.cpp), and touches no game and no Lossless Scaling install.
-//   lsproxy_coretest.exe        (lsproxy_testaddon.dll must sit beside it; the build puts it there)
+//   eam_coretest.exe        (eam_testaddon.dll must sit beside it; the build puts it there)
 #include "src/addon/addon_dependency.h"
 #include "src/addon/addon_manager.h"
 #include "src/addon/addon_security.h"
@@ -13,7 +13,7 @@
 #include "src/host/host_impl.h"
 #include "src/host/metrics.h"
 #include "src/log/logger.h"
-#include "lsproxy/version.h"
+#include "eam/version.h"
 #include "imgui.h"
 #include <windows.h>
 #include <cstdio>
@@ -26,7 +26,7 @@
 #include <vector>
 
 namespace fs = std::filesystem;
-using namespace lsproxy;
+using namespace eam;
 
 static int g_failed = 0;
 static void Check(const char* what, bool ok, const std::string& detail = "") {
@@ -50,7 +50,7 @@ static fs::path ExeDir() {
 static fs::path MakeAddon(const fs::path& root, const std::string& folder, const std::string& dll, const char* manifest = nullptr, const char* mode = nullptr) {
     const fs::path dir = root / folder;
     fs::create_directories(dir);
-    fs::copy_file(ExeDir() / "lsproxy_testaddon.dll", dir / dll, fs::copy_options::overwrite_existing);
+    fs::copy_file(ExeDir() / "eam_testaddon.dll", dir / dll, fs::copy_options::overwrite_existing);
     if (manifest) WriteFile(dir / "addon.json", manifest);
     if (mode) WriteFile(dir / "mode.txt", mode);
     return dir;
@@ -237,7 +237,7 @@ static void TestConfig(const fs::path& T) {
         std::string backup;
         threw = false;
         try { backup = MakeSettingsBackupText(C.Snapshot(), "test"); } catch (...) { threw = true; }
-        Check("a settings backup of the same settings does not throw either", !threw && backup.find("lsproxy_settings_backup") != std::string::npos);
+        Check("a settings backup of the same settings does not throw either", !threw && backup.find("eam_settings_backup") != std::string::npos);
     }
 }
 
@@ -260,7 +260,7 @@ static void TestHost(const fs::path& T) {
     ConfigManager::Instance().Load((dir / "config.json").wstring());
     HostImpl h;
 
-    Check("the host reports the addon API version", h.GetHostVersion() == (uint32_t)LSPROXY_API_VERSION_INT);
+    Check("the host reports the addon API version", h.GetHostVersion() == (uint32_t)EAM_API_VERSION_INT);
     h.SetConfig("a", "k", "v");
     Check("a setting written by an addon reads back", std::string(h.GetConfig("a", "k", "")) == "v");
     Check("a missing setting gives the default given", std::string(h.GetConfig("a", "nope", "dflt")) == "dflt");
@@ -306,7 +306,7 @@ static void TestHost(const fs::path& T) {
     Check("the device and context handed over by the hook are what addons get", h.GetD3D11Device() == (void*)0x10 && h.GetD3D11DeviceContext() == (void*)0x20);
 
     std::pair<uint32_t, std::string> seen{ 0, "" };
-    const uint32_t evt = LSPROXY_EVENT_CUSTOM + 7;
+    const uint32_t evt = EAM_EVENT_CUSTOM + 7;
     h.SubscribeEvent(evt, EventGot, &seen);
     h.PublishEvent(evt, "payload", 7);
     Check("an event published by one addon reaches a subscriber with its data", seen.first == evt && seen.second == "payload");
@@ -435,7 +435,7 @@ static void RemovesItself(uint32_t id, const void*, uint32_t, void* user) {
 static void TestEvents() {
     printf("== event bus\n");
     EventBus& bus = EventBus::Instance();
-    const uint32_t base = LSPROXY_EVENT_CUSTOM + 100;
+    const uint32_t base = EAM_EVENT_CUSTOM + 100;
     {
         std::string seen;
         bus.Subscribe(base, CountA, &seen);
@@ -522,19 +522,19 @@ int main(int argc, char** argv) {
         printf("abrupt exit with the GPU sampler running\n"); fflush(stdout);
         exit(0);   // runs the static destructors, as a DLL's are run when the process ends
     }
-    const fs::path T = fs::temp_directory_path() / ("lsp_coretest_" + std::to_string(GetCurrentProcessId()));
+    const fs::path T = fs::temp_directory_path() / ("eam_coretest_" + std::to_string(GetCurrentProcessId()));
     std::error_code ec;
     fs::remove_all(T, ec);
     const fs::path A = T / "addons";
     fs::create_directories(A);
-    if (!fs::exists(ExeDir() / "lsproxy_testaddon.dll")) { printf("FAIL  lsproxy_testaddon.dll is not beside the test program\n"); return 1; }
+    if (!fs::exists(ExeDir() / "eam_testaddon.dll")) { printf("FAIL  eam_testaddon.dll is not beside the test program\n"); return 1; }
 
     // ---- a folder of addons in every shape the manager has to cope with
     const fs::path alpha = MakeAddon(A, "alpha", "alpha.dll", R"({"name":"Alpha","version":"1.2.3","author":"A","description":"first","tags":["x","y"]})");
     WriteFile(alpha / "icon.png", "not really a picture");
     WriteFile(alpha / "settings.ini", "[a]\n");
     const fs::path beta = MakeAddon(A, "beta", "custom.dll", R"({"dll":"custom.dll","icon":"pic.jpg"})");
-    fs::copy_file(ExeDir() / "lsproxy_testaddon.dll", beta / "other.dll");
+    fs::copy_file(ExeDir() / "eam_testaddon.dll", beta / "other.dll");
     WriteFile(beta / "pic.jpg", "x");
     const fs::path gamma = MakeAddon(A, "gamma", "zzz.dll");                                   // no manifest, DLL not named after the folder
     MakeAddon(A, "newer", "newer.dll", R"({"min_host_version":"9.0.0"})");                     // needs a much newer manager
@@ -557,8 +557,8 @@ int main(int argc, char** argv) {
 
     HostImpl host;
     int loadedEvents = 0, unloadedEvents = 0;
-    host.SubscribeEvent(LSPROXY_EVENT_ADDON_LOADED, OnEvent, &loadedEvents);
-    host.SubscribeEvent(LSPROXY_EVENT_ADDON_UNLOADED, OnEvent, &unloadedEvents);
+    host.SubscribeEvent(EAM_EVENT_ADDON_LOADED, OnEvent, &loadedEvents);
+    host.SubscribeEvent(EAM_EVENT_ADDON_UNLOADED, OnEvent, &unloadedEvents);
 
     {
         AddonManager mgr(&host, A.wstring());

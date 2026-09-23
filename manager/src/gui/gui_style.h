@@ -3,7 +3,7 @@
 
 struct ImFont;
 
-namespace lsproxy {
+namespace eam {
 
 void SetupModernStyle();
 
@@ -22,4 +22,4 @@ ImFont* MonoFont();
 // Base font size in logical pixels (before the display scale).
 constexpr float kUiFontSize = 15.0f;
 
-} // namespace lsproxy
+} // namespace eam

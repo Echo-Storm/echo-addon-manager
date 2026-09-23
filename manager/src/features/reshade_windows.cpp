@@ -3,7 +3,7 @@
 #include <mutex>
 #include <vector>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 namespace reshade {
 
@@ -143,4 +143,4 @@ void CleanupDeadWindows() {
 
 } // namespace reshade
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

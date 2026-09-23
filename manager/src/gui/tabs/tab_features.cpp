@@ -4,16 +4,16 @@
 #include "../widgets/tooltip.h"
 #include "../../features/features.h"
 #include "imgui.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 
 // A small outlined label in the warning colour, like the one on an addon's card.
 void Chip(const char* text) {
-    using namespace lsp::theme;
+    using namespace eam::ui::theme;
     const ImVec2 at = ImGui::GetCursorScreenPos(), size = ImGui::CalcTextSize(text);
     const float padX = S(6), padY = S(1);
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -23,7 +23,7 @@ void Chip(const char* text) {
 }
 
 void Card(int index) {
-    using namespace lsp::theme;
+    using namespace eam::ui::theme;
     const features::Info& info = features::At(index);
     const bool on = features::IsOn(index);
 
@@ -85,4 +85,4 @@ void RenderTabFeatures() {
     }
 }
 
-} // namespace lsproxy
+} // namespace eam

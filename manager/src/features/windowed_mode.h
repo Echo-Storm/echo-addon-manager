@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 namespace windowed {
 
@@ -12,7 +12,8 @@ namespace windowed {
 // displays. So it is started when Lossless Scaling starts (if it is switched on then), and switching it on later needs a restart;
 // switching it off while running just makes the hooks do nothing.
 
-inline constexpr const char* kId = "LSP-Windowed";   // the settings section, and the id the on/off switch has always had
+inline constexpr const char* kId = "WindowedMode";   // the settings section and the id of the on/off switch
+inline constexpr const char* kOldId = "LSP-Windowed";   // the same, up to 0.7.4 (and the folder of the standalone addon this once was)
 
 void Start();                       // load the settings and install the hooks (Lossless Scaling start-up, when it is switched on)
 void Stop();                        // take the hooks out (shutdown)
@@ -23,4 +24,4 @@ std::string Status();               // a short line for the window's status, or 
 
 } // namespace windowed
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

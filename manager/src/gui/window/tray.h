@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 namespace tray {
 
@@ -24,4 +24,4 @@ void ShowMenu(HWND hwnd, bool managerHidden, bool& toggle);
 
 } // namespace tray
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

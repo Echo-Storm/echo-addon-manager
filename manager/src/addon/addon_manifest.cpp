@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <fstream>
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 
@@ -63,4 +63,4 @@ uint32_t ParseApiVersion(const std::string& text) {
     return (part[0] << 16) | ((part[1] & 0xFF) << 8) | (part[2] & 0xFF);
 }
 
-} // namespace lsproxy
+} // namespace eam

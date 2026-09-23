@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace lsproxy {
+namespace eam {
 
 using EventCallback = void(*)(uint32_t eventId, const void* data, uint32_t dataSize, void* userData);
 
@@ -35,4 +35,4 @@ private:
     std::unordered_map<uint32_t, std::vector<Subscriber>> m_subscribers;
 };
 
-} // namespace lsproxy
+} // namespace eam

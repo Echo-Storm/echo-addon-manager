@@ -6,7 +6,7 @@
 
 namespace ShaderHook {
 
-static lsproxy::AddonManager* g_addonManager = nullptr;
+static eam::AddonManager* g_addonManager = nullptr;
 static std::map<HRSRC, CachedShader> g_shaderCache;
 static CRITICAL_SECTION g_cacheLock;
 static bool g_hooksInstalled = false;
@@ -90,7 +90,7 @@ BOOL WINAPI HookedFreeResource(HGLOBAL hResData) {
     return g_origFreeResource ? g_origFreeResource(hResData) : TRUE;
 }
 
-void Initialize(lsproxy::AddonManager* addonManager) {
+void Initialize(eam::AddonManager* addonManager) {
     g_addonManager = addonManager;
     InitializeCriticalSection(&g_cacheLock);
     LOG_INFO("ShaderHook", "Initialized");

@@ -1,14 +1,14 @@
 #include "gui_style.h"
 #include "gui_scale.h"
 #include "imgui.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include <windows.h>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 void SetupModernStyle() {
-    lsp::theme::ApplyStyle(ImGui::GetStyle());
+    eam::ui::theme::ApplyStyle(ImGui::GetStyle());
 }
 
 // ---------------------------------------------------------------------------------------
@@ -65,4 +65,4 @@ void LoadUiFonts(const std::string& uiFontPath, const std::string& monoFontPath)
 
 ImFont* MonoFont() { return g_monoFont; }
 
-} // namespace lsproxy
+} // namespace eam

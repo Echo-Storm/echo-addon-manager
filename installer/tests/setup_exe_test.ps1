@@ -41,7 +41,7 @@ function MakeLs($name, $dll = 'fake_original.dll') {
 $payload = "$tmp\payload"
 New-Item -ItemType Directory "$payload\addons\DLSS5NR01" -Force | Out-Null
 Copy-Item $ours "$payload\Lossless.dll"
-Set-Content "$payload\LP-icon.ico" 'icon'; Set-Content "$payload\LP-icon.png" 'png'
+Set-Content "$payload\manager-icon.ico" 'icon'; Set-Content "$payload\manager-icon.png" 'png'
 Set-Content "$payload\addons\DLSS5NR01\DLSS5NR01.dll" 'addon dll'
 Set-Content "$payload\addons\DLSS5NR01\addon.json" '{ "id": "DLSS5NR01" }'
 $ls = MakeLs 'ls1'
@@ -58,7 +58,7 @@ Check 'install succeeds' ($r.Code -eq 0) "$($r.Code) $($r.Log)"
 Check 'the original Lossless.dll is kept as Lossless_original.dll, byte for byte' ((Hash "$ls\Lossless_original.dll") -eq (Hash "$fakes\fake_original.dll"))
 Check 'our Lossless.dll is in place, byte for byte' ((Hash "$ls\Lossless.dll") -eq (Hash $ours))
 Check 'the addon files came across, byte for byte' ((Hash "$ls\addons\DLSS5NR01\DLSS5NR01.dll") -eq (Hash "$payload\addons\DLSS5NR01\DLSS5NR01.dll") -and (Hash "$ls\addons\DLSS5NR01\addon.json") -eq (Hash "$payload\addons\DLSS5NR01\addon.json"))
-Check 'the icons came across' ((Test-Path "$ls\LP-icon.ico") -and (Test-Path "$ls\LP-icon.png"))
+Check 'the icons came across' ((Test-Path "$ls\manager-icon.ico") -and (Test-Path "$ls\manager-icon.png"))
 Check 'the person''s settings and other addons are untouched' ((Get-Content "$ls\addons\config.json" -Raw) -eq $configBefore -and (Test-Path "$ls\addons\OtherAddon\other.dll"))
 Check 'the replaced original went to a backups folder' ((Get-ChildItem "$ls\backups" -Recurse -Filter 'Lossless.dll' -ErrorAction SilentlyContinue | Measure-Object).Count -ge 1)
 $r = Run @('--silent', 'status', '--folder', "`"$ls`"", '--payload', "`"$payload`"") 'status2'

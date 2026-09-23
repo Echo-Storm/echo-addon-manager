@@ -4,7 +4,7 @@
 #include <functional>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 // The text of a settings backup file: the whole configuration (every addon's settings and the manager's own), wrapped with the
 // version and date so a file can be recognised later.
@@ -27,4 +27,4 @@ struct ImportResult { bool ok = false; std::string message; std::filesystem::pat
 ImportResult ImportSettings(const std::string& text, const nlohmann::json& current, const std::filesystem::path& backupDir,
                             const std::function<void(const nlohmann::json&)>& apply);
 
-} // namespace lsproxy
+} // namespace eam

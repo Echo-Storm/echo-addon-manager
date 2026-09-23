@@ -4,7 +4,7 @@
 #include "../config/config_manager.h"
 #include "../log/logger.h"
 #include "imgui.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -12,7 +12,7 @@
 #include <thread>
 #include <windows.h>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 namespace reshade {
 
@@ -267,4 +267,4 @@ void RenderOptions() {
 
 } // namespace reshade
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

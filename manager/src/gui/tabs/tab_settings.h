@@ -1,9 +1,9 @@
 #pragma once
 
-namespace lsproxy {
+namespace eam {
 
 class AddonManager;
 
 void RenderTabSettings(AddonManager* manager);
 
-} // namespace lsproxy
+} // namespace eam

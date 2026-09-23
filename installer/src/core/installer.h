@@ -15,7 +15,7 @@ struct PayloadInfo {
     std::string version;             // the version of the Lossless.dll it carries ("0.4.1")
     std::string error;
 };
-// A payload is a folder laid out like the release zip: Lossless.dll (ours), LP-icon.ico, LP-icon.png and an addons folder.
+// A payload is a folder laid out like the release zip: Lossless.dll (ours), manager-icon.ico, manager-icon.png and an addons folder.
 PayloadInfo CheckPayload(const std::wstring& payloadDir);
 
 struct Result {

@@ -53,7 +53,7 @@ std::wstring PlanText(Action a) {
     switch (a) {
     case Action::Install:
         return std::wstring(L"Lossless Scaling's own Lossless.dll is kept, renamed Lossless_original.dll (the manager passes everything on to it). "
-                            L"Echo Addon Manager's Lossless.dll takes its place, with the two LP-icon files and the addons folder.") + safety;
+                            L"Echo Addon Manager's Lossless.dll takes its place, with its two icon files and the addons folder.") + safety;
     case Action::Update:
         return std::wstring(L"The earlier Echo Addon Manager files are replaced with these; Lossless_original.dll stays as it is.") + safety;
     case Action::Repair:

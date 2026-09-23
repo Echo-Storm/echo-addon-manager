@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 namespace hotkey {
 
@@ -22,4 +22,4 @@ const char* Status();                 // "registered", "off" or why it could not
 
 } // namespace hotkey
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

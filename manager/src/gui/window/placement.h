@@ -3,7 +3,7 @@
 #include <functional>
 #include "../../../third_party/nlohmann/json.hpp"
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 
 // Sizes are "logical" pixels (96 dpi); the window is created at logical * the display scale.
@@ -38,4 +38,4 @@ SavedPlacement CapturePlacement(HWND hwnd, float displayScale);
 nlohmann::json ToJson(const SavedPlacement& p);
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

@@ -2,7 +2,7 @@
 #include <chrono>
 #include <thread>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 namespace reshade {
 
@@ -49,4 +49,4 @@ void PressCombo(int vk, bool ctrl, bool alt, bool shift) {
 
 } // namespace reshade
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

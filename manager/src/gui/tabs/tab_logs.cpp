@@ -2,14 +2,14 @@
 #include "../gui_scale.h"
 #include "../gui_style.h"
 #include "../../log/logger.h"
-#include "../../../sdk/include/lsproxy/version.h"
+#include "../../../sdk/include/eam/version.h"
 #include "../widgets/tooltip.h"
 #include "imgui.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include <chrono>
 #include <vector>
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 
@@ -61,8 +61,8 @@ void DrawControls() {
     widgets::Tip("Show only messages at or above this level. This only filters the view; what gets recorded is set in Settings > Log Level.");
     ImGui::SameLine();
 
-    if (lsp::Button("Clear", lsp::icons::kTrash)) Logger::Instance().Clear();
-    widgets::Tip("Empty this list. " LSPROXY_PRODUCT_FILE ".log on disk is not touched.");
+    if (eam::ui::Button("Clear", eam::ui::icons::kTrash)) Logger::Instance().Clear();
+    widgets::Tip("Empty this list. " EAM_PRODUCT_FILE ".log on disk is not touched.");
     ImGui::Separator();
 }
 
@@ -93,4 +93,4 @@ void RenderTabLogs() {
     ImGui::EndChild();
 }
 
-} // namespace lsproxy
+} // namespace eam

@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 // UTF-8 text for a wide string (folder names, paths in log lines).
 std::string WideToUtf8(const std::wstring& text);
@@ -13,4 +13,4 @@ std::string WideToUtf8(const std::wstring& text);
 // The user's switch and the security verdict are not decided here.
 bool DiscoverAddon(const std::filesystem::path& folder, AddonInfo& info);
 
-} // namespace lsproxy
+} // namespace eam

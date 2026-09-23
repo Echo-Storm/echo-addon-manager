@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <cwctype>
 
-namespace lsproxy {
+namespace eam {
 namespace instance {
 
 namespace {
@@ -34,4 +34,4 @@ void Release() {
 }
 
 } // namespace instance
-} // namespace lsproxy
+} // namespace eam

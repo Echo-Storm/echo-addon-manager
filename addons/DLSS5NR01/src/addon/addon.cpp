@@ -13,9 +13,9 @@
 // LS's queue never waits for the model, so the model can only ever be late for a frame, never slow LS down.
 // The delta for frame k is normally finished before frame k is shown; until then the previous delta is warped
 // forward. Settings live in an ImGui panel inside Echo Addon Manager.
-#include <lsproxy/addon_sdk.h>
+#include <eam/addon_sdk.h>
 #include "imgui.h"
-#include <lsproxy/lsp_widgets.h>
+#include <eam/widgets.h>
 #include "engine/nr_engine.h"
 #include "addon/bridge.h"
 #include "addon/frame_tap.h"
@@ -160,7 +160,7 @@ static uint64_t g_presentStage[8] = {};   // diagnostics: how far each present g
 // Wrapped tooltip for the widget just submitted, after a short hover delay.
 static void Tip(const char* text) {
     if (!ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled)) return;
-    const char* hint = lsp::SliderHint();   // sliders add "default, double-click resets, Ctrl+scroll fine-tunes"
+    const char* hint = eam::ui::SliderHint();   // sliders add "default, double-click resets, Ctrl+scroll fine-tunes"
     ImGui::BeginTooltip(); ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f); ImGui::TextUnformatted(text);
     if (hint) { ImGui::Dummy(ImVec2(0, 2)); ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]); ImGui::TextUnformatted(hint); ImGui::PopStyleColor(); }
     ImGui::PopTextWrapPos(); ImGui::EndTooltip();
@@ -172,12 +172,12 @@ static void Note(const char* fmt, ...) {
     ImGui::TextWrapped("%s", b);
     ImGui::PopStyleColor();
 }
-// Every collapsible section of the panel starts closed (lsp::SectionHeader with no second argument); the person opens what they need.
+// Every collapsible section of the panel starts closed (eam::ui::SectionHeader with no second argument); the person opens what they need.
 // A titled block of the panel: some room, a thin line, the title in the small capitals of the other apps, and a little room under it.
 static void Block(const char* title, bool first = false) {
     const float u = ImGui::GetFontSize();
     if (!first) { ImGui::Dummy(ImVec2(0, u * 0.7f)); ImGui::Separator(); ImGui::Dummy(ImVec2(0, u * 0.5f)); }
-    lsp::SectionLabel(title);
+    eam::ui::SectionLabel(title);
     ImGui::Dummy(ImVec2(0, u * 0.35f));
 }
 static void SetStatus(const char* s) { std::lock_guard<std::mutex> lk(g_statusMu); g_status = s; }
@@ -186,7 +186,7 @@ static std::string GetStatus() { std::lock_guard<std::mutex> lk(g_statusMu); ret
 static void Log(const char* fmt, ...) {
     char b[1024]; va_list a; va_start(a, fmt); vsnprintf(b, sizeof b, fmt, a); va_end(a);
     std::lock_guard<std::mutex> lk(g_logMu);
-    if (g_host) g_host->Log(LSPROXY_LOG_INFO, b);
+    if (g_host) g_host->Log(EAM_LOG_INFO, b);
     if (g_logFile) { SYSTEMTIME t; GetLocalTime(&t); fprintf(g_logFile, "[%02d:%02d:%02d.%03d] %s\n", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, b); fflush(g_logFile); }
 }
 static void Kill(const char* why) { g_killed = true; { std::lock_guard<std::mutex> lk(g_statusMu); g_killReason = why; } Log("DISABLED: %s", why); }
@@ -432,7 +432,7 @@ static void DropDevice() {   // under g_tapMu
     g_bridge.Shutdown(); g_compose.Shutdown(); g_tap.Reset(); g_seenDevs.clear(); g_tapDev = nullptr; g_lastSwap = nullptr; g_lastSwapOther = nullptr; g_lastSwapIsLs = false;
 }
 static void OnDeviceEvent(uint32_t id, const void*, uint32_t, void*) {
-    if (id == LSPROXY_EVENT_D3D11_DEVICE_CHANGED) {
+    if (id == EAM_EVENT_D3D11_DEVICE_CHANGED) {
         std::lock_guard<std::mutex> lk(g_tapMu);
         DropDevice(); g_dev = nullptr; g_ctx = nullptr; return;
     }
@@ -491,7 +491,7 @@ static void PublishLive(const NrStats& st) {
         g_host->SetStatus(kAddonId, b, s_keep >= 90.0 ? 1 : 2);
     }
 }
-static void OnPresent(IDXGISwapChain* sc, void* user);
+static void OnPresent(IDXGISwapChain* sc);
 static void ReleaseDecision(TapDecision& d) { if (d.frame) d.frame->Release(); if (d.flow) d.flow->Release(); d.frame = nullptr; d.flow = nullptr; }
 static bool TapBody(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     TapDecision d; bool run = g_tap.Observe(ctx, x, y, z, d);
@@ -515,7 +515,7 @@ static bool TapBody(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z
     g_pendingTaps = 0;
     if (!g_bridge.IsReady() && !g_bridge.Init(g_tapDev, ctx, &g_engine, [](const char* m) { Log("%s", m); })) { Kill("bridge init failed"); ReleaseDecision(d); return false; }
     if (!g_compose.IsReady() && !g_compose.Init(g_tapDev, [](const char* m) { Log("%s", m); })) { Kill("compose init failed"); ReleaseDecision(d); return false; }
-    if (!PresentHook::Installed() && !PresentHook::Install(g_tapDev, OnPresent, nullptr, [](const char* m) { Log("%s", m); })) { Kill("could not hook dxgi Present"); ReleaseDecision(d); return false; }
+    if (!PresentHook::Installed() && !PresentHook::Install(g_tapDev, OnPresent, [](const char* m) { Log("%s", m); })) { Kill("could not hook dxgi Present"); ReleaseDecision(d); return false; }
     D3D11_TEXTURE2D_DESC td; d.frame->GetDesc(&td);
     if (td.Width < 64 || td.Height < 64) {   // a minimised or mid-resize capture: nothing to enhance, and no reason to rebuild the model for it
         static uint64_t s_lastTinyTap = 0; if (g_tap.Taps() - s_lastTinyTap > 600) { s_lastTinyTap = g_tap.Taps(); Log("skipping a %ux%u capture (too small)", td.Width, td.Height); }
@@ -611,7 +611,7 @@ static void MaybeRearm() {
     g_rearms++; g_watchdogKill = false; g_watchdogHits = 0; g_killed = false;
     Log("watchdog: re-armed (%d of 3)", (int)g_rearms);
 }
-static bool OnDispatch(ID3D11DeviceContext* ctx, UINT x, UINT y, UINT z, void*) {
+static bool OnDispatch(ID3D11DeviceContext* ctx, UINT x, UINT y, UINT z) {
     MaybeRearm();
     if (t_ownWork || g_killed || g_engineStarting || !ctx) return false;
     { std::lock_guard<std::mutex> lk(g_cfgMu); if (!g_cfg.enabled) return false; }
@@ -737,7 +737,7 @@ static void PresentBody(IDXGISwapChain* sc) {
 static void PresentGuarded(IDXGISwapChain* sc) {
     __try { PresentBody(sc); } __except (SehFilter(GetExceptionCode(), "present")) { t_ownWork = false; }
 }
-static void OnPresent(IDXGISwapChain* sc, void*) {
+static void OnPresent(IDXGISwapChain* sc) {
     if (g_killed && HostHasLive()) {   // a switched-off addon keeps saying so (a status that is not refreshed goes stale)
         static uint64_t s_at = 0; const uint64_t now = GetTickCount64();
         if (now - s_at >= 1000) { s_at = now; std::string why; { std::lock_guard<std::mutex> lk(g_statusMu); why = g_killReason; } g_host->SetStatus(kAddonId, ("Switched off: " + why).c_str(), 3); }
@@ -755,7 +755,7 @@ static void ShapeStr(const DispatchSig& s, char* out, size_t n) {
     for (int i = 0; i < 4; ++i) if (s.uav[i].valid && k < (int)n - 48) k += snprintf(out + k, n - k, "U%d:%ux%u %s ", i, s.uav[i].w, s.uav[i].h, FmtName(s.uav[i].fmt));
 }
 
-LSPROXY_EXPORT void AddonRenderSettings() {
+EAM_EXPORT void AddonRenderSettings() {
     Config c; { std::lock_guard<std::mutex> lk(g_cfgMu); c = g_cfg; }
     bool changed = false, createChanged = false, tapChanged = false;
     // Every slider bound to a field of the params gets that field's default (a fresh NrParams): a tick on the groove, a ring on the
@@ -764,16 +764,16 @@ LSPROXY_EXPORT void AddonRenderSettings() {
     auto SL = [&](const char* label, float* v, float lo, float hi, const char* fmt = "%.2f") {
         const char* base = (const char*)&c.p; const char* pv = (const char*)v; const float* def = nullptr;
         if (pv >= base && pv < base + sizeof(NrParams)) def = (const float*)((const char*)&kDefaults + (pv - base));
-        return lsp::SliderFloat(label, v, lo, hi, fmt, 0, def);
+        return eam::ui::SliderFloat(label, v, lo, hi, fmt, 0, def);
     };
 
     // status
     std::string status = GetStatus(), frameInfo, adapterName; bool hasDisplay;
     { std::lock_guard<std::mutex> lk(g_statusMu); frameInfo = g_frameInfo; adapterName = g_adapterName; hasDisplay = g_hasDisplay; }
     Block("Status", true);
-    if (g_killed) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kDanger)); ImGui::Text("DISABLED: %s", g_killReason.c_str()); ImGui::PopStyleColor(); ImGui::SameLine(); if (ImGui::SmallButton("Re-arm")) { g_killed = false; g_watchdogHits = 0; g_watchdogKill = false; g_rearms = 0; } Tip("Turn Neural Render back on after it switched itself off. If it switches off again, the reason above is still true."); }
-    else { ImGui::PushStyleColor(ImGuiCol_Text, g_nrRuns ? lsp::theme::V(lsp::theme::kAccent) : lsp::theme::V(lsp::theme::kWarn)); ImGui::Text("%s", status.c_str()); ImGui::PopStyleColor(); }
-    if (g_engine.IsFailed()) { ImGui::TextColored(lsp::theme::V(lsp::theme::kDanger), "engine: %s", g_engine.Stats().lastError); ImGui::SameLine(); if (ImGui::SmallButton("Retry engine")) { g_engineLuidValid = false; if (g_tapLuidValid) StartEngine(g_tapLuid); } Tip("Try to start the DLSS model again on the current graphics card."); }
+    if (g_killed) { ImGui::PushStyleColor(ImGuiCol_Text, eam::ui::theme::V(eam::ui::theme::kDanger)); ImGui::Text("DISABLED: %s", g_killReason.c_str()); ImGui::PopStyleColor(); ImGui::SameLine(); if (ImGui::SmallButton("Re-arm")) { g_killed = false; g_watchdogHits = 0; g_watchdogKill = false; g_rearms = 0; } Tip("Turn Neural Render back on after it switched itself off. If it switches off again, the reason above is still true."); }
+    else { ImGui::PushStyleColor(ImGuiCol_Text, g_nrRuns ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::Text("%s", status.c_str()); ImGui::PopStyleColor(); }
+    if (g_engine.IsFailed()) { ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "engine: %s", g_engine.Stats().lastError); ImGui::SameLine(); if (ImGui::SmallButton("Retry engine")) { g_engineLuidValid = false; if (g_tapLuidValid) StartEngine(g_tapLuid); } Tip("Try to start the DLSS model again on the current graphics card."); }
     {   // ---- Requirements: what this needs, what was found, and what to do about anything missing
         bool have; { std::lock_guard<std::mutex> lk(g_reqMu); have = g_reqHave; }
         const bool failed = g_engine.IsFailed();
@@ -787,13 +787,13 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.4f));
         // the verdict, in one line
         if (!have) ImGui::TextDisabled("Checking...");
-        else if (rep.overall == req::Level::Missing) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kDanger)); ImGui::TextWrapped("Not ready yet. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
-        else if (rep.overall == req::Level::Note) { ImGui::PushStyleColor(ImGuiCol_Text, lsp::theme::V(lsp::theme::kWarn)); ImGui::TextWrapped("Ready, with a note. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
-        else { ImGui::TextColored(lsp::theme::V(lsp::theme::kAccent), "Everything is in place."); }
+        else if (rep.overall == req::Level::Missing) { ImGui::PushStyleColor(ImGuiCol_Text, eam::ui::theme::V(eam::ui::theme::kDanger)); ImGui::TextWrapped("Not ready yet. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
+        else if (rep.overall == req::Level::Note) { ImGui::PushStyleColor(ImGuiCol_Text, eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("Ready, with a note. %s", rep.headline.c_str()); ImGui::PopStyleColor(); }
+        else { ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kAccent), "Everything is in place."); }
         ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
         {   // (always open)
             for (const auto& row : rep.rows) {
-                const ImVec4 col = row.level == req::Level::Ok ? lsp::theme::V(lsp::theme::kAccent) : (row.level == req::Level::Note ? lsp::theme::V(lsp::theme::kWarn) : lsp::theme::V(lsp::theme::kDanger));
+                const ImVec4 col = row.level == req::Level::Ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : (row.level == req::Level::Note ? eam::ui::theme::V(eam::ui::theme::kWarn) : eam::ui::theme::V(eam::ui::theme::kDanger));
                 ImGui::TextColored(col, row.level == req::Level::Ok ? "OK     " : (row.level == req::Level::Note ? "NOTE   " : "MISSING"));
                 ImGui::SameLine(ImGui::GetFontSize() * 5.2f); ImGui::Text("%s", row.label.c_str()); ImGui::SameLine(ImGui::GetFontSize() * 13.0f); ImGui::TextWrapped("%s", row.value.c_str());
                 if (!row.hint.empty()) { ImGui::Indent(ImGui::GetFontSize() * 1.7f); ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)); ImGui::TextWrapped("%s", row.hint.c_str()); ImGui::PopStyleColor(); ImGui::Unindent(ImGui::GetFontSize() * 1.7f); }
@@ -823,7 +823,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
                 Tip("A short text file about the last compatibility test: your graphics card, driver, Windows, the model file's name, version and size, and the result. Paste it into an issue or the compatibility table. It holds no folders, user name or file hash.");
             }
             { std::string msg; bool ok; { std::lock_guard<std::mutex> lk(g_reqMu); msg = g_placeMsg; ok = g_placeOk; }
-              if (!msg.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? lsp::theme::V(lsp::theme::kAccent) : lsp::theme::V(lsp::theme::kWarn)); ImGui::TextWrapped("%s", msg.c_str()); ImGui::PopStyleColor(); } }
+              if (!msg.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", msg.c_str()); ImGui::PopStyleColor(); } }
         }
     }
     Block("Saved looks (load and save your settings)");
@@ -855,7 +855,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         }
         Tip("Your saved looks: pick one to apply it. The Next preset hotkey cycles through them in the game. A look with a different Model resolution makes the model rebuild (a brief hitch).");
         ImGui::SameLine();
-        if (lsp::Button("Save", lsp::icons::kSave, lsp::ButtonKind::Primary)) {
+        if (eam::ui::Button("Save", eam::ui::icons::kSave, eam::ui::ButtonKind::Primary)) {
             if (s_active >= 0) {
                 std::lock_guard<std::mutex> lk(g_cfgMu);
                 if (s_active < (int)g_presets.size()) g_presets[s_active].data = now;
@@ -864,11 +864,11 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         }
         Tip(s_active >= 0 ? "Update the selected look with the sliders as they are now." : "Keep the sliders as they are now as a new look: you are asked for a name.");
         ImGui::SameLine();
-        if (lsp::Button("Save as new", lsp::icons::kPlus)) { s_name[0] = 0; s_askSave = true; }
+        if (eam::ui::Button("Save as new", eam::ui::icons::kPlus)) { s_name[0] = 0; s_askSave = true; }
         Tip("Keep the current sliders under a new name. Using a name that already exists replaces that look.");
         ImGui::SameLine();   // always shown, so it can be found: greyed out until a look is picked
         if (s_active < 0) ImGui::BeginDisabled();
-        if (lsp::Button("Delete", lsp::icons::kTrash, lsp::ButtonKind::Danger)) s_askDelete = true;
+        if (eam::ui::Button("Delete", eam::ui::icons::kTrash, eam::ui::ButtonKind::Danger)) s_askDelete = true;
         if (s_active < 0) ImGui::EndDisabled();
         Tip(s_active >= 0 ? "Delete the selected look. Your current sliders are not changed." : "Pick a look in the list first, then this deletes it.");
         if (s_askSave) { ImGui::OpenPopup("Save look"); s_askSave = false; }
@@ -880,13 +880,13 @@ LSPROXY_EXPORT void AddonRenderSettings() {
             const std::string n = PresetCleanName(s_name);
             const bool can = !n.empty();
             if (!can) ImGui::BeginDisabled();
-            if (lsp::Button("Save", lsp::icons::kCheck, lsp::ButtonKind::Primary) || (enter && can)) {
+            if (eam::ui::Button("Save", eam::ui::icons::kCheck, eam::ui::ButtonKind::Primary) || (enter && can)) {
                 { std::lock_guard<std::mutex> lk(g_cfgMu); bool found = false; for (auto& pr : g_presets) if (pr.name == n) { pr.data = now; found = true; } if (!found) g_presets.push_back({ n, now }); }
                 s_active = -1; changed = true; ImGui::CloseCurrentPopup();
             }
             if (!can) ImGui::EndDisabled();
             ImGui::SameLine();
-            if (lsp::Button("Cancel", lsp::icons::kClose)) ImGui::CloseCurrentPopup();
+            if (eam::ui::Button("Cancel", eam::ui::icons::kClose)) ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
         if (s_askDelete) { ImGui::OpenPopup("Delete look"); s_askDelete = false; }
@@ -894,12 +894,12 @@ LSPROXY_EXPORT void AddonRenderSettings() {
             ImGui::Text("Delete the look '%s'?", s_active >= 0 && s_active < (int)names.size() ? names[s_active].c_str() : "");
             ImGui::TextDisabled("Your current sliders stay as they are.");
             ImGui::Dummy(ImVec2(0, 4));
-            if (lsp::Button("Delete", lsp::icons::kTrash, lsp::ButtonKind::Danger)) {
+            if (eam::ui::Button("Delete", eam::ui::icons::kTrash, eam::ui::ButtonKind::Danger)) {
                 { std::lock_guard<std::mutex> lk(g_cfgMu); if (s_active >= 0 && s_active < (int)g_presets.size()) { CfgSet(("preset." + g_presets[s_active].name).c_str(), ""); g_presets.erase(g_presets.begin() + s_active); } }
                 s_active = -1; changed = true; ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (lsp::Button("Cancel", lsp::icons::kClose)) ImGui::CloseCurrentPopup();
+            if (eam::ui::Button("Cancel", eam::ui::icons::kClose)) ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
     }
@@ -918,7 +918,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
     Block("Settings");
     Note("Open a section to change it. Sliders: double-click to reset, Ctrl+click to type a value, Ctrl+scroll to fine-tune. The small tick marks the default.");
     ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
-    if (lsp::SectionHeader("Model (what it does to the picture)")) {
+    if (eam::ui::SectionHeader("Model (what it does to the picture)")) {
         // Read by the model at every evaluate: changes apply on the next frame. Ranges are what the model honours
         // (docs/dlssnr-knobs.md): intensity clamps at 1, the local strengths do not clamp at all.
         int style = (int)c.p.style; const char* styles[] = { "Standard", "Natural", "Cinematic" };
@@ -945,7 +945,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
             "On is the default; the switch is here to compare the two.");
         if (!c.p.useFlow) ImGui::EndDisabled();
     }
-    if (lsp::SectionHeader("Quality and performance")) {
+    if (eam::ui::SectionHeader("Quality and performance")) {
         // The model costs ~10 ms + ~7 ms per megapixel on Ampere. The working scale is the only cost lever: past the
         // frame interval the model simply skips frames and the present side carries the last delta forward.
         createChanged |= SL("Model resolution", &c.p.workingScale, 0.25f, 1.0f, "%.2f x the frame");
@@ -959,10 +959,10 @@ LSPROXY_EXPORT void AddonRenderSettings() {
                 ImGui::TextWrapped("model keeps up with %llu of %llu frames (%.0f%%); GPU start +%.1f / done +%.1f ms after submit; tap CPU %.2f ms", (unsigned long long)runs, (unsigned long long)seen, seen ? 100.0 * runs / seen : 0.0, st.startMs, st.doneMs, g_bridge.CpuMs());
                 ImGui::TextWrapped("presents: %llu on LS's swap chain (%s), composed %llu, compose CPU %.2f ms, target %s; newest delta = frame %llu, applied at offset %.2f frames",
                     (unsigned long long)g_lsPresents, g_tap.PresentPattern(), (unsigned long long)g_composed, g_compose.CpuMs(), g_compose.TargetInfo(), (unsigned long long)g_lastDelta, g_lastOffset);
-                if (seen > 30 && runs * 2 < seen) ImGui::TextColored(lsp::theme::V(lsp::theme::kWarn), "the model runs on fewer than half of the frames: the delta is carried across frames by the flow. Lower the working scale for a fresher result.");
+                if (seen > 30 && runs * 2 < seen) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "the model runs on fewer than half of the frames: the delta is carried across frames by the flow. Lower the working scale for a fresher result.");
             } else ImGui::TextDisabled("(no frame tapped yet)");
         }
-        { int ps = (int)c.p.passes; const int dps = (int)kDefaults.passes; if (lsp::SliderInt("Model passes", &ps, 1, 4, "%d", 0, &dps)) { c.p.passes = (uint32_t)ps; changed = true; } }
+        { int ps = (int)c.p.passes; const int dps = (int)kDefaults.passes; if (eam::ui::SliderInt("Model passes", &ps, 1, 4, "%d", 0, &dps)) { c.p.passes = (uint32_t)ps; changed = true; } }
         Tip("How many times the model reworks each frame; every pass takes the previous result as its input. 1 = normal. 2 to 4 make the effect stronger (and can start to look over-processed, so compare with the Before / after hotkey).\nEach extra pass costs roughly another model run: watch the model time and the 'keeps up with' line below. If the model cannot keep up it skips frames, and the last result is carried forward.");
         changed |= SL("Temporal smoothing", &c.p.deltaSmooth, 0.0f, 0.9f, c.p.deltaSmooth <= 0.001f ? "off" : "%.2f");
         Tip("Blends the model's change for this frame with its change for the previous one, moved along with the picture by Lossless Scaling's motion data. It calms shimmer and crawling in fine detail (distant roads, fences, foliage) at the price of a little softness or ghosting when the camera moves fast. 0 = off; try 0.3 first. Costs almost nothing.");
@@ -977,7 +977,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         changed |= SL("Protect bright areas from", &c.p.hiProtect, 0.5f, 1.0f, c.p.hiProtect >= 0.999f ? "off" : "%.2f");
         Tip("The model's change fades out as a pixel's brightness rises from this level to white, so highlights are not crushed. At the far right (off) the change applies everywhere.");
     }
-    if (lsp::SectionHeader("Picture (sharpness, tone, colour, grain)")) {
+    if (eam::ui::SectionHeader("Picture (sharpness, tone, colour, grain)")) {
         // Compose side, applied to every presented frame, real and generated alike.
         changed |= SL("Sharpen", &c.p.sharpen, 0.0f, 1.0f, c.p.sharpen <= 0.001f ? "off" : "%.2f");
         Tip("Contrast-adaptive sharpening of every presented frame, after the model's change is added. The model and the upscale both soften the picture; a little sharpening (0.2 to 0.4) puts the bite back. Costs almost nothing.");
@@ -997,10 +997,10 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         Tip("Works on the bright parts of the picture only. Below 0 pulls them down (recovers sky and glare); above 0 pushes them up. Dark areas stay as they are.");
         changed |= SL("Film grain", &c.p.grain, 0.0f, 1.0f, c.p.grain <= 0.002f ? "off" : "%.2f");
         Tip("Fine monochrome noise, strongest in the mid-tones and different on every frame. Hides banding and the plastic look of upscaling. Keep it low (0.1 to 0.3).");
-        { int gs = (int)c.p.grainSize; const int dgs = (int)kDefaults.grainSize; if (lsp::SliderInt("Grain size", &gs, 1, 4, "%d px", 0, &dgs)) { c.p.grainSize = (float)gs; changed = true; } }
+        { int gs = (int)c.p.grainSize; const int dgs = (int)kDefaults.grainSize; if (eam::ui::SliderInt("Grain size", &gs, 1, 4, "%d px", 0, &dgs)) { c.p.grainSize = (float)gs; changed = true; } }
         Tip("How big each grain speck is, in screen pixels. 1 is the finest; on a 4K screen 2 looks closest to film.");
     }
-    if (lsp::SectionHeader("Keep the HUD untouched")) {
+    if (eam::ui::SectionHeader("Keep the HUD untouched")) {
         Note("Rectangles where the picture stays exactly as Lossless Scaling made it: no model change, sharpening, tone, colour or grain. Use them for action bars, the minimap, chat and text.");
         changed |= SL("Edge softness", &c.p.hudFeather, 0.0f, 0.05f, c.p.hudFeather <= 0.0005f ? "hard edge" : "%.3f");
         Tip("How gradually the enhancement fades in outside a protected area, as a fraction of the screen. 0 = a hard edge.");
@@ -1010,8 +1010,8 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         for (uint32_t i = 0; i < c.p.hudCount; ++i) {
             ImGui::PushID((int)i); float* r = c.p.hud[i];
             ImGui::Text("Area %u", i + 1); ImGui::SameLine(); if (ImGui::SmallButton("Remove")) rm = (int)i;
-            changed |= lsp::SliderFloat("Left", &r[0], 0.0f, 0.99f); changed |= lsp::SliderFloat("Top", &r[1], 0.0f, 0.99f);
-            changed |= lsp::SliderFloat("Right", &r[2], 0.01f, 1.0f); changed |= lsp::SliderFloat("Bottom", &r[3], 0.01f, 1.0f);
+            changed |= eam::ui::SliderFloat("Left", &r[0], 0.0f, 0.99f); changed |= eam::ui::SliderFloat("Top", &r[1], 0.0f, 0.99f);
+            changed |= eam::ui::SliderFloat("Right", &r[2], 0.01f, 1.0f); changed |= eam::ui::SliderFloat("Bottom", &r[3], 0.01f, 1.0f);
             if (r[2] < r[0] + 0.01f) r[2] = r[0] + 0.01f;
             if (r[3] < r[1] + 0.01f) r[3] = r[1] + 0.01f;
             ImGui::PopID();
@@ -1028,11 +1028,11 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         if (c.p.hudCount) { ImGui::SameLine(); if (ImGui::SmallButton("Clear all")) { c.p.hudCount = 0; changed = true; } }
         Note("Areas are saved with the preset, so each game can have its own layout.");
     }
-    if (lsp::SectionHeader("Compare and hotkeys")) {
+    if (eam::ui::SectionHeader("Compare and hotkeys")) {
         int cm = g_compare; const char* cms[] = { "Enhanced", "Split: left original | right enhanced", "Original only (before)" };
         if (ImGui::Combo("Compare view", &cm, cms, 3)) g_compare = cm;
         Tip("Enhanced = normal. Split = left of the line is the original, right is enhanced. Original only = as if Neural Render were off (it saves the compose work but the model keeps running). Display only; not saved.");
-        float sp = g_splitPos; { const float dsp = 0.5f; if (lsp::SliderFloat("Split position", &sp, 0.05f, 0.95f, "%.2f", 0, &dsp)) g_splitPos = sp; }
+        float sp = g_splitPos; { const float dsp = 0.5f; if (eam::ui::SliderFloat("Split position", &sp, 0.05f, 0.95f, "%.2f", 0, &dsp)) g_splitPos = sp; }
         Tip("Where the split line sits, from the left edge (0) to the right edge (1) of the screen.");
         Note("Display only: the model keeps running, so switching is instant. Not saved: Lossless Scaling always starts enhanced.");
         changed |= ImGui::Checkbox("Hotkeys: Ctrl+Shift + key (work while the game has focus)", &c.hotkeys);
@@ -1051,7 +1051,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
             fname(c.keyAB), fname(c.keySplit), fname(c.keySharpDn), fname(c.keySharpUp), fname(c.keyPreset), c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
         Note("A small square appears in the screen's top-left corner for a moment: green enhanced, red original, amber split, blue sharpen changed, purple preset.");
     }
-    if (lsp::SectionHeader("Games (a look per program)")) {
+    if (eam::ui::SectionHeader("Games (a look per program)")) {
         std::string cur; { std::lock_guard<std::mutex> lk(g_statusMu); cur = g_gameExe; }
         ImGui::Text("Program in focus: %s", cur.empty() ? "(none seen yet)" : cur.c_str());
         Tip("The program that had focus most recently, ignoring Lossless Scaling's own windows. While a game is being scaled this is the game.");
@@ -1101,7 +1101,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
         }
         Tip("Stores everything you have set now (including the HUD areas) as a preset named after the program, and links the program to it.");
     }
-    if (lsp::SectionHeader("Frame detection (advanced)")) {
+    if (eam::ui::SectionHeader("Frame detection (advanced)")) {
         Note("How the addon recognises Lossless Scaling's new real frame. Auto works; change this only if the status stays stuck on waiting.");
         int mode = c.tapMode; if (ImGui::RadioButton("Auto", mode == 0)) { mode = 0; } ImGui::SameLine(); if (ImGui::RadioButton("Manual", mode == 1)) { mode = 1; }
         if (mode != c.tapMode) { c.tapMode = mode; tapChanged = true; }
@@ -1131,14 +1131,14 @@ LSPROXY_EXPORT void AddonRenderSettings() {
             ImGui::EndTable();
         }
     }
-    if (lsp::SectionHeader("Technical status")) {
+    if (eam::ui::SectionHeader("Technical status")) {
     ImGui::Text("last LS device: %s %s   engine: %s", adapterName.c_str(), hasDisplay ? "(drives a display)" : "(no display output)", g_engineLuidValid ? "on the LSFG device" : "not started");
     ImGui::Text("frame: %s   NR %.1f ms (avg %.1f)  run %.1f ms   runs %llu   fails %llu", frameInfo.c_str(), g_lastNrMs, g_avgNrMs, g_lastTotalMs, (unsigned long long)g_nrRuns, (unsigned long long)g_engine.Stats().fails);
     ImGui::Text("dispatches %llu  ticks %llu  taps %llu  gate:%s  float-slot %d", (unsigned long long)g_tap.Dispatches(), (unsigned long long)g_tap.Ticks(), (unsigned long long)g_tap.Taps(), g_tap.GateName(), g_engine.Stats().floatSlot);
     { std::string tdi; { std::lock_guard<std::mutex> lk(g_statusMu); tdi = g_tapDevInfo; }
       ImGui::Text("d3d11 hook: %d entry points   other-adapter dispatches: %llu   tapped device: %s", g_hookCount, (unsigned long long)g_otherDispatches, tdi.c_str()); }
     }
-    if (lsp::SectionHeader("Advanced")) {
+    if (eam::ui::SectionHeader("Advanced")) {
         int dv = (int)c.p.debugView; const char* views[] = { "Result", "Original", "Delta x4", "Frame role (green real, red generated)", "LSFG flow", "Ghost guard (white = full effect)" };
         if (ImGui::Combo("Diagnostic view", &dv, views, 6)) { c.p.debugView = dv; changed = true; }
         Tip("Shows what the addon is doing instead of the finished picture: the original frame, the model's change amplified 4x, which frames are real or generated, or the motion data. Leave on Result for normal use.");
@@ -1169,7 +1169,7 @@ LSPROXY_EXPORT void AddonRenderSettings() {
 static void AddonInitializeBody(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void* userData) {
     ImGui::SetCurrentContext(ctx);
     ImGui::SetAllocatorFunctions((ImGuiMemAllocFunc)allocFunc, (ImGuiMemFreeFunc)freeFunc, userData);
-    lsp::InitAddonImGui();
+    eam::ui::InitAddonImGui();
     g_host = host;
     wchar_t exe[MAX_PATH]; GetModuleFileNameW(nullptr, exe, MAX_PATH); *wcsrchr(exe, L'\\') = 0; g_lsDir = exe;
     HMODULE self = nullptr; GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&AddonInitializeBody, &self);
@@ -1186,12 +1186,12 @@ static void AddonInitializeBody(IHost* host, ImGuiContext* ctx, void* allocFunc,
     LoadConfig(); ApplyTapRoles();
     ScanRequirements();
     if (CfgGet("selfTestOnStart", "0") == "1") RunSelfTestAsync();   // a diagnostic switch (config.json): the offline test host uses it to run the self-test without a click
-    host->SubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_READY, OnDeviceEvent, nullptr);
-    host->SubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent, nullptr);
+    host->SubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent, nullptr);
+    host->SubscribeEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent, nullptr);
     Log("DLSS5NR01 initialised (host version 0x%x), addon dir %ls", host->GetHostVersion(), g_addonDir.c_str());
     // Own inline hook on d3d11.dll instead of the host's vtable patch (see dispatch_hook.h for why). The Present hook
     // needs a device to find dxgi's entry points; it is installed at the first tap.
-    g_hookCount = DispatchHook::Install(OnDispatch, nullptr, [](const char* m) { Log("%s", m); });
+    g_hookCount = DispatchHook::Install(OnDispatch, [](const char* m) { Log("%s", m); });
     if (g_hookCount <= 0) Kill("could not hook d3d11 Dispatch");
     // No manual DEVICE_READY replay here: the host's last device pointer may already be destroyed
     // (LS creates and drops devices constantly); we only touch devices inside the event or from a live context.
@@ -1206,17 +1206,17 @@ static int InitFilter(EXCEPTION_POINTERS* ep) {
     Kill(b);
     return EXCEPTION_EXECUTE_HANDLER;
 }
-LSPROXY_EXPORT void AddonInitialize(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void* userData) {
+EAM_EXPORT void AddonInitialize(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void* userData) {
     __try { AddonInitializeBody(host, ctx, allocFunc, freeFunc, userData); }
     __except (InitFilter(GetExceptionInformation())) {}
 }
 
-LSPROXY_EXPORT void AddonShutdown() {
+EAM_EXPORT void AddonShutdown() {
     Log("shutting down");
     g_killed = true;
     PresentHook::Uninstall();
     DispatchHook::Uninstall();
-    if (g_host) { g_host->UnsubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_READY, OnDeviceEvent); g_host->UnsubscribeEvent(LSPROXY_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent); }
+    if (g_host) { g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent); g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent); }
     for (int i = 0; i < 3000 && g_engineStarting; ++i) Sleep(10);   // let a model load that is in progress finish (as the join used to)
     for (int i = 0; i < 300 && g_reqBusy; ++i) Sleep(10);   // a requirements scan takes milliseconds; an open file dialog is left (the process is ending)
     { std::lock_guard<std::mutex> lk(g_tapMu); g_bridge.Shutdown(); g_compose.Shutdown(); g_engine.Shutdown(); }
@@ -1225,8 +1225,8 @@ LSPROXY_EXPORT void AddonShutdown() {
     g_host = nullptr;
 }
 
-LSPROXY_EXPORT uint32_t GetAddonCapabilities() { return LSPROXY_CAP_HAS_SETTINGS | LSPROXY_CAP_D3D11_DEVICE_ACCESS; }
-LSPROXY_EXPORT const char* GetAddonName() { return "DLSS 5 Neural Rendering"; }
-LSPROXY_EXPORT const char* GetAddonVersion() { return "0.7.0"; }
-LSPROXY_EXPORT const char* GetAddonAuthor() { return "andreiday"; }
-LSPROXY_EXPORT const char* GetAddonDescription() { return "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. Needs your own copy of nvngx_dlssnr.dll (not included, never downloaded)."; }
+EAM_EXPORT uint32_t GetAddonCapabilities() { return EAM_CAP_HAS_SETTINGS | EAM_CAP_D3D11_DEVICE_ACCESS; }
+EAM_EXPORT const char* GetAddonName() { return "DLSS 5 Neural Rendering"; }
+EAM_EXPORT const char* GetAddonVersion() { return "0.7.0"; }
+EAM_EXPORT const char* GetAddonAuthor() { return "andreiday"; }
+EAM_EXPORT const char* GetAddonDescription() { return "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. Needs your own copy of nvngx_dlssnr.dll (not included, never downloaded)."; }

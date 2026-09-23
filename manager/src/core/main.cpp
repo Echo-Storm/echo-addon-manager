@@ -9,7 +9,7 @@
 #include "../host/host_impl.h"
 #include "../log/logger.h"
 #include "../gui/gui_manager.h"
-#include "../../sdk/include/lsproxy/version.h"
+#include "../../sdk/include/eam/version.h"
 #include <algorithm>
 #include <filesystem>
 #include <memory>
@@ -35,8 +35,8 @@ static ApplySettings_t g_origApplySettings = nullptr;
 
 // Core owns all subsystems with proper lifetime management
 struct Core {
-    std::unique_ptr<lsproxy::HostImpl> host;
-    std::unique_ptr<lsproxy::AddonManager> addonManager;
+    std::unique_ptr<eam::HostImpl> host;
+    std::unique_ptr<eam::AddonManager> addonManager;
     bool passive = false;   // another Lossless Scaling from this folder already runs a manager: this copy only forwards
 
     bool Init() {
@@ -60,12 +60,12 @@ struct Core {
         // Logs live in <Lossless Scaling>\\logs so the program's own folder stays readable.
         std::error_code logDirError;
         fs::create_directories(exePath.parent_path() / "logs", logDirError);
-        fs::path logPath = exePath.parent_path() / "logs" / LSPROXY_PRODUCT_FILE ".log";
+        fs::path logPath = exePath.parent_path() / "logs" / EAM_PRODUCT_FILE ".log";
 
         // Initialize logger first
-        lsproxy::Logger::Instance().Init(logPath.wstring());
-        LOG_INFO("Core", "%s v%s (built %s) starting...", LSPROXY_PRODUCT_NAME, LSPROXY_VERSION_STRING, __DATE__);
-        lsproxy::InstallCrashLogging();
+        eam::Logger::Instance().Init(logPath.wstring());
+        LOG_INFO("Core", "%s v%s (built %s) starting...", EAM_PRODUCT_NAME, EAM_VERSION_STRING, __DATE__);
+        eam::InstallCrashLogging();
 
         // Load original DLL
         HMODULE hLosslessOriginal = LoadLibraryW(L"Lossless_original.dll");
@@ -86,21 +86,21 @@ struct Core {
 
         // Lossless Scaling runs one copy of itself: a second start loads this DLL, hands over to the running copy and exits. It must not start a
         // second window, tray icon, hotkey or set of addons, nor write the settings or the addon logs the running copy is using.
-        if (!lsproxy::instance::Claim(exePath.parent_path().wstring())) {
+        if (!eam::instance::Claim(exePath.parent_path().wstring())) {
             passive = true;
             LOG_INFO("Core", "Another Lossless Scaling from this folder is already running with the manager: this copy only forwards to Lossless Scaling and starts nothing");
             return true;
         }
 
         // Create host
-        host = std::make_unique<lsproxy::HostImpl>();
+        host = std::make_unique<eam::HostImpl>();
 
         // Create addon manager (loads config, scans addons)
-        addonManager = std::make_unique<lsproxy::AddonManager>(host.get());
+        addonManager = std::make_unique<eam::AddonManager>(host.get());
 
         // Settings > Log Level (loaded with the config in the AddonManager constructor).
-        lsproxy::Logger::Instance().SetMinLevel(static_cast<lsproxy::LogLevel>(std::clamp(
-            lsproxy::ConfigManager::Instance().GlobalGetOr<int>(nullptr, "log_level", 2), 0, 4)));
+        eam::Logger::Instance().SetMinLevel(static_cast<eam::LogLevel>(std::clamp(
+            eam::ConfigManager::Instance().GlobalGetOr<int>(nullptr, "log_level", 2), 0, 4)));
 
         // An unreadable addons folder must not take Lossless Scaling down with it (this runs in DllMain).
         try {
@@ -119,22 +119,22 @@ struct Core {
         LOG_INFO("Core", "D3D11 hooks installed");
 
         // Built-in features that are switched on (on their own threads where they hook things: this runs in DllMain)
-        lsproxy::features::Start();
+        eam::features::Start();
 
         // Start GUI thread (loads + initializes addons)
-        lsproxy::GuiManager::StartGuiThread(addonManager.get());
+        eam::GuiManager::StartGuiThread(addonManager.get());
 
         return true;
     }
 
     void Shutdown() {
-        if (passive) { lsproxy::Logger::Instance().Shutdown(); return; }   // it started nothing
+        if (passive) { eam::Logger::Instance().Shutdown(); return; }   // it started nothing
         LOG_INFO("Core", "Shutting down...");
 
         // Publish shutdown event
-        lsproxy::EventBus::Instance().Publish(LSPROXY_EVENT_HOST_SHUTDOWN);
+        eam::EventBus::Instance().Publish(EAM_EVENT_HOST_SHUTDOWN);
 
-        lsproxy::features::Stop();
+        eam::features::Stop();
         D3D11Hook::Shutdown();
         ShaderHook::UninstallHooks();
         ShaderHook::Shutdown();
@@ -144,8 +144,8 @@ struct Core {
         }
         host.reset();
 
-        lsproxy::instance::Release();
-        lsproxy::Logger::Instance().Shutdown();
+        eam::instance::Release();
+        eam::Logger::Instance().Shutdown();
     }
 };
 
@@ -183,7 +183,7 @@ extern "C" __declspec(dllexport) void __fastcall ApplySettings(
     }
 
     // Notify addons that settings were just applied — they can now override globals
-    lsproxy::EventBus::Instance().Publish(LSPROXY_EVENT_SETTINGS_APPLIED);
+    eam::EventBus::Instance().Publish(EAM_EVENT_SETTINGS_APPLIED);
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID /*lpReserved*/) {

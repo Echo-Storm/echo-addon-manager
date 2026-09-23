@@ -1,12 +1,12 @@
 #pragma once
-#include "../../sdk/include/lsproxy/addon_exports.h"
+#include "../../sdk/include/eam/addon_exports.h"
 #include <cstdint>
 #include <d3d11.h>
 #include <string>
 #include <vector>
 #include <windows.h>
 
-namespace lsproxy {
+namespace eam {
 
 // What trusted_addons.json says about an addon's DLL.
 enum class SecurityVerdict : uint8_t {
@@ -54,7 +54,7 @@ struct AddonInfo {
     // what state it is in
     bool enabled = true;                   // the user's switch
     HMODULE hModule = nullptr;             // non-null while the DLL is loaded
-    uint32_t capabilities = 0;             // LSPROXY_CAP_* bits, read from the DLL
+    uint32_t capabilities = 0;             // EAM_CAP_* bits, read from the DLL
     SecurityVerdict security = SecurityVerdict::Unknown;
     std::string errorMessage;              // why it is not running, in words for the user
     bool faulted = false;                  // it crashed while starting
@@ -79,7 +79,7 @@ struct AddonInfo {
         return manifest.author.empty() ? kUnknown : manifest.author;
     }
     bool IsLoaded() const { return hModule != nullptr; }
-    bool RequiresRestart() const { return (capabilities & LSPROXY_CAP_REQUIRES_RESTART) != 0; }
+    bool RequiresRestart() const { return (capabilities & EAM_CAP_REQUIRES_RESTART) != 0; }
 };
 
-} // namespace lsproxy
+} // namespace eam

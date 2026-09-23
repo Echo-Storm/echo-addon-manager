@@ -2,7 +2,7 @@
 #include "addon_info.h"
 #include <vector>
 
-namespace lsproxy {
+namespace eam {
 
 class AddonDependency {
 public:
@@ -12,4 +12,4 @@ public:
     static bool Resolve(std::vector<AddonInfo>& addons);
 };
 
-} // namespace lsproxy
+} // namespace eam

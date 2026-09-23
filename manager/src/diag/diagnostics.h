@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 
 struct DiagResult { bool ok = false; std::string message; std::filesystem::path zip; };
 
@@ -11,4 +11,4 @@ struct DiagResult { bool ok = false; std::string message; std::filesystem::path 
 // anywhere; the user decides who gets the file. Uses Windows' own tar.exe to write the zip.
 DiagResult CreateDiagnosticsZip(const std::filesystem::path& lsDir, const std::string& summary, const std::filesystem::path& outDir);
 
-} // namespace lsproxy
+} // namespace eam

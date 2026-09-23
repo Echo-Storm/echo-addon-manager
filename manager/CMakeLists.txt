@@ -155,8 +155,8 @@ if(MSVC)
 endif()
 
 # Offscreen UI preview (no window): renders the theme, toggle, cards and sliders to BMP files. Not built by default;
-# build it with: cmake --build . --config Release --target lsproxy_uipreview
-add_executable(lsproxy_uipreview EXCLUDE_FROM_ALL
+# build it with: cmake --build . --config Release --target eam_uipreview
+add_executable(eam_uipreview EXCLUDE_FROM_ALL
     tools/ui_preview.cpp
     src/gui/gui_style.cpp
     src/gui/widgets/toggle_switch.cpp
@@ -190,69 +190,69 @@ add_executable(lsproxy_uipreview EXCLUDE_FROM_ALL
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp
 )
-target_include_directories(lsproxy_uipreview PRIVATE
+target_include_directories(eam_uipreview PRIVATE
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include
     ${minhook_SOURCE_DIR}/include
 )
-target_link_libraries(lsproxy_uipreview d3d11 dxgi d3dcompiler minhook)
+target_link_libraries(eam_uipreview d3d11 dxgi d3dcompiler minhook)
 
-# Offline test of installing addons from a folder / zip / dll: cmake --build . --config Release --target lsproxy_installtest
-add_executable(lsproxy_installtest EXCLUDE_FROM_ALL tools/install_test.cpp src/addon/addon_install.cpp src/host/metrics.cpp src/host/gpu_stats.cpp src/config/settings_backup.cpp src/diag/diagnostics.cpp)
-target_include_directories(lsproxy_installtest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# Offline test of installing addons from a folder / zip / dll: cmake --build . --config Release --target eam_installtest
+add_executable(eam_installtest EXCLUDE_FROM_ALL tools/install_test.cpp src/addon/addon_install.cpp src/host/metrics.cpp src/host/gpu_stats.cpp src/config/settings_backup.cpp src/diag/diagnostics.cpp)
+target_include_directories(eam_installtest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # SDK install target (copies headers for addon developers)
 # Offline test of the addon handling (scan, load, init, toggle, remove, install, security), run against a throw-away folder with a small
-# test addon: cmake --build . --config Release --target lsproxy_coretest
-add_library(lsproxy_testaddon SHARED EXCLUDE_FROM_ALL tools/test_addon.cpp)
-target_include_directories(lsproxy_testaddon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${imgui_SOURCE_DIR})
-add_executable(lsproxy_coretest EXCLUDE_FROM_ALL tools/core_test.cpp src/core/instance_guard.cpp
+# test addon: cmake --build . --config Release --target eam_coretest
+add_library(eam_testaddon SHARED EXCLUDE_FROM_ALL tools/test_addon.cpp)
+target_include_directories(eam_testaddon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${imgui_SOURCE_DIR})
+add_executable(eam_coretest EXCLUDE_FROM_ALL tools/core_test.cpp src/core/instance_guard.cpp
     ${ADDON_SOURCES} ${FEATURE_SOURCES} ${EVENT_SOURCES} ${HOST_SOURCES} ${CONFIG_SOURCES} ${LOG_SOURCES}
     src/gui/icon_loader.cpp src/core/d3d11_hook.cpp src/core/shader_hook.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
-target_include_directories(lsproxy_coretest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
-target_link_libraries(lsproxy_coretest d3d11 dxgi d3dcompiler bcrypt minhook)
-add_dependencies(lsproxy_coretest lsproxy_testaddon)
-add_custom_command(TARGET lsproxy_coretest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:lsproxy_testaddon> $<TARGET_FILE_DIR:lsproxy_coretest>)
+target_include_directories(eam_coretest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
+target_link_libraries(eam_coretest d3d11 dxgi d3dcompiler bcrypt minhook)
+add_dependencies(eam_coretest eam_testaddon)
+add_custom_command(TARGET eam_coretest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:eam_testaddon> $<TARGET_FILE_DIR:eam_coretest>)
 
 # The sample addon (examples/SampleAddon, the one docs/addon-authors.md points to) and its offline test: it is loaded, started and drawn by the real
-# AddonManager. cmake --build . --config Release --target lsproxy_sampletest
-add_library(lsproxy_sampleaddon SHARED EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/../examples/SampleAddon/SampleAddon.cpp
+# AddonManager. cmake --build . --config Release --target eam_sampletest
+add_library(eam_sampleaddon SHARED EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/../examples/SampleAddon/SampleAddon.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
-target_include_directories(lsproxy_sampleaddon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${imgui_SOURCE_DIR})
-set_target_properties(lsproxy_sampleaddon PROPERTIES PREFIX "" OUTPUT_NAME "SampleAddon")
-add_executable(lsproxy_sampletest EXCLUDE_FROM_ALL tools/sample_test.cpp
+target_include_directories(eam_sampleaddon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${imgui_SOURCE_DIR})
+set_target_properties(eam_sampleaddon PROPERTIES PREFIX "" OUTPUT_NAME "SampleAddon")
+add_executable(eam_sampletest EXCLUDE_FROM_ALL tools/sample_test.cpp
     ${ADDON_SOURCES} ${FEATURE_SOURCES} ${EVENT_SOURCES} ${HOST_SOURCES} ${CONFIG_SOURCES} ${LOG_SOURCES}
     src/gui/icon_loader.cpp src/core/d3d11_hook.cpp src/core/shader_hook.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
-target_include_directories(lsproxy_sampletest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
-target_compile_definitions(lsproxy_sampletest PRIVATE SAMPLE_ADDON_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../examples/SampleAddon")
-target_link_libraries(lsproxy_sampletest d3d11 dxgi d3dcompiler bcrypt minhook)
-add_dependencies(lsproxy_sampletest lsproxy_sampleaddon)
-add_custom_command(TARGET lsproxy_sampletest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:lsproxy_sampleaddon> $<TARGET_FILE_DIR:lsproxy_sampletest>)
+target_include_directories(eam_sampletest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
+target_compile_definitions(eam_sampletest PRIVATE SAMPLE_ADDON_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../examples/SampleAddon")
+target_link_libraries(eam_sampletest d3d11 dxgi d3dcompiler bcrypt minhook)
+add_dependencies(eam_sampletest eam_sampleaddon)
+add_custom_command(TARGET eam_sampletest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:eam_sampleaddon> $<TARGET_FILE_DIR:eam_sampletest>)
 
 # Offline test of the built-in features (ReShade passthrough on a hidden window, the Windowed virtual display through DXGI). Run it twice:
-# once plain, once with the argument "off" (Windowed switched off): cmake --build . --config Release --target lsproxy_featurestest
-add_executable(lsproxy_featurestest EXCLUDE_FROM_ALL tools/features_test.cpp
+# once plain, once with the argument "off" (Windowed switched off): cmake --build . --config Release --target eam_featurestest
+add_executable(eam_featurestest EXCLUDE_FROM_ALL tools/features_test.cpp
     ${FEATURE_SOURCES} src/config/config_manager.cpp src/log/logger.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
-target_include_directories(lsproxy_featurestest PRIVATE ${imgui_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
-target_link_libraries(lsproxy_featurestest d3d11 dxgi user32 minhook)
+target_include_directories(eam_featurestest PRIVATE ${imgui_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
+target_link_libraries(eam_featurestest d3d11 dxgi user32 minhook)
 
 # Smoke test of the manager window (real GUI thread, hidden: no window appears). Run it twice: plain, and with the argument "place":
-# cmake --build . --config Release --target lsproxy_guitest
-add_executable(lsproxy_guitest EXCLUDE_FROM_ALL tools/gui_test.cpp
+# cmake --build . --config Release --target eam_guitest
+add_executable(eam_guitest EXCLUDE_FROM_ALL tools/gui_test.cpp
     ${ADDON_SOURCES} ${FEATURE_SOURCES} ${EVENT_SOURCES} ${UPDATE_SOURCES} ${HOST_SOURCES} ${CONFIG_SOURCES} ${LOG_SOURCES}
     src/core/d3d11_hook.cpp src/core/shader_hook.cpp
     ${GUI_SOURCES} ${IMGUI_SOURCES})
-target_include_directories(lsproxy_guitest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
-target_link_libraries(lsproxy_guitest d3d11 dxgi d3dcompiler bcrypt minhook)
+target_include_directories(eam_guitest PRIVATE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${minhook_SOURCE_DIR}/include)
+target_link_libraries(eam_guitest d3d11 dxgi d3dcompiler bcrypt minhook)
 
 # Offline test of the update check, against a small server of its own (add the argument "live" to also ask the real GitHub):
-# cmake --build . --config Release --target lsproxy_updatetest
-add_executable(lsproxy_updatetest EXCLUDE_FROM_ALL tools/update_test.cpp src/update/update_check.cpp src/config/config_manager.cpp src/log/logger.cpp)
-target_include_directories(lsproxy_updatetest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+# cmake --build . --config Release --target eam_updatetest
+add_executable(eam_updatetest EXCLUDE_FROM_ALL tools/update_test.cpp src/update/update_check.cpp src/config/config_manager.cpp src/log/logger.cpp)
+target_include_directories(eam_updatetest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 
-install(DIRECTORY sdk/include/lsproxy DESTINATION include)
+install(DIRECTORY sdk/include/eam DESTINATION include)

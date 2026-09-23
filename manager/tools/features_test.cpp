@@ -2,8 +2,8 @@
 // off-screen and shown without activation, in this test's own process, and Windowed mode is tried by enumerating displays through DXGI and
 // user32 the way Lossless Scaling does. Run it twice, because the Windowed hooks stay in the process once they are in:
 //
-//   lsproxy_featurestest.exe          Windowed mode switched on at start-up: the virtual display appears, and can be switched off and on live
-//   lsproxy_featurestest.exe off      Windowed mode switched off at start-up: no virtual display, and switching it on says a restart is needed
+//   eam_featurestest.exe          Windowed mode switched on at start-up: the virtual display appears, and can be switched off and on live
+//   eam_featurestest.exe off      Windowed mode switched off at start-up: no virtual display, and switching it on says a restart is needed
 #include "src/config/config_manager.h"
 #include "src/features/features.h"
 #include "src/features/reshade_passthrough.h"
@@ -23,7 +23,7 @@
 #pragma comment(lib, "user32.lib")
 
 namespace fs = std::filesystem;
-using namespace lsproxy;
+using namespace eam;
 
 static int g_fail = 0;
 static void Check(const char* what, bool ok) { printf("%s  %s\n", ok ? "PASS" : "FAIL", what); if (!ok) ++g_fail; }
@@ -191,7 +191,7 @@ int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     const bool startOn = !(argc > 1 && !strcmp(argv[1], "off"));
 
-    const fs::path dir = fs::temp_directory_path() / ("lsp_featurestest_" + std::to_string(GetCurrentProcessId()));
+    const fs::path dir = fs::temp_directory_path() / ("eam_featurestest_" + std::to_string(GetCurrentProcessId()));
     {   // a fresh folder every run: process ids are reused, and an earlier run (the abrupt one) must not leave a switched-on feature behind
         std::error_code cleanup;
         fs::remove_all(dir, cleanup);
@@ -213,12 +213,20 @@ int main(int argc, char** argv) {
     }
 
     printf("== the list of features\n");
-    Check("two features are built in", features::Count() == 2 && IndexOfFeature("LSP-ReShade") == 0 && IndexOfFeature("LSP-Windowed") == 1);
+    Check("two features are built in", features::Count() == 2 && IndexOfFeature("ReShadePassthrough") == 0 && IndexOfFeature("WindowedMode") == 1);
     Check("the retired standalone addons are recognised by folder name", features::IsRetiredAddonId("LSP-ReShade") && features::IsRetiredAddonId("LSP-Windowed") && !features::IsRetiredAddonId("DLSS5NR01"));
     Check("a feature is off until switched on", !features::IsOn(0) && !features::IsOn(1));
     features::SetOn(0, true);
-    Check("switching one on is saved where the old addon kept it", ConfigManager::Instance().IsAddonEnabled("LSP-ReShade", false));
+    Check("switching one on is saved under the feature's id", ConfigManager::Instance().IsAddonEnabled("ReShadePassthrough", false));
     features::SetOn(0, false);
+    {   // settings saved up to 0.7.4 sit under the old ids
+        ConfigManager& cfg = ConfigManager::Instance();
+        cfg.Set("LSP-Windowed", "test_marker", "moved");
+        cfg.Set("LSP-ReShade", "test_marker", "old");
+        features::MoveOldSettings();
+        Check("settings saved under a feature's old id move to its id", cfg.Get("WindowedMode", "test_marker", "") == "moved" && cfg.Get("LSP-Windowed", "test_marker", "") == "");
+        Check("...but never over settings the new id already has", cfg.Get("ReShadePassthrough", "test_marker", "") == "" && cfg.Get("LSP-ReShade", "test_marker", "") == "old");
+    }
 
     if (startOn) { ReShadeOnce(false); ReShadeOnce(true); }
     WindowedOnce(startOn);

@@ -4,7 +4,7 @@
 // This must be included in exactly one translation unit (main.cpp)
 //
 // ApplySettings is NOT forwarded here — it's manually intercepted in main.cpp
-// so the proxy can fire LSPROXY_EVENT_SETTINGS_APPLIED after the call.
+// so the proxy can fire EAM_EVENT_SETTINGS_APPLIED after the call.
 
 #pragma comment(linker, "/export:Activate=Lossless_original.Activate")
 #pragma comment(linker, "/export:GetAdapterNames=Lossless_original.GetAdapterNames")

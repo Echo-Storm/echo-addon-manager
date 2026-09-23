@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 
 // Display scale of the monitor a window is on (1.0 = 96 dpi); the system dpi when there is no window or the call is missing.
@@ -12,4 +12,4 @@ int ClampScalePercent(int percent);
 float UserScale();
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

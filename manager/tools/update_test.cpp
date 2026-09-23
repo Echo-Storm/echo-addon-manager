@@ -1,11 +1,11 @@
 // Offline test of the update check: version numbers, reading GitHub's answer, when a check is due, and the whole check against a small server of
 // its own on the loopback address (a good answer, a newer one, errors, silence, a huge answer), plus the worker that runs it and what it remembers.
-//   lsproxy_updatetest.exe          everything above; needs no internet
-//   lsproxy_updatetest.exe live     also asks the real GitHub once and prints what it says
+//   eam_updatetest.exe          everything above; needs no internet
+//   eam_updatetest.exe live     also asks the real GitHub once and prints what it says
 #include "src/config/config_manager.h"
 #include "src/log/logger.h"
 #include "src/update/update_check.h"
-#include "lsproxy/version.h"
+#include "eam/version.h"
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -21,8 +21,8 @@
 #pragma comment(lib, "ws2_32.lib")
 
 namespace fs = std::filesystem;
-using namespace lsproxy;
-using namespace lsproxy::update;
+using namespace eam;
+using namespace eam::update;
 
 static int g_failed = 0;
 static void Check(const char* what, bool ok, const std::string& detail = "") {
@@ -122,12 +122,12 @@ int main(int argc, char** argv) {
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
     const bool live = argc > 1 && !strcmp(argv[1], "live");
-    const fs::path dir = fs::temp_directory_path() / ("lsp_updatetest_" + std::to_string(GetCurrentProcessId()));
+    const fs::path dir = fs::temp_directory_path() / ("eam_updatetest_" + std::to_string(GetCurrentProcessId()));
     { std::error_code fresh; fs::remove_all(dir, fresh); }   // a fresh folder every run (process ids are reused)
     fs::create_directories(dir);
     Logger::Instance().Init((dir / "test.log").wstring());
     ConfigManager::Instance().Load((dir / "config.json").wstring());
-    const std::string me = LSPROXY_VERSION_STRING;
+    const std::string me = EAM_VERSION_STRING;
 
     printf("== version numbers\n");
     {

@@ -4,7 +4,7 @@
 #include <mutex>
 #include <windows.h>
 
-namespace lsproxy {
+namespace eam {
 
 namespace {
 
@@ -73,4 +73,4 @@ size_t EventBus::SubscriberCount(uint32_t eventId) const {
     return list == m_subscribers.end() ? 0 : list->second.size();
 }
 
-} // namespace lsproxy
+} // namespace eam

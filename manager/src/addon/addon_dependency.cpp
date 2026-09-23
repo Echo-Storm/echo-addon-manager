@@ -2,7 +2,7 @@
 #include "../log/logger.h"
 #include <unordered_set>
 
-namespace lsproxy {
+namespace eam {
 
 bool AddonDependency::Resolve(std::vector<AddonInfo>& addons) {
     std::unordered_set<std::string> installed;
@@ -43,4 +43,4 @@ bool AddonDependency::Resolve(std::vector<AddonInfo>& addons) {
     return true;
 }
 
-} // namespace lsproxy
+} // namespace eam

@@ -12,7 +12,7 @@
 #include "../../update/update_check.h"
 #include "imgui.h"
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 
 namespace {
@@ -71,4 +71,4 @@ void RenderMainFrame(AddonManager* manager, bool& bringAddonsForward) {
 }
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

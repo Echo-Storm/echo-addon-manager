@@ -4,7 +4,7 @@
 #include "../config/config_manager.h"
 #include "../log/logger.h"
 #include "imgui.h"
-#include "lsproxy/lsp_widgets.h"
+#include "eam/widgets.h"
 #include <MinHook.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -12,7 +12,7 @@
 #include <cstdlib>
 #include <string>
 
-namespace lsproxy {
+namespace eam {
 namespace features {
 namespace windowed {
 
@@ -384,4 +384,4 @@ void RenderOptions() {
 
 } // namespace windowed
 } // namespace features
-} // namespace lsproxy
+} // namespace eam

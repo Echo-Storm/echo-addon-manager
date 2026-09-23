@@ -1,6 +1,6 @@
 r"""Builds the README screenshots (docs/images/*.png) from offscreen renders. Nothing here touches a real window or the screen.
 
-    powershell -File tools\ui_preview.ps1 -Out <folder>       (with the environment variable LSP_PREVIEW_CLEAN=1 for the tidy scene)
+    powershell -File tools\ui_preview.ps1 -Out <folder>       (with the environment variable EAM_PREVIEW_CLEAN=1 for the tidy scene)
     python tools\make_readme_shots.py <folder> [nr_panel.bmp]
 
 Every tab is cropped to its content and keeps the status bar from the bottom of the window. The Performance numbers in the

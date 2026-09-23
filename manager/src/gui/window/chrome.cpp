@@ -5,7 +5,7 @@
 
 namespace fs = std::filesystem;
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 
 void ApplyDarkTitleBar(HWND hwnd) {
@@ -71,8 +71,8 @@ AppIcons LoadAppIcons() {
                        reinterpret_cast<LPCWSTR>(&LoadAppIcons), &self);
 
     std::error_code ec;
-    const fs::path icoBesideExe = Beside(nullptr, L"LP-icon.ico"), icoBesideDll = Beside(self, L"LP-icon.ico");
-    const fs::path pngBesideExe = Beside(nullptr, L"LP-icon.png"), pngBesideDll = Beside(self, L"LP-icon.png");
+    const fs::path icoBesideExe = Beside(nullptr, L"manager-icon.ico"), icoBesideDll = Beside(self, L"manager-icon.ico");
+    const fs::path pngBesideExe = Beside(nullptr, L"manager-icon.png"), pngBesideDll = Beside(self, L"manager-icon.png");
 
     AppIcons icons;
     const fs::path* ico = fs::exists(icoBesideExe, ec) ? &icoBesideExe : (fs::exists(icoBesideDll, ec) ? &icoBesideDll : nullptr);
@@ -89,4 +89,4 @@ AppIcons LoadAppIcons() {
 }
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam

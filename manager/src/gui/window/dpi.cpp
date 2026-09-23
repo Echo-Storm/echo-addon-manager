@@ -1,7 +1,7 @@
 #include "dpi.h"
 #include "../../config/config_manager.h"
 
-namespace lsproxy {
+namespace eam {
 namespace window {
 
 float DisplayScale(HWND hwnd) {
@@ -29,4 +29,4 @@ float UserScale() {
 }
 
 } // namespace window
-} // namespace lsproxy
+} // namespace eam
