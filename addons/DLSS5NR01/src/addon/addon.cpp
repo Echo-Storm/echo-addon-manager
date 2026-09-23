@@ -1162,7 +1162,11 @@ static void AddonInitializeBody(IHost* host, ImGuiContext* ctx, void* allocFunc,
     HMODULE self = nullptr; GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&AddonInitializeBody, &self);
     wchar_t mod[MAX_PATH]; GetModuleFileNameW(self, mod, MAX_PATH); *wcsrchr(mod, L'\\') = 0; g_addonDir = mod;
     CreateDirectoryW((g_lsDir + L"\\logs").c_str(), nullptr);   // <Lossless Scaling>\\logs, shared with the proxy's log
-    g_logFile = _wfopen((g_lsDir + L"\\logs\\DLSS5NR01.log").c_str(), L"w");
+    {   // the log is started afresh at every start: keep the previous session's as .old, so a problem seen while playing is still there after a restart
+        const std::wstring log = g_lsDir + L"\\logs\\DLSS5NR01.log";
+        MoveFileExW(log.c_str(), (log + L".old").c_str(), MOVEFILE_REPLACE_EXISTING);
+        g_logFile = _wfopen(log.c_str(), L"w");
+    }
     InstallCrashDiagnostics();
     LoadConfig(); ApplyTapRoles();
     ScanRequirements();
