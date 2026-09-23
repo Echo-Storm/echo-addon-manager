@@ -34,6 +34,8 @@ struct StandInHost : IHost {
     void SetStatus(const char*, const char*, int) override {}
     void PublishMetric(const char*, const char*, double, const char*) override {}
     void* GetDispatchingContext() override { return nullptr; }
+    void* CreateImage(const void*, uint32_t, uint32_t, uint32_t) override { return nullptr; }
+    void ReleaseImage(void*) override {}
 };
 
 static bool Same(float a, float b) { return std::fabs(a - b) < 1e-5f; }

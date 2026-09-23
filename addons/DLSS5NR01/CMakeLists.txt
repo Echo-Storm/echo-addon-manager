@@ -39,7 +39,7 @@ add_dependencies(nr_selftest nr_forwarder)
 # ---- the addon ----
 add_library(DLSS5NR01 SHARED
     src/addon/addon.cpp src/addon/runtime.cpp src/addon/panel.cpp src/addon/tasks.cpp src/addon/settings.cpp src/addon/log.cpp
-    src/addon/screenshot.cpp src/addon/screenshot_pixels.cpp
+    src/addon/screenshot.cpp src/addon/screenshot_pixels.cpp src/addon/hud_editor.cpp
     src/addon/bridge.cpp src/addon/frame_tap.cpp
     src/addon/present_hook.cpp src/addon/compose11.cpp src/addon/requirements.cpp
     src/engine/nr_engine.cpp

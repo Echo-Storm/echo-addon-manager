@@ -6,11 +6,17 @@
 #pragma once
 #include <d3d11.h>
 #include <dxgi.h>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace nr::screenshot {
 
 void Request();
+// A snapshot for the panel instead of a file: the same picture, made at most 960 pixels wide (RGBA), kept in memory.
+void RequestSnapshot();
+// The newest snapshot, when it is newer than `serial` (which it then updates).
+bool NewSnapshot(uint64_t& serial, std::vector<unsigned char>& rgba, unsigned& w, unsigned& h);
 // At every present of Lossless Scaling's swap chain, after the compose (on its render thread, under g_frameMutex).
 void OnPresent(ID3D11DeviceContext* ctx, IDXGISwapChain* chain, const std::string& game);
 void Forget();   // the device is going away: drop a copy in progress

@@ -4,6 +4,15 @@
 
 The manager and Neural Rendering now show 0.8.0.
 
+- **HUD protection is drawn on a picture of the game** (Neural Rendering's panel, Keep the HUD untouched). The areas were typed in as numbers before, which was cumbersome.
+  - **Take a snapshot** puts the game's picture, as it is shown, in the panel.
+  - **Drag on it to add an area**, drag an area to move it, drag an edge or corner to resize it, and right-click an area to remove it. The change is saved when the mouse is let go.
+  - Without a snapshot the same editing works on an empty box of the frame's shape. The World of Warcraft starter layout, Clear all and edge softness stay, and the exact numbers are
+    still there, folded under "Exact numbers".
+  - The offline test host renders the panel with a real snapshot taken through the whole chain (the present, the GPU copy, the read-back, the manager's image).
+- **Addon API 1.2: `IHost::CreateImage` and `ReleaseImage`.** An addon hands over RGBA pixels and gets back an image to draw in its panel with `ImGui::Image`, made on the manager
+  window's own device, which an addon cannot reach otherwise. Appended at the end of the interface, so older addons are unaffected; the core test checks it. Neural Rendering now asks
+  for API 1.2.
 - **Screenshots** (Neural Rendering's panel, Screenshots; and Ctrl+Shift+F11 in the game, which can be changed):
   - The picture is taken as it is shown, with Neural Rendering's result, the scaling and frame generation in it. It is taken where the result is added to the presented frame, so it needs no
     ReShade.

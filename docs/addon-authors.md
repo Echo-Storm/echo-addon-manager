@@ -79,6 +79,7 @@ Capabilities: `EAM_CAP_HAS_SETTINGS`, `EAM_CAP_REQUIRES_RESTART` (enabling or di
 | `SubscribeEvent`, `UnsubscribeEvent`, `PublishEvent` | the event bus (events in `events.h`) |
 | `GetD3D11Device()`, `GetD3D11DeviceContext()` | with `EAM_CAP_D3D11_DEVICE_ACCESS` |
 | `SetPreDispatchCallback`, `SetPostDispatchCallback`, `GetCurrentComputeShader`, `GetDispatchCount`, `GetDispatchingContext` (API 1.1) | with `EAM_CAP_DISPATCH_HOOK`. The callbacks run on Lossless Scaling's render thread for each of its compute passes, on any of its devices; `GetDispatchingContext` says which. |
+| `CreateImage`, `ReleaseImage` (API 1.2) | Pixels you have (RGBA8) as an image for `ImGui::Image` in your panel, made on the manager window's own device (an addon cannot reach it otherwise). Release it when it is no longer drawn. |
 | `SetStatus(addonId, text, level)` | one line on your card and in the status bar ("Running, model 6.6 ms"); level 0 grey, 1 green, 2 amber, 3 red; refresh it, a status not refreshed for a few seconds is hidden |
 | `PublishMetric(addonId, key, value, unit)` | a number for the Performance tab; call it as often as you have a new value (the manager keeps the newest few thousand per series) |
 

@@ -3,6 +3,7 @@
 #include "addon/state.h"
 #include "addon/present_hook.h"
 #include "addon/screenshot.h"
+#include "addon/hud_editor.h"
 #include "imgui.h"
 #include <eam/widgets.h>
 #include <windows.h>
@@ -289,32 +290,39 @@ void DrawPanel() {
         Tip("How big each grain speck is, in screen pixels. 1 is the finest; on a 4K screen 2 looks closest to film.");
     }
     if (eam::ui::SectionHeader("Keep the HUD untouched")) {
-        Note("Rectangles where the picture stays exactly as Lossless Scaling made it: no model change, sharpening, tone, colour or grain. Use them for action bars, the minimap, chat and text.");
-        changed |= SL("Edge softness", &c.p.hudFeather, 0.0f, 0.05f, c.p.hudFeather <= 0.0005f ? "hard edge" : "%.3f");
-        Tip("How gradually the enhancement fades in outside a protected area, as a fraction of the screen. 0 = a hard edge.");
-        { bool show = g_showHud; if (ImGui::Checkbox("Show the areas on screen (display only)", &show)) g_showHud = show; }
-        Tip("Tints and outlines the protected areas in green so you can line them up with your HUD. Not saved: turn it off when you are done.");
-        int rm = -1;
-        for (uint32_t i = 0; i < c.p.hudCount; ++i) {
-            ImGui::PushID((int)i); float* r = c.p.hud[i];
-            ImGui::Text("Area %u", i + 1); ImGui::SameLine(); if (ImGui::SmallButton("Remove")) rm = (int)i;
-            changed |= eam::ui::SliderFloat("Left", &r[0], 0.0f, 0.99f); changed |= eam::ui::SliderFloat("Top", &r[1], 0.0f, 0.99f);
-            changed |= eam::ui::SliderFloat("Right", &r[2], 0.01f, 1.0f); changed |= eam::ui::SliderFloat("Bottom", &r[3], 0.01f, 1.0f);
-            if (r[2] < r[0] + 0.01f) r[2] = r[0] + 0.01f;
-            if (r[3] < r[1] + 0.01f) r[3] = r[1] + 0.01f;
-            ImGui::PopID();
-        }
-        if (rm >= 0) { for (uint32_t k = (uint32_t)rm; k + 1 < c.p.hudCount; ++k) memcpy(c.p.hud[k], c.p.hud[k + 1], sizeof c.p.hud[k]); c.p.hudCount--; changed = true; }
-        if (c.p.hudCount < (uint32_t)NrParams::kMaxHud && ImGui::SmallButton("Add area")) { const float d[4] = { 0.35f, 0.88f, 0.65f, 1.0f }; memcpy(c.p.hud[c.p.hudCount++], d, sizeof d); changed = true; }
-        Tip("Adds a rectangle along the bottom centre of the screen. Drag its four sliders to cover your HUD.");
+        Note("Areas where the picture stays exactly as Lossless Scaling made it (no model change, sharpening, tone, colour or grain): for action bars, the minimap, chat and text. Draw them on a snapshot of the game.");
+        const bool busy = screenshot::Busy();
+        if (busy) ImGui::BeginDisabled();
+        if (eam::ui::Button(busy ? "Taking it..." : "Take a snapshot", eam::ui::icons::kCheck, eam::ui::ButtonKind::Primary)) screenshot::RequestSnapshot();
+        if (busy) ImGui::EndDisabled();
+        Tip("A picture of the game as it is shown now, to draw the areas on. The game must be running and scaled. Take another one any time.");
         ImGui::SameLine();
+        { bool show = g_showHud; if (ImGui::Checkbox("Show the areas in the game", &show)) g_showHud = show; }
+        Tip("Tints and outlines the areas in green in the game itself, to check them against your HUD. Not saved: turn it off when you are done.");
+        ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
+        changed |= DrawHudEditor(c.p);
+        Note("Drag on the picture to add an area (six at most). Drag an area to move it, an edge or corner to resize it. Right-click an area to remove it.");
+        changed |= SL("Edge softness", &c.p.hudFeather, 0.0f, 0.05f, c.p.hudFeather <= 0.0005f ? "hard edge" : "%.3f");
+        Tip("How gradually the enhancement fades in outside an area, as a fraction of the screen. 0 = a hard edge.");
         if (ImGui::SmallButton("WoW starter layout")) {
             const float d[4][4] = { { 0.0f, 0.0f, 0.30f, 0.17f }, { 0.86f, 0.0f, 1.0f, 0.24f }, { 0.0f, 0.70f, 0.26f, 1.0f }, { 0.27f, 0.88f, 0.73f, 1.0f } };
             memcpy(c.p.hud, d, sizeof d); c.p.hudCount = 4; changed = true;
         }
-        Tip("Fills four areas where World of Warcraft's default interface sits: unit frames (top left), minimap (top right), chat (bottom left) and the action bars (bottom centre). A starting point: turn on 'Show the areas' and adjust to your own layout.");
+        Tip("Four areas where World of Warcraft's default interface sits: unit frames (top left), minimap (top right), chat (bottom left) and the action bars (bottom centre). A starting point to adjust on the snapshot.");
         if (c.p.hudCount) { ImGui::SameLine(); if (ImGui::SmallButton("Clear all")) { c.p.hudCount = 0; changed = true; } }
-        Note("Areas are saved with the preset, so each game can have its own layout.");
+        if (c.p.hudCount && ImGui::TreeNode("Exact numbers")) {
+            for (uint32_t i = 0; i < c.p.hudCount; ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                float* r = c.p.hud[i];
+                ImGui::Text("Area %u", i + 1);
+                changed |= eam::ui::SliderFloat("Left", &r[0], 0.0f, 0.99f); changed |= eam::ui::SliderFloat("Top", &r[1], 0.0f, 0.99f);
+                changed |= eam::ui::SliderFloat("Right", &r[2], 0.01f, 1.0f); changed |= eam::ui::SliderFloat("Bottom", &r[3], 0.01f, 1.0f);
+                r[2] = std::max(r[2], r[0] + 0.01f); r[3] = std::max(r[3], r[1] + 0.01f);
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
+        Note("Areas are saved with the look, so each game can have its own layout.");
     }
     if (eam::ui::SectionHeader("Compare and hotkeys")) {
         int cm = g_compare; const char* cms[] = { "Enhanced", "Split: left original | right enhanced", "Original only (before)" };

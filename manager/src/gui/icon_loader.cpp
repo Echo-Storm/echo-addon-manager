@@ -50,6 +50,19 @@ bool DecodeImageFile(const std::wstring& path, std::vector<unsigned char>& rgba,
     return true;
 }
 
+ID3D11ShaderResourceView* MakeImageTexture(const void* rgba, uint32_t w, uint32_t h, uint32_t pitch) {
+    if (!g_device || !rgba || w == 0 || h == 0 || w > 4096 || h > 4096 || pitch < w * 4) return nullptr;
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = w; desc.Height = h; desc.MipLevels = 1; desc.ArraySize = 1; desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1; desc.Usage = D3D11_USAGE_IMMUTABLE; desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    const D3D11_SUBRESOURCE_DATA pixels{ rgba, pitch, 0 };
+    ID3D11Texture2D* texture = nullptr;
+    HRESULT hr = g_device->CreateTexture2D(&desc, &pixels, &texture);
+    ID3D11ShaderResourceView* view = nullptr;
+    if (SUCCEEDED(hr)) { hr = g_device->CreateShaderResourceView(texture, nullptr, &view); texture->Release(); }
+    return SUCCEEDED(hr) ? view : nullptr;
+}
+
 ID3D11ShaderResourceView* LoadIconTexture(const std::wstring& path) {
     if (!g_device) return nullptr;
     std::vector<unsigned char> rgba;

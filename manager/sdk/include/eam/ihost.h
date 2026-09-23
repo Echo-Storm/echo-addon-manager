@@ -74,4 +74,12 @@ struct IHost {
     // Inside a dispatch callback: the ID3D11DeviceContext the pass runs on (borrowed, do not Release). Lossless Scaling makes more than one
     // device, and this tells them apart. Null outside a callback.
     virtual void* GetDispatchingContext() = 0;
+
+    // ---- API 1.2 (GetHostVersion() >= 0x010200)
+
+    // An RGBA picture, 8 bits a channel, rows top to bottom `pitch` bytes apart, made into an image to draw with ImGui::Image (the result is its
+    // ImTextureID). Null when the manager's window has no device yet, or the picture is larger than 4096 pixels a side. The pixels are copied at
+    // once. Give it back with ReleaseImage when it is no longer drawn. Any thread.
+    virtual void* CreateImage(const void* rgba, uint32_t width, uint32_t height, uint32_t pitch) = 0;
+    virtual void ReleaseImage(void* image) = 0;
 };

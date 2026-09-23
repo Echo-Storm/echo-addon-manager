@@ -6,6 +6,8 @@
 #include "addon/state.h"
 #include "addon/log.h"
 #include "addon/present_hook.h"
+#include "addon/hud_editor.h"
+#include "addon/screenshot.h"
 #include "imgui.h"
 #include <eam/widgets.h>
 #include <windows.h>
@@ -100,6 +102,7 @@ void Start(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void
     ScanRequirements();
     // a switch for the offline test host: run the compatibility test without a click
     if (std::string(host->GetConfig(kAddonId, "selfTestOnStart", "0")) == "1") RunSelfTest();
+    if (std::string(host->GetConfig(kAddonId, "snapshotOnStart", "0")) == "1") screenshot::RequestSnapshot();   // likewise: a snapshot for the HUD editor
     host->SubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent, nullptr);
     host->SubscribeEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent, nullptr);
     Log("DLSS5NR01 initialised (host version 0x%x), addon dir %ls", host->GetHostVersion(), g_addonDir.c_str());
@@ -139,6 +142,7 @@ EAM_EXPORT void AddonShutdown() {
         g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent);
     }
     PresentHook::Uninstall();
+    DropHudSnapshot();
     for (int i = 0; i < 3000 && g_engineStarting; ++i) Sleep(10);   // a model that is loading is let finish
     for (int i = 0; i < 300 && Scanning(); ++i) Sleep(10);          // a requirements scan takes milliseconds (an open file dialog is left: the process is ending)
     { std::lock_guard<std::mutex> lock(g_frameMutex); g_bridge.Shutdown(); g_compose.Shutdown(); g_engine.Shutdown(); }

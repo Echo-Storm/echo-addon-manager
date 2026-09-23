@@ -14,12 +14,16 @@ namespace nr::screenshot {
 
 namespace {
 
-std::atomic<bool> g_requested{ false }, g_writing{ false }, g_choosing{ false };
+std::atomic<bool> g_requested{ false }, g_writing{ false }, g_choosing{ false }, g_snapshotRequested{ false };
+struct Snapshot { std::vector<unsigned char> rgba; unsigned w = 0, h = 0; uint64_t serial = 0; };
+std::mutex g_snapshotMutex;
+Snapshot g_snapshot;
+constexpr unsigned kSnapshotWidth = 960;
 std::mutex g_resultMutex;
 std::string g_result; bool g_resultOk = false;
 
 // The copy in progress (render thread only, under g_frameMutex).
-struct Pending { ID3D11Texture2D* staging = nullptr; DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN; unsigned w = 0, h = 0; int presentsWaited = 0; std::wstring path; };
+struct Pending { ID3D11Texture2D* staging = nullptr; DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN; unsigned w = 0, h = 0; int presentsWaited = 0; std::wstring path; bool snapshot = false; };
 Pending g_pending;
 constexpr int kWaitPresents = 30;   // after this many presents the read-back waits for the GPU (it has long finished by then)
 
@@ -94,6 +98,25 @@ void Finish(ID3D11DeviceContext* ctx, bool wait) {
     ctx->Unmap(done.staging, 0);
     done.staging->Release();
     if (!converted) { SetResult("Frames in this format cannot be saved yet.", false); g_writing = false; return; }
+    if (done.snapshot) {   // shrunk by a whole factor with a box filter, and turned to RGBA for the panel
+        const unsigned factor = (done.w + kSnapshotWidth - 1) / kSnapshotWidth, sw = done.w / factor, sh = done.h / factor;
+        Snapshot shot; shot.w = sw; shot.h = sh; shot.rgba.resize(static_cast<size_t>(sw) * sh * 4);
+        for (unsigned y = 0; y < sh; ++y)
+            for (unsigned x = 0; x < sw; ++x) {
+                unsigned sum[3] = {};
+                for (unsigned dy = 0; dy < factor; ++dy)
+                    for (unsigned dx = 0; dx < factor; ++dx) {
+                        const unsigned char* p = bgra.data() + ((static_cast<size_t>(y) * factor + dy) * done.w + static_cast<size_t>(x) * factor + dx) * 4;
+                        sum[0] += p[2]; sum[1] += p[1]; sum[2] += p[0];
+                    }
+                unsigned char* out = shot.rgba.data() + (static_cast<size_t>(y) * sw + x) * 4;
+                for (int k = 0; k < 3; ++k) out[k] = static_cast<unsigned char>(sum[k] / (factor * factor));
+                out[3] = 255;
+            }
+        { std::lock_guard<std::mutex> lock(g_snapshotMutex); shot.serial = g_snapshot.serial + 1; g_snapshot = std::move(shot); }
+        g_writing = false;
+        return;
+    }
     std::thread([pixels = std::move(bgra), done] {
         std::string error;
         if (WritePng(done.path, pixels, done.w, done.h, error)) { SetResult("Saved " + Utf8(done.path), true); Log("screenshot: %s", Utf8(done.path).c_str()); }
@@ -105,11 +128,20 @@ void Finish(ID3D11DeviceContext* ctx, bool wait) {
 } // namespace
 
 void Request() { g_requested = true; }
+void RequestSnapshot() { g_snapshotRequested = true; }
+
+bool NewSnapshot(uint64_t& serial, std::vector<unsigned char>& rgba, unsigned& w, unsigned& h) {
+    std::lock_guard<std::mutex> lock(g_snapshotMutex);
+    if (g_snapshot.serial <= serial || g_snapshot.rgba.empty()) return false;
+    serial = g_snapshot.serial; rgba = g_snapshot.rgba; w = g_snapshot.w; h = g_snapshot.h;
+    return true;
+}
 
 void OnPresent(ID3D11DeviceContext* ctx, IDXGISwapChain* chain, const std::string& game) {
     if (g_pending.staging) Finish(ctx, ++g_pending.presentsWaited >= kWaitPresents);
-    if (!g_requested || g_pending.staging || g_writing) return;
-    g_requested = false;
+    if ((!g_requested && !g_snapshotRequested) || g_pending.staging || g_writing) return;
+    const bool snapshot = !g_requested && g_snapshotRequested;   // a screenshot first when both were asked for
+    (snapshot ? g_snapshotRequested : g_requested) = false;
     ID3D11Texture2D* buffer = nullptr;
     if (FAILED(chain->GetBuffer(0, IID_PPV_ARGS(&buffer)))) { SetResult("Lossless Scaling's picture could not be reached.", false); return; }
     D3D11_TEXTURE2D_DESC desc; buffer->GetDesc(&desc);
@@ -124,7 +156,7 @@ void OnPresent(ID3D11DeviceContext* ctx, IDXGISwapChain* chain, const std::strin
     ctx->CopyResource(copy, buffer);
     buffer->Release();
     g_writing = true;
-    g_pending = { copy, desc.Format, desc.Width, desc.Height, 0, NewPath(game) };
+    g_pending = { copy, desc.Format, desc.Width, desc.Height, 0, snapshot ? std::wstring() : NewPath(game), snapshot };
 }
 
 void Forget() {
@@ -172,7 +204,7 @@ void ChooseFolder() {
 }
 
 bool Choosing() { return g_choosing; }
-bool Busy() { return g_requested || g_writing; }
+bool Busy() { return g_requested || g_snapshotRequested || g_writing; }
 
 std::string LastResult(bool& ok) {
     std::lock_guard<std::mutex> lock(g_resultMutex);

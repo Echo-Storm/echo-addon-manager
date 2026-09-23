@@ -30,7 +30,7 @@ struct FakeHost : IHost {
     const char* GetConfig(const char*, const char* k, const char* d) override { auto it = cfg.find(k); return it == cfg.end() ? d : it->second.c_str(); }
     void SetConfig(const char*, const char* k, const char* v) override { cfg[k] = v; }
     void SaveConfig() override {}
-    uint32_t GetHostVersion() override { return 0x10100; }   // API 1.1: the dispatching context is known
+    uint32_t GetHostVersion() override { return 0x10200; }   // API 1.2: images for the panel
     void SubscribeEvent(uint32_t id, EamEventCallback cb, void* ud) override { subs.push_back({ id, cb, ud }); }
     void UnsubscribeEvent(uint32_t id, EamEventCallback cb) override { for (size_t i = 0; i < subs.size();) if (subs[i].id == id && subs[i].cb == cb) subs.erase(subs.begin() + i); else ++i; }
     void PublishEvent(uint32_t id, const void* d, uint32_t n) override { auto copy = subs; for (auto& s : copy) if (s.id == id) s.cb(id, d, n, s.ud); }
@@ -43,6 +43,20 @@ struct FakeHost : IHost {
     void* GetCurrentComputeShader() override { return nullptr; }
     uint32_t GetDispatchCount() override { return dispatches; }
     void* GetDispatchingContext() override { return dispatching; }
+    // images for the panel, on the shot renderer's device (none without shot=)
+    ID3D11Device* imageDevice = nullptr;
+    void* CreateImage(const void* rgba, uint32_t w, uint32_t h, uint32_t pitch) override {
+        if (!imageDevice || !rgba) return nullptr;
+        D3D11_TEXTURE2D_DESC d{}; d.Width = w; d.Height = h; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_R8G8B8A8_UNORM; d.SampleDesc.Count = 1;
+        d.Usage = D3D11_USAGE_IMMUTABLE; d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        const D3D11_SUBRESOURCE_DATA px{ rgba, pitch, 0 };
+        ID3D11Texture2D* t = nullptr; ID3D11ShaderResourceView* v = nullptr;
+        if (SUCCEEDED(imageDevice->CreateTexture2D(&d, &px, &t))) { imageDevice->CreateShaderResourceView(t, nullptr, &v); t->Release(); }
+        if (v) ++images;
+        return v;
+    }
+    void ReleaseImage(void* image) override { if (image) static_cast<IUnknown*>(image)->Release(); }
+    int images = 0;
     void Dispatch(ID3D11DeviceContext* c, UINT x, UINT y, UINT z) {
         ++dispatches; dispatching = c;
         const bool skip = pre && pre(x, y, z, preUser);
@@ -129,6 +143,7 @@ int main(int argc, char** argv) {
         if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
+    if (shotMode) host.imageDevice = shot.dev;
     Init(&host, ctx, (void*)af, (void*)ff, ud);
 
     auto panel = [&]() {

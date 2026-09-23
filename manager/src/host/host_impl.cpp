@@ -2,6 +2,7 @@
 #include "metrics.h"
 #include "../config/config_manager.h"
 #include "../core/d3d11_hook.h"
+#include "../gui/icon_loader.h"
 #include "../event/event_system.h"
 #include "../log/logger.h"
 #include "../../sdk/include/eam/version.h"
@@ -107,6 +108,8 @@ void HostImpl::SetD3D11Device(void* device, void* context) {
 void* HostImpl::GetCurrentComputeShader() { return D3D11Hook::GetCurrentComputeShader(); }
 uint32_t HostImpl::GetDispatchCount() { return D3D11Hook::GetDispatchCount(); }
 void* HostImpl::GetDispatchingContext() { return D3D11Hook::DispatchingContext(); }
+void* HostImpl::CreateImage(const void* rgba, uint32_t width, uint32_t height, uint32_t pitch) { return MakeImageTexture(rgba, width, height, pitch); }
+void HostImpl::ReleaseImage(void* image) { if (image) static_cast<IUnknown*>(image)->Release(); }
 
 // ---- dispatch callbacks
 

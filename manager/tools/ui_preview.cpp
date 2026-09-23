@@ -78,6 +78,8 @@ struct FakeHost : IHost {
     void* GetCurrentComputeShader() override { return nullptr; }
     uint32_t GetDispatchCount() override { return 0; }
     void* GetDispatchingContext() override { return nullptr; }
+    void* CreateImage(const void*, uint32_t, uint32_t, uint32_t) override { return nullptr; }
+    void ReleaseImage(void*) override {}
     void SetStatus(const char*, const char*, int) override {}
     void PublishMetric(const char*, const char*, double, const char*) override {}
 };

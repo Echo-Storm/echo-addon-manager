@@ -36,6 +36,8 @@ public:
     void* GetCurrentComputeShader() override;
     uint32_t GetDispatchCount() override;
     void* GetDispatchingContext() override;
+    void* CreateImage(const void* rgba, uint32_t width, uint32_t height, uint32_t pitch) override;
+    void ReleaseImage(void* image) override;
 
     void SetStatus(const char* addonId, const char* text, int level) override;
     void PublishMetric(const char* addonId, const char* key, double value, const char* unit) override;

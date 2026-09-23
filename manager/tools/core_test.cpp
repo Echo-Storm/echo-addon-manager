@@ -10,6 +10,7 @@
 #include "src/core/d3d11_hook.h"
 #include "src/core/instance_guard.h"
 #include "src/core/shader_hook.h"
+#include "src/gui/icon_loader.h"
 #include "abi_v1_0.h"
 #include "src/event/event_system.h"
 #include "src/host/gpu_stats.h"
@@ -557,6 +558,27 @@ static void TestFrozenAbi() {
     Check("Log and SaveConfig return", true);
 }
 
+// ---- images for addons' panels (API 1.2), made on the window's device
+
+static void TestImages() {
+    printf("== images for addon panels\n");
+    HostImpl h;
+    const uint32_t pixels[4] = { 0xFF0000FFu, 0xFF00FF00u, 0xFFFF0000u, 0xFFFFFFFFu };
+    Check("without the window's device there is no image, and giving back nothing is harmless", h.CreateImage(pixels, 2, 2, 8) == nullptr);
+    h.ReleaseImage(nullptr);
+    ID3D11Device* dev = nullptr;
+    D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &dev, nullptr, nullptr);
+    if (!dev) { Check("a WARP device for the test", false); return; }
+    SetIconDevice(dev);
+    void* const image = h.CreateImage(pixels, 2, 2, 8);
+    Check("with it, pixels become an image an addon can draw", image != nullptr);
+    Check("a picture larger than 4096 pixels a side, or a pitch too small for its width, is refused",
+          h.CreateImage(pixels, 5000, 1, 20000) == nullptr && h.CreateImage(pixels, 2, 2, 4) == nullptr);
+    h.ReleaseImage(image);
+    SetIconDevice(nullptr);
+    dev->Release();
+}
+
 // ---- the resource hook, on this program's own imports of kernel32's resource functions
 
 static void TestResourceHook() {
@@ -691,7 +713,7 @@ int main(int argc, char** argv) {
     WriteFile(A / "config.json", R"({"addons":{"beta":{"_enabled":false},"renamed_old":{"_enabled":false,"keep":"me"}},"global":{"security_level":0}})");
 
     setvbuf(stdout, nullptr, _IONBF, 0);
-    try { TestInstanceGuard(T); TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); TestFrozenAbi(); TestResourceHook(); TestDispatchHook(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
+    try { TestInstanceGuard(T); TestConfig(T); TestHost(T); TestDependencies(); TestSecurity(T); TestEvents(); TestFrozenAbi(); TestImages(); TestResourceHook(); TestDispatchHook(); } catch (const std::exception& e) { Check("the settings tests ran to the end", false, e.what()); }
 
     HostImpl host;
     int loadedEvents = 0, unloadedEvents = 0;
