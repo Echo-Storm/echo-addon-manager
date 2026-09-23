@@ -16,5 +16,4 @@ namespace DispatchHook {
     int  Install(Callback cb, void* user, LogFn log);
     void Uninstall();
     int  Count();
-    unsigned VariantHits(int i);   // diagnostics: how often entry point i has fired
 }

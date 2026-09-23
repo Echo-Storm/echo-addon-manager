@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+A bug sweep of the manager itself (the code that runs inside Lossless Scaling), with a failing test written for each bug before it was fixed, and dead code removed.
+
+- **Loading settings from a file no longer gets undone by the restart it asks for.** The running addons still hold their old settings, and Neural Rendering writes all of its settings back when it
+  shuts down, so the restart put the old saved looks, per-game looks and sliders back over the imported ones. After an import, every later write (by an addon or by the manager) now waits for the restart,
+  and the Settings tab says so until then.
+- **An addon's dispatch callback that faults no longer ends Lossless Scaling.** These callbacks run on Lossless Scaling's render thread and were called unguarded; a faulting one is now removed and logged.
+- **Switching an addon off takes back the callbacks it left registered.** An addon that forgets to unsubscribe from events or clear its dispatch callback left pointers into its unloaded DLL; the next
+  dispatch would have run freed code. Everything whose code lies in the addon's DLL is removed when it is unloaded, and the log names the addon.
+- **Settings that are not valid UTF-8 no longer crash the save.** An addon storing text in the ANSI code page (a path with an accented letter, for example) made writing `config.json`, and a settings backup,
+  throw; such bytes are now replaced.
+- **A hand-edited `config.json` whose `addons` or `global` is not an object** no longer throws at the first write: those parts start afresh and the original file is kept as `config.json.corrupt`. An addon
+  entry that is not an object is replaced when that addon writes to it.
+- **One bad frame no longer takes the manager window, and Lossless Scaling, down.** An error while drawing or while handling a click (a file that could not be written, a folder that vanished) is caught,
+  the half-drawn frame is unwound with Dear ImGui's error recovery, and the window carries on with a note in the log and a toast.
+- Two settings imports in the same second no longer overwrite each other's copy of the previous settings.
+- **Dead code removed:** the "LS1 logic" memory patches inherited from the original project (19 hard-coded addresses for an old Lossless Scaling build, which could never be applied because the hooks are
+  installed before any addon's capabilities are known; the capability bit stays in the SDK as reserved, with no effect), two DirectX 11 vtable hooks that only passed calls through
+  (`CSSetShaderResources`, `CSSetUnorderedAccessViews`: one less patch in Lossless Scaling and one less hop per call), an unused `ReloadAddons`, and a per-dispatch counter in Neural Rendering that was
+  never read. A duplicated test header is shared instead of copied.
+- Neural Rendering and the sample addon use `FetchContent_MakeAvailable` instead of `FetchContent_Populate`, which newer CMake releases deprecate and will remove.
+- New checks: the core test covers settings of the wrong shape, invalid UTF-8, the import freeze, faulting dispatch callbacks and an addon that leaves its callbacks behind (a new "leaky" test-addon mode);
+  the window test makes frames throw and checks the window survives.
+
 ## 0.7.0 (2026-09-21)
 
 Upgrading from 0.6.0: run `EchoAddonManagerSetup.exe` from the new zip and choose **Update**, or copy the new files over the old ones. Nothing to migrate. The addon API is unchanged (1.0.0).

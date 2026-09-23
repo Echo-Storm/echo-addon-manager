@@ -23,7 +23,6 @@ public:
     void ScanAddons();                      // rebuild the list from disk
     void LoadAddons();                      // load the DLL of every enabled addon
     void UnloadAddons();
-    void ReloadAddons();
     void InitializeAddons(ImGuiContext* ctx);   // call each loaded addon's AddonInitialize
 
     std::vector<AddonInfo>& GetAddons();

@@ -19,9 +19,9 @@ FetchContent_Declare(imgui
     GIT_TAG        367b2c24f399988ddafc0bb4628da0106bcc09be)
 FetchContent_Declare(minhook
     GIT_REPOSITORY https://github.com/TsudaKageyu/minhook.git
-    GIT_TAG        v1.3.4)
-FetchContent_Populate(imgui)
-FetchContent_Populate(minhook)
+    GIT_TAG        v1.3.4
+    SOURCE_SUBDIR  cmake-not-used)   # sources only: minhook_static below is built with this addon's static runtime, not minhook's own CMake project
+FetchContent_MakeAvailable(imgui minhook)   # Dear ImGui has no CMake project of its own: this only fetches it
 
 add_library(minhook_static STATIC
     ${minhook_SOURCE_DIR}/src/buffer.c ${minhook_SOURCE_DIR}/src/hook.c
@@ -73,7 +73,7 @@ add_executable(nr_hosttest tools/addon_host_test.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp)
-target_include_directories(nr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+target_include_directories(nr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${CMAKE_SOURCE_DIR}/../../manager/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(nr_hosttest PRIVATE d3d11 dxgi d3dcompiler)
 add_dependencies(nr_hosttest DLSS5NR01)
 

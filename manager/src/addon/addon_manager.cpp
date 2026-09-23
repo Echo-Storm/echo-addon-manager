@@ -300,12 +300,6 @@ void AddonManager::UnloadAddons() {
     for (auto it = m_addons.rbegin(); it != m_addons.rend(); ++it) UnloadModule(*it);   // dependents first
 }
 
-void AddonManager::ReloadAddons() {
-    UnloadAddons();
-    ScanAddons();
-    LoadAddons();
-}
-
 // ---------------------------------------------------------------------------------------------------------------------------------
 // While it runs
 // ---------------------------------------------------------------------------------------------------------------------------------

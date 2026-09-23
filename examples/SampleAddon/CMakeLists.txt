@@ -11,7 +11,7 @@ add_definitions(-DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN -DNOMINMAX -D_CRT_SEC
 # This is the commit pinned in manager/CMakeLists.txt.
 include(FetchContent)
 FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG 367b2c24f399988ddafc0bb4628da0106bcc09be)
-FetchContent_Populate(imgui)
+FetchContent_MakeAvailable(imgui)   # Dear ImGui has no CMake project of its own: this only fetches it
 
 add_library(SampleAddon SHARED
     SampleAddon.cpp

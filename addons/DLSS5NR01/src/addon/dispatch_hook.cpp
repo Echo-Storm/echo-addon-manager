@@ -19,9 +19,7 @@ DispatchHook::Callback g_cb = nullptr;
 void* g_user = nullptr;
 thread_local int t_depth = 0;
 
-unsigned g_variantHits[kMax] = {};
 template <int N> void STDMETHODCALLTYPE Detour(ID3D11DeviceContext* ctx, UINT x, UINT y, UINT z) {
-    g_variantHits[N]++;
     // Only the outermost entry invokes the callback: a refresh stub tail-jumps into the resolved
     // implementation (also hooked), so the guard must stay raised across the original call.
     bool skip = false;
@@ -101,4 +99,3 @@ void DispatchHook::Uninstall() {
 }
 
 int DispatchHook::Count() { return g_count; }
-unsigned DispatchHook::VariantHits(int i) { return (i >= 0 && i < kMax) ? g_variantHits[i] : 0; }

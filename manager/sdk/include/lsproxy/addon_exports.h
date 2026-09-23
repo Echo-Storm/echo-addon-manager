@@ -12,7 +12,7 @@ enum LsProxyAddonCaps : uint32_t {
     LSPROXY_CAP_NONE             = 0,
     LSPROXY_CAP_HAS_SETTINGS     = 1 << 0,  // Addon provides a settings UI via AddonRenderSettings
     LSPROXY_CAP_REQUIRES_RESTART = 1 << 1,  // Enable/disable requires app restart (no hot reload)
-    LSPROXY_CAP_PATCH_LS1_LOGIC      = 1 << 3,  // Request host to patch LS1 JMP instructions
+    LSPROXY_CAP_PATCH_LS1_LOGIC      = 1 << 3,  // Reserved, has no effect (it never did in this manager); kept so older addons still compile
     LSPROXY_CAP_D3D11_DEVICE_ACCESS  = 1 << 4,  // Request D3D11 device/context pointers via IHost
     LSPROXY_CAP_DISPATCH_HOOK        = 1 << 5   // Request pre/post Dispatch callbacks
 };

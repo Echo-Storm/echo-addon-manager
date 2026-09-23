@@ -24,15 +24,9 @@ typedef void(STDMETHODCALLTYPE* PFN_Dispatch)(
     ID3D11DeviceContext*, UINT, UINT, UINT);
 typedef void(STDMETHODCALLTYPE* PFN_CSSetShader)(
     ID3D11DeviceContext*, ID3D11ComputeShader*, ID3D11ClassInstance* const*, UINT);
-typedef void(STDMETHODCALLTYPE* PFN_CSSetShaderResources)(
-    ID3D11DeviceContext*, UINT, UINT, ID3D11ShaderResourceView* const*);
-typedef void(STDMETHODCALLTYPE* PFN_CSSetUnorderedAccessViews)(
-    ID3D11DeviceContext*, UINT, UINT, ID3D11UnorderedAccessView* const*, const UINT*);
 
 static PFN_Dispatch g_origDispatch = nullptr;
 static PFN_CSSetShader g_origCSSetShader = nullptr;
-static PFN_CSSetShaderResources g_origCSSetSRVs = nullptr;
-static PFN_CSSetUnorderedAccessViews g_origCSSetUAVs = nullptr;
 
 // Track currently bound compute shader for dispatch identification
 static ID3D11ComputeShader* g_currentCS = nullptr;
@@ -46,24 +40,6 @@ static void STDMETHODCALLTYPE HookedCSSetShader(
     g_currentCS = shader;
     if (g_origCSSetShader) {
         g_origCSSetShader(ctx, shader, classInstances, numClassInstances);
-    }
-}
-
-static void STDMETHODCALLTYPE HookedCSSetSRVs(
-    ID3D11DeviceContext* ctx, UINT startSlot, UINT numViews,
-    ID3D11ShaderResourceView* const* views)
-{
-    if (g_origCSSetSRVs) {
-        g_origCSSetSRVs(ctx, startSlot, numViews, views);
-    }
-}
-
-static void STDMETHODCALLTYPE HookedCSSetUAVs(
-    ID3D11DeviceContext* ctx, UINT startSlot, UINT numUAVs,
-    ID3D11UnorderedAccessView* const* views, const UINT* initialCounts)
-{
-    if (g_origCSSetUAVs) {
-        g_origCSSetUAVs(ctx, startSlot, numUAVs, views, initialCounts);
     }
 }
 
@@ -116,12 +92,6 @@ static void InstallDispatchHook(ID3D11DeviceContext* ctx) {
 
     if (HookVtableSlot(vtable, 39, (void*)&HookedCSSetShader, (void**)&g_origCSSetShader))
         LOG_INFO("D3D11Hook", "CSSetShader hook installed (slot 39)");
-
-    if (HookVtableSlot(vtable, 37, (void*)&HookedCSSetSRVs, (void**)&g_origCSSetSRVs))
-        LOG_INFO("D3D11Hook", "CSSetShaderResources hook installed (slot 37)");
-
-    if (HookVtableSlot(vtable, 38, (void*)&HookedCSSetUAVs, (void**)&g_origCSSetUAVs))
-        LOG_INFO("D3D11Hook", "CSSetUnorderedAccessViews hook installed (slot 38)");
 
     g_hookedVtable = vtable;
 }

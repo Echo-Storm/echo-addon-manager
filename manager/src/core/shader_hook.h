@@ -11,7 +11,6 @@ namespace ShaderHook {
 
 struct CachedShader {
     std::vector<uint8_t> bytecode;
-    uint32_t size = 0;
 };
 
 void Initialize(lsproxy::AddonManager* addonManager);
