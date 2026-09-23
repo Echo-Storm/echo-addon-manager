@@ -10,6 +10,14 @@ The manager and Neural Rendering now show 0.8.0.
   - Without a snapshot the same editing works on an empty box of the frame's shape. The World of Warcraft starter layout, Clear all and edge softness stay, and the exact numbers are
     still there, folded under "Exact numbers".
   - The offline test host renders the panel with a real snapshot taken through the whole chain (the present, the GPU copy, the read-back, the manager's image).
+- **Auto quality** (Neural Rendering's panel, Quality and performance; off by default): keeps the model within a time budget you set.
+  - While the model runs over the budget, it lowers the model resolution, and raises it back toward your own setting when there is room again. Your setting is the most it uses; a
+    lowest resolution you choose is the least.
+  - It changes slowly, because each change rebuilds the model (a short hitch): down after 3 s over the budget, up after 10 s well under it, and only up when the model time it expects at
+    the higher resolution still fits. Frames slower than 100 ms (a loading screen, a pause) are not judged. Nothing that changes the look is touched.
+  - The panel shows the resolution it runs at and its recent changes; the log names each change, and the manager's Performance tab gets a `model_scale` number.
+  - `nr_autotest` drives it with a simulated model: it settles within the budget without swinging back and forth, goes back up when the model gets faster, and keeps to the floor, the
+    ceiling and the pauses.
 - **Addon API 1.2: `IHost::CreateImage` and `ReleaseImage`.** An addon hands over RGBA pixels and gets back an image to draw in its panel with `ImGui::Image`, made on the manager
   window's own device, which an addon cannot reach otherwise. Appended at the end of the interface, so older addons are unaffected; the core test checks it. Neural Rendering now asks
   for API 1.2.

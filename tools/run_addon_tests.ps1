@@ -50,9 +50,10 @@ $suites = [ordered]@{
                    Build = @('installer', 'setup_core', 'setup_cli', 'pack_payload', 'EchoAddonManagerSetup');
                    Script = "$root\installer\tests\setup_exe_test.ps1" }
     nr        = @{ When = '^addons/DLSS5NR01/(src|tools|CMakeLists)|^manager/sdk/|^tools/run_hosttest_matrix';
-                   Build = @('nr', 'nr_reqtest', 'nr_taptest', 'nr_settingstest', 'DLSS5NR01', 'nr_hosttest', 'nr_selftest');
+                   Build = @('nr', 'nr_reqtest', 'nr_taptest', 'nr_settingstest', 'nr_autotest', 'DLSS5NR01', 'nr_hosttest', 'nr_selftest');
                    Runs = @(@('Neural Rendering requirements check', "$nrBuild\Release\nr_reqtest.exe", @()),
                             @('Neural Rendering settings and looks', "$nrBuild\Release\nr_settingstest.exe", @()),
+                            @('Neural Rendering auto quality', "$nrBuild\Release\nr_autotest.exe", @()),
                             @('Neural Rendering frame tap', "$nrBuild\Release\nr_taptest.exe", @()));
                    Matrix = $true }
 }

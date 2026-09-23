@@ -150,6 +150,9 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.keyAB = integer("keyAB", VK_F6); c.keySplit = integer("keySplit", VK_F7); c.keySharpDn = integer("keySharpDn", VK_F8);
     c.keySharpUp = integer("keySharpUp", VK_F9); c.keyPreset = integer("keyPreset", VK_F10); c.keyShot = integer("keyShot", VK_F11);
     c.screenshotFolder = text("screenshotFolder");
+    c.autoQuality = flag("autoQuality", false);
+    c.autoBudgetMs = std::clamp(static_cast<float>(number("autoBudgetMs", 5.0)), 2.0f, 15.0f);
+    c.autoFloor = std::clamp(static_cast<float>(number("autoFloor", 0.25)), 0.25f, 1.0f);
     c.gameAuto = flag("gameAuto", true);
     for (const std::string& exe : SplitList(text("gameList"))) {
         const std::string look = text("game." + exe);
@@ -182,6 +185,7 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
     put("keyAB", std::to_string(c.keyAB)); put("keySplit", std::to_string(c.keySplit)); put("keySharpDn", std::to_string(c.keySharpDn));
     put("keySharpUp", std::to_string(c.keySharpUp)); put("keyPreset", std::to_string(c.keyPreset)); put("keyShot", std::to_string(c.keyShot));
     put("screenshotFolder", c.screenshotFolder);
+    putFlag("autoQuality", c.autoQuality); put("autoBudgetMs", Number(c.autoBudgetMs)); put("autoFloor", Number(c.autoFloor));
     putFlag("gameAuto", c.gameAuto);
     std::vector<std::string> exes;
     for (const auto& [exe, look] : c.games) { exes.push_back(exe); put("game." + exe, look); }

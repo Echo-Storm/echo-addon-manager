@@ -34,6 +34,8 @@ LUID g_frameCard{}; std::atomic<bool> g_frameCardKnown{ false };
 std::atomic<int> g_compare{ 0 };
 std::atomic<float> g_splitPos{ 0.5f };
 std::atomic<bool> g_showHud{ false };
+std::mutex g_autoMutex;
+AutoQuality g_auto;
 std::mutex g_textMutex;
 std::string g_status = "waiting for device", g_offReason, g_frameText, g_cardName, g_tappedDeviceText = "none yet", g_focusExe;
 bool g_cardDrivesDisplay = false;

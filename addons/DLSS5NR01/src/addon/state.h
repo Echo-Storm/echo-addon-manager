@@ -7,6 +7,7 @@
 #pragma once
 #include <eam/addon_sdk.h>
 #include "addon/bridge.h"
+#include "addon/auto_quality.h"
 #include "addon/compose11.h"
 #include "addon/frame_tap.h"
 #include "addon/requirements.h"
@@ -51,6 +52,10 @@ extern std::atomic<float> g_splitPos;
 extern std::atomic<bool> g_showHud;         // outline the protected areas on screen
 
 // For the panel.
+// Auto quality: changed by the frame path, read by the panel (both briefly, under g_autoMutex).
+extern std::mutex g_autoMutex;
+extern AutoQuality g_auto;
+
 extern std::mutex g_textMutex;
 extern std::string g_status, g_offReason, g_frameText, g_cardName, g_tappedDeviceText, g_focusExe;
 extern bool g_cardDrivesDisplay;

@@ -238,7 +238,26 @@ void DrawPanel() {
         // The model costs ~10 ms + ~7 ms per megapixel on Ampere. The working scale is the only cost lever: past the
         // frame interval the model simply skips frames and the present side carries the last delta forward.
         createChanged |= SL("Model resolution", &c.p.workingScale, 0.25f, 1.0f, "%.2f x the frame");
-        Tip("The frame is shrunk by this before the model sees it, and the model's change is stretched back up to the picture. 1.00 = the model sees the whole frame: best detail, costs the most. This is the only setting that changes the cost.\nOn an RTX 4070 Ti SUPER the model takes roughly 2.7 ms plus 1.8 ms per megapixel.\nChanging it rebuilds the model, which costs a short hitch.");
+        Tip("The frame is shrunk by this before the model sees it, and the model's change is stretched back up to the picture. 1.00 = the model sees the whole frame: best detail, costs the most. This is the only setting that changes the cost.\nOn an RTX 4070 Ti SUPER the model takes roughly 2.7 ms plus 1.8 ms per megapixel.\nChanging it rebuilds the model, which costs a short hitch.\nWith Auto on, this is the most it uses.");
+        changed |= ImGui::Checkbox("Auto: keep the model within a time budget", &c.autoQuality);
+        Tip("Lowers the model resolution while the model takes longer than the budget below (a busy scene, a hot card), and raises it back toward your own setting above when there is room. It changes slowly (down after 3 s over the budget, up after 10 s well under it) because each change costs a short hitch. Nothing that changes the look is touched.");
+        if (c.autoQuality) {
+            changed |= SL("Time budget", &c.autoBudgetMs, 2.0f, 15.0f, "%.1f ms");
+            Tip("The model time to stay within. Half the frame time is a good start: 8 ms at 60 fps, 5 ms at 100 fps.");
+            changed |= SL("Lowest model resolution", &c.autoFloor, 0.25f, 1.0f, "%.2f x the frame");
+            Tip("Auto never goes below this, even when the model still runs over the budget.");
+            float scale, avg; std::deque<AutoQuality::Step> history;
+            { std::lock_guard<std::mutex> lock(g_autoMutex); scale = g_auto.Scale(); avg = g_auto.AverageMs(); history = g_auto.History(); }
+            if (scale <= 0) ImGui::TextDisabled("Auto starts with the model's first run.");
+            else if (scale < c.p.workingScale - 0.001f) ImGui::TextWrapped("Auto runs the model at %.2f x (model %.1f ms, budget %.1f ms).", scale, avg, c.autoBudgetMs);
+            else ImGui::TextWrapped("Auto runs the model at your setting, %.2f x (model %.1f ms, budget %.1f ms).", scale, avg, c.autoBudgetMs);
+            if (!history.empty() && ImGui::TreeNode("autohist", "Recent changes (%d)", static_cast<int>(history.size()))) {
+                const uint64_t now = GetTickCount64();
+                for (auto it = history.rbegin(); it != history.rend(); ++it)
+                    ImGui::Text("%3llu s ago: %.2f -> %.2f (model %.1f ms)", static_cast<unsigned long long>((now - it->atMs) / 1000), it->from, it->to, it->modelMs);
+                ImGui::TreePop();
+            }
+        }
         {
             const NrStats& st = g_engine.Stats();
             if (g_bridge.Width()) {

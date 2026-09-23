@@ -23,6 +23,8 @@ struct Config {
     bool hotkeys = true;                 // Ctrl+Shift + an F key, read at every present
     int keyAB = VK_F6, keySplit = VK_F7, keySharpDn = VK_F8, keySharpUp = VK_F9, keyPreset = VK_F10, keyShot = VK_F11;
     std::string screenshotFolder;        // empty: Pictures\Lossless Scaling
+    bool autoQuality = false;            // lower the model resolution when the model runs over its time budget (auto_quality.h)
+    float autoBudgetMs = 5.0f, autoFloor = 0.25f;
     bool gameAuto = true;                // switch to a program's look when it takes focus
     std::vector<std::pair<std::string, std::string>> games;   // lower-case exe name, look name
     int tapMode = 0;                     // 0 automatic, 1 by hand

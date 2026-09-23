@@ -39,7 +39,7 @@ add_dependencies(nr_selftest nr_forwarder)
 # ---- the addon ----
 add_library(DLSS5NR01 SHARED
     src/addon/addon.cpp src/addon/runtime.cpp src/addon/panel.cpp src/addon/tasks.cpp src/addon/settings.cpp src/addon/log.cpp
-    src/addon/screenshot.cpp src/addon/screenshot_pixels.cpp src/addon/hud_editor.cpp
+    src/addon/screenshot.cpp src/addon/screenshot_pixels.cpp src/addon/hud_editor.cpp src/addon/auto_quality.cpp
     src/addon/bridge.cpp src/addon/frame_tap.cpp
     src/addon/present_hook.cpp src/addon/compose11.cpp src/addon/requirements.cpp
     src/engine/nr_engine.cpp
@@ -72,6 +72,10 @@ target_link_libraries(nr_taptest PRIVATE d3d11)
 # ---- offline test of the settings and looks (the table, looks as text and back, the settings file through a stand-in host)
 add_executable(nr_settingstest tools/settings_test.cpp src/addon/settings.cpp src/addon/screenshot_pixels.cpp)
 target_include_directories(nr_settingstest PRIVATE src ${CMAKE_SOURCE_DIR}/../../manager/sdk/include)
+
+# ---- offline test of auto quality (a simulated model)
+add_executable(nr_autotest tools/auto_test.cpp src/addon/auto_quality.cpp)
+target_include_directories(nr_autotest PRIVATE src)
 
 # ---- offline test of the requirements checker (no model, no NVIDIA SDK needed at run time) ----
 add_executable(nr_reqtest tools/requirements_test.cpp src/addon/requirements.cpp)

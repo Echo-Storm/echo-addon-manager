@@ -107,6 +107,7 @@ void PublishLive(const NrStats& st) {
         if (newRuns + newSkipped) keepUp = 100.0 * newRuns / static_cast<double>(newRuns + newSkipped);
         g_host->PublishMetric(kAddonId, "model_ms", st.nrMs, "ms");
         g_host->PublishMetric(kAddonId, "model_total_ms", st.totalMs, "ms");
+        { std::lock_guard<std::mutex> lock(g_autoMutex); if (g_auto.Scale() > 0) g_host->PublishMetric(kAddonId, "model_scale", g_auto.Scale(), "x"); }
         g_host->PublishMetric(kAddonId, "gpu_start_ms", st.startMs, "ms");
         g_host->PublishMetric(kAddonId, "keepup_pct", keepUp, "%");
         g_host->PublishMetric(kAddonId, "tap_cpu_ms", g_bridge.CpuMs(), "ms");
@@ -189,8 +190,11 @@ void Tap(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
       std::lock_guard<std::mutex> lock(g_textMutex); g_frameText = text; }
     if (!g_bridge.Ensure(frame.Width, frame.Height, frame.Format)) { SetStatus("unsupported frame format"); ReleaseDecision(d); return; }
 
-    NrParams p; float watchdogMs; bool lsFirst;
-    { std::lock_guard<std::mutex> lock(g_settingsMutex); p = g_config.p; watchdogMs = g_config.watchdogMs; lsFirst = g_config.lsFirst; }
+    NrParams p; float watchdogMs; bool lsFirst; AutoQuality::Settings autoSettings;
+    { std::lock_guard<std::mutex> lock(g_settingsMutex); p = g_config.p; watchdogMs = g_config.watchdogMs; lsFirst = g_config.lsFirst;
+      autoSettings = { g_config.autoQuality, g_config.autoBudgetMs, g_config.autoFloor }; }
+    const float ceiling = p.workingScale;
+    if (autoSettings.on) { std::lock_guard<std::mutex> lock(g_autoMutex); if (g_auto.Scale() > 0) p.workingScale = std::min(ceiling, g_auto.Scale()); }
     g_bridge.SetLsGpuPriority(lsFirst ? 7 : 0);
     // Lossless Scaling's pass may have the frame bound as an input: the copy needs it unbound, and it is put back after
     ID3D11ShaderResourceView* bound[8] = {}; ctx->CSGetShaderResources(0, 8, bound);
@@ -205,6 +209,13 @@ void Tap(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
         ++g_runs; g_lastModelMs = st.nrMs; g_lastRunMs = st.totalMs;
         g_avgModelMs = g_avgModelMs == 0 ? st.nrMs : g_avgModelMs * 0.95 + st.nrMs * 0.05;
         if (g_runs == 1) SetStatus("running");
+        // auto quality: the scale it picks here is used from the next frame (changing it rebuilds the model)
+        std::lock_guard<std::mutex> lock(g_autoMutex);
+        const uint64_t now = GetTickCount64();
+        if (g_auto.Update(now, st.nrMs, static_cast<float>(g_bridge.LastIntervalMs()), ceiling, autoSettings) && !g_auto.History().empty() && g_auto.History().back().atMs == now) {
+            const AutoQuality::Step& s = g_auto.History().back();
+            Log("auto: model resolution %.2f -> %.2f (model %.1f ms, budget %.1f ms)", s.from, s.to, s.modelMs, autoSettings.budgetMs);
+        }
     }
     if (g_engine.IsFailed()) SwitchOff(st.lastError);
     if (g_host->GetHostVersion() >= 0x010000) PublishLive(st);
