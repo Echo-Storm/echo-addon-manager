@@ -81,7 +81,12 @@ void ClaimFrames();
 void ReleaseFrames();
 bool OwnsFrames();
 void SettleFramesAtStart();
-void ForgetFramePath();   // the frame path's device state, as at a device change                      // on the card the frames come from
+void ForgetFramePath();
+// DLSS as Lossless Scaling's scaler (the DLSS 4 addon): what the panel shows, and letting go at shutdown.
+struct ScalerView { bool starting = false, ready = false, failed = false; std::string error; uint32_t inW = 0, inH = 0, outW = 0, outH = 0;
+                    double gpuMs = 0; uint64_t runs = 0, nisSeen = 0; uint32_t perFrame = 0; };
+ScalerView GetScalerView();
+void StopScaler();   // the frame path's device state, as at a device change                      // on the card the frames come from
 void OnDeviceEvent(uint32_t id, const void* data, uint32_t size, void* user);
 bool OnPass(uint32_t x, uint32_t y, uint32_t z, void* user);   // the manager's pre-dispatch callback
 std::string PassText(const DispatchSig& sig);                    // the views of a pass, for the log and the panel

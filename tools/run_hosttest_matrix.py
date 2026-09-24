@@ -196,21 +196,20 @@ def scenario_flow_previous(ctx, res, text, frame):
     res.check('...and it still changes the picture', np.abs(frame - ctx['pat']).mean() > 0.3)
 
 
-def scenario_dlaa(ctx, res, text, frame):
-    # DLAA through NVIDIA's DLSS runtime on the whole frame: it must start without the Neural Rendering model file, run, and change the picture
-    # only a little (it smooths edges; it does not restyle the picture as Neural Rendering does)
-    import re
-    m = re.findall(r'tap #\d+: model ([0-9.]+) ms', text)
-    d = np.abs(frame - ctx['pat']).mean() if frame is not None else -1
-    res.check('DLAA runs on the whole frame', 'model input 1920x1080' in text, (m[-1] + ' ms') if m else 'no model time in the log')
-    res.check('...and changes the picture, less than Neural Rendering does', 0.0 < d < np.abs(ctx['base'] - ctx['pat']).mean(), 'mean abs change %.3f' % d)
+def scenario_scaler(ctx, res, text, frame):
+    # the DLSS 4 Upscaler in place of Lossless Scaling's NIS pass (a fake one here, which paints its output magenta)
+    made = re.search(r'DLSS scaler: (\d+)x(\d+) -> (\d+)x(\d+).*?made in (\d+) ms', text)
+    res.check('it finds the NIS pass and makes DLSS for its sizes', bool(made) and made.group(1, 2, 3, 4) == ('1920', '1080', '2880', '1620'),
+              made.group(0) if made else 'no line in the log')
+    nis = re.search(r'\[check-nis\].*', text)
+    res.check('DLSS writes a real upscaled picture where the NIS pass would have', 'DLSS REPLACED NIS' in text, nis.group(0)[12:] if nis else 'no check line')
+    res.check('...on every presented frame, real and generated', bool(re.search(r'DLSS scaler: \d+ frames upscaled, NIS passes seen \d+, 2 per real frame', text)))
 
 
 def scenario_pair(ctx, res, text, frame):
-    # both addons of the pair loaded, both switched on: only one may work on the frames
-    res.check('the second addon found the first in charge and switched itself off', 'STEPPED ASIDE' in text)
-    res.check('the first works on the frames as usual', 'COMPOSE APPLIED' in text and frame is not None and np.abs(frame - ctx['pat']).mean() > 0.3)
-    res.check('turning the other one on makes the first step aside and let its model go', 'HANDED OVER' in text)
+    # both addons loaded and switched on: the upscaler works beside Neural Rendering, which keeps its frames
+    res.check('neither steps aside', 'BOTH ON' in text)
+    res.check('Neural Rendering works on the frames as usual', 'COMPOSE APPLIED' in text and frame is not None and np.abs(frame - ctx['pat']).mean() > 0.3)
 
 
 def scenario_selftest(ctx, res, text, frame):
@@ -233,18 +232,18 @@ SCENARIOS = [
     ('ghost_on', ['flowsplit=1', 'ghostGuard=1'], scenario_ghost_on),
     ('flow_previous', ['freshFlow=0'], scenario_flow_previous),
     ('selftest', ['selfTestOnStart=1'], scenario_selftest),
-    ('dlaa', ['addon=DLSS4DLAA.dll', 'wipRun=1'], scenario_dlaa),
-    ('dlaa_m', ['addon=DLSS4DLAA.dll', 'dlaaPreset=13', 'wipRun=1'], scenario_dlaa),
-    ('pair', ['second=DLSS4DLAA.dll', 'wipRun=1'], scenario_pair),
+    ('scaler', ['addon=DLSS4DLAA.dll', 'nis=1'], scenario_scaler),
+    ('scaler_m', ['addon=DLSS4DLAA.dll', 'nis=1', 'dlaaPreset=13'], scenario_scaler),
+    ('pair', ['second=DLSS4DLAA.dll'], scenario_pair),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'snapshotOnStart=1', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),
 ]
 
 
-# The everyday set (--quick): the frame reaching the model with its own motion, the older timing, an exit with no AddonShutdown, DLAA, and the
-# two addons loaded together. The
-# rest (looks, HUD, grain, smoothing, the self-test, DLAA's preset M, the panel shot) run with no option, before a release.
-QUICK = {'base', 'flow_previous', 'exit_abrupt', 'dlaa', 'pair'}
+# The everyday set (--quick): the frame reaching the model with its own motion, the older timing, an exit with no AddonShutdown, the DLSS 4
+# Upscaler in place of NIS, and the two addons loaded together. The
+# rest (looks, HUD, grain, smoothing, the self-test, the upscaler with preset M, the panel shot) run with no option, before a release.
+QUICK = {'base', 'flow_previous', 'exit_abrupt', 'scaler', 'pair'}
 
 
 def selftest_exe_checks(nr_dir, snippet):

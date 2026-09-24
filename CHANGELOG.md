@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **DLSS 4 Upscaler (prototype, not in the release package).** The DLSS 4 DLAA addon becomes an upscaler: with NIS chosen as Lossless Scaling's
+  Scaling Type, it recognises Lossless Scaling's NIS pass (the frame at the game's size, NIS's two 2x64 coefficient tables, the picture at the
+  screen's size, one thread group per 32x24 pixels) and runs NVIDIA DLSS Super Resolution into the same output instead, on Lossless Scaling's
+  own D3D11 device, on every presented frame, real and generated. Frame generation's optical flow is its motion (half a real frame apart at 2x);
+  depth is flat and there is no camera jitter. Found in a New Vegas session log (2560x1440 -> 3840x2160, twice per real frame at 2x).
+  - The Before / after hotkey lets NIS run again, to compare in the game. If DLSS cannot run, NIS runs as usual.
+  - It works beside DLSS 5 Neural Rendering (no longer "one addon at a time"); the addon list can switch it on again.
+  - The test host has a fake NIS pass that paints its output magenta: DLSS replaces it with a real upscaled picture, on real and generated
+    frames. The scaler and pair scenarios are in the everyday quick set.
+
 ## 0.8.0 (2026-09-24): the interface pass
 
 The manager and Neural Rendering now show 0.8.0.

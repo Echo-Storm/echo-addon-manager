@@ -11,11 +11,11 @@ namespace nr {
 inline constexpr bool kDlaaAddon = true;
 inline constexpr const char* kAddonId = "DLSS4DLAA";
 inline constexpr const wchar_t* kAddonIdW = L"DLSS4DLAA";
-inline constexpr const char* kProductName = "DLSS 4 DLAA (WIP)";
-// Work in progress: on a captured frame DLSS gets no camera jitter and no depth, and in World of Warcraft at 4K (2026-09-24) it changed
-// nothing visible while costing 3 to 4 ms of GPU time a frame. It stays switched off (its Enable box greyed out) until a way around that is
-// found; the test host alone can still run it (config key wipRun=1).
-inline constexpr bool kWip = true;
+inline constexpr const char* kProductName = "DLSS 4 Upscaler (WIP)";
+// DLSS Super Resolution in place of Lossless Scaling's NIS pass (scaler11.h). It began as DLAA on the captured frame, which in World of
+// Warcraft at 4K changed nothing visible (no camera jitter, no depth), so it now does what DLSS is made for: the upscaling. A prototype: it
+// can be switched on, and the release package leaves it out. (Its id is still DLSS4DLAA, so its settings stay where they are.)
+inline constexpr bool kWip = false;
 #else
 inline constexpr bool kDlaaAddon = false;
 inline constexpr bool kWip = false;
@@ -28,7 +28,7 @@ inline constexpr const char* kProductName = "DLSS 5 Neural Rendering";
 inline const char* ProductNameOf(const char* id) {
     if (!id || !*id) return "";
     if (!strcmp(id, "DLSS5NR01")) return "DLSS 5 Neural Rendering";
-    if (!strcmp(id, "DLSS4DLAA")) return "DLSS 4 DLAA (WIP)";
+    if (!strcmp(id, "DLSS4DLAA")) return "DLSS 4 Upscaler (WIP)";
     return id;
 }
 

@@ -12,6 +12,7 @@
 #include "addon/log.h"
 #include "addon/present_hook.h"
 #include "addon/screenshot.h"
+#include "addon/scaler11.h"
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -468,7 +469,7 @@ std::string FrameOwner() {
     const DWORD n = GetEnvironmentVariableA(kOwnerVariable, name, sizeof name);
     return n > 0 && n < sizeof name ? name : "";
 }
-void ClaimFrames() { SetEnvironmentVariableA(kOwnerVariable, kAddonId); g_ownsFrames = true; g_ownerCheckedAt = GetTickCount64(); }
+void ClaimFrames() { if (kDlaaAddon) return; SetEnvironmentVariableA(kOwnerVariable, kAddonId); g_ownsFrames = true; g_ownerCheckedAt = GetTickCount64(); }
 void ReleaseFrames() { if (FrameOwner() == kAddonId) SetEnvironmentVariableA(kOwnerVariable, nullptr); g_ownsFrames = false; }
 
 bool OwnsFrames() {   // the caller has checked that this addon is on
@@ -488,6 +489,7 @@ bool OwnsFrames() {   // the caller has checked that this addon is on
 }
 
 void SettleFramesAtStart() {
+    if (kDlaaAddon) return;   // the upscaler works beside Neural Rendering
     bool on; { std::lock_guard<std::mutex> lock(g_settingsMutex); on = g_config.enabled; }
     if (!on) return;
     const std::string owner = FrameOwner();
@@ -559,6 +561,111 @@ void OnDeviceEvent(uint32_t id, const void*, uint32_t, void*) {
     // machine), not from these events, which come for every device Lossless Scaling makes.
 }
 
+// ---- DLSS as Lossless Scaling's scaler (the DLSS 4 addon; see scaler11.h)
+//
+// Every pass still goes through the frame tap, which follows frame generation's optical flow and tells real frames apart; the NIS pass is
+// replaced when DLSS is ready, and runs as usual until then (NVIDIA's runtime loads on a thread of its own), when DLSS fails, or while the
+// Before / after hotkey shows the original.
+
+namespace {
+Scaler11 g_scaler;                               // under g_frameMutex, once g_scalerStarting is false
+std::atomic<bool> g_scalerStarting{ false };
+ID3D11Device* g_scalerDevice = nullptr;          // the device it was started on (not AddRef'd: the scaler holds it)
+uint32_t g_nisSinceTap = 0, g_nisPerFrame = 0;   // NIS passes between two real frames: the presents per real frame
+uint64_t g_nisSeen = 0, g_scalerStatusAt = 0;
+std::atomic<uint32_t> g_scaleInW{ 0 }, g_scaleInH{ 0 }, g_scaleOutW{ 0 }, g_scaleOutH{ 0 };
+
+void StartScaler(ID3D11Device* dev) {   // under g_frameMutex
+    g_scalerDevice = dev;
+    g_scalerStarting = true;
+    dev->AddRef();
+    std::thread([dev] {
+        SetStatus("DLSS: loading NVIDIA's runtime...");
+        const bool ok = g_scaler.Init(dev, g_addonDir, g_addonDir + L"\\dlss", [](const char* m) { Log("%s", m); });
+        SetStatus(ok ? "DLSS ready: waiting for the NIS pass" : g_scaler.LastError());
+        dev->Release();
+        g_scalerStarting = false;
+    }).detach();
+}
+
+bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
+    std::lock_guard<std::mutex> lock(g_frameMutex);
+    TapDecision d;
+    g_tap.Observe(ctx, x, y, z, d);   // the flow and the real frames (nothing is handed to a model here)
+    if (d.isTap) { if (g_nisSinceTap) g_nisPerFrame = g_nisSinceTap; g_nisSinceTap = 0; }
+    ReleaseDecision(d);
+    LogPassTable();
+
+    NisPass pass;
+    if (!FindNisPass(ctx, x, y, z, pass)) return false;
+    ++g_nisSeen; ++g_nisSinceTap;
+    g_scaleInW = pass.inW; g_scaleInH = pass.inH; g_scaleOutW = pass.outW; g_scaleOutH = pass.outH;
+    ReadHotkeys();
+    bool replaced = false;
+    ID3D11Device* dev = nullptr; ctx->GetDevice(&dev);
+    if (!g_scalerStarting) {
+        if (dev && dev != g_scalerDevice && !g_scaler.IsFailed()) {
+            if (g_scaler.IsReady()) g_scaler.Shutdown();
+            if (CardOf(dev).nvidia) StartScaler(dev);
+            else { g_scalerDevice = dev; SetStatus("waiting: Lossless Scaling's device is not an NVIDIA card"); }
+        } else if (g_scaler.IsReady() && g_compare.load() != 2) {   // "original only" lets NIS run, for comparing
+            NrParams p; unsigned preset;
+            { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; }
+            uint32_t fw = 0, fh = 0;
+            ID3D11Resource* flow = p.useFlow ? g_tap.NewestFlow(fw, fh) : nullptr;
+            const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;
+            t_ownWork = true;
+            replaced = g_scaler.Run(ctx, pass, flow, fw, fh, p.flowUnit, fraction, preset, g_resetRequested.exchange(false));
+            t_ownWork = false;
+            if (flow) flow->Release();
+            if (!replaced && g_scaler.IsFailed()) SetStatus(g_scaler.LastError());
+        }
+    }
+    if (dev) dev->Release();
+    ReleaseNisPass(pass);
+    const uint64_t now = GetTickCount64();
+    if (g_host && now - g_scalerStatusAt >= 1000) {
+        g_scalerStatusAt = now;
+        char text[160];
+        if (replaced) {
+            snprintf(text, sizeof text, "DLSS %ux%u -> %ux%u, %.1f ms", g_scaleInW.load(), g_scaleInH.load(), g_scaleOutW.load(), g_scaleOutH.load(), g_scaler.GpuMs());
+            g_host->SetStatus(kAddonId, text, 1);
+            if (g_host->GetHostVersion() >= 0x010000) g_host->PublishMetric(kAddonId, "dlss_ms", g_scaler.GpuMs(), "ms");
+            SetStatus(text);
+        } else if (g_compare.load() == 2) g_host->SetStatus(kAddonId, "Showing Lossless Scaling's NIS (Before / after)", 0);
+    }
+    if (g_scaler.Runs() == 1 || (replaced && g_scaler.Runs() % 3000 == 0))
+        Log("DLSS scaler: %llu frames upscaled, NIS passes seen %llu, %u per real frame, DLSS %.2f ms", (unsigned long long)g_scaler.Runs(),
+            (unsigned long long)g_nisSeen, g_nisPerFrame, g_scaler.GpuMs());
+    return replaced;   // true: Lossless Scaling's NIS pass is skipped, DLSS has written its output
+}
+
+bool ScalerFault(unsigned code) {
+    char text[64]; snprintf(text, sizeof text, "exception 0x%08x in the DLSS scaler", code);
+    SwitchOff(text);
+    return true;
+}
+bool ScalerGuarded(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {   // no objects here: __try cannot unwind them
+    __try { return ScalerPass(ctx, x, y, z); } __except (ScalerFault(GetExceptionCode()) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) { t_ownWork = false; return false; }
+}
+} // namespace
+
+ScalerView GetScalerView() {
+    ScalerView v;
+    v.starting = g_scalerStarting; v.ready = !v.starting && g_scaler.IsReady(); v.failed = !v.starting && g_scaler.IsFailed();
+    if (v.failed) v.error = g_scaler.LastError();
+    v.inW = g_scaleInW; v.inH = g_scaleInH; v.outW = g_scaleOutW; v.outH = g_scaleOutH;
+    v.gpuMs = v.ready ? g_scaler.GpuMs() : 0; v.runs = v.ready ? g_scaler.Runs() : 0; v.nisSeen = g_nisSeen; v.perFrame = g_nisPerFrame;
+    return v;
+}
+
+void StopScaler() {
+    for (int i = 0; i < 500 && g_scalerStarting; ++i) Sleep(10);
+    std::lock_guard<std::mutex> lock(g_frameMutex);
+    if (g_scaler.IsReady() || g_scaler.IsFailed()) g_scaler.Shutdown();
+    g_scalerDevice = nullptr;
+}
+
 bool OnPass(uint32_t x, uint32_t y, uint32_t z, void*) {
     // after a pause, the watchdog switches it back on (three times a session at most); every other reason waits for the person
     if (g_off && g_offByWatchdog && GetTickCount64() >= g_backOnAtMs && g_backOnCount < 3) {
@@ -568,6 +675,7 @@ bool OnPass(uint32_t x, uint32_t y, uint32_t z, void*) {
     auto* const ctx = static_cast<ID3D11DeviceContext*>(g_host ? g_host->GetDispatchingContext() : nullptr);
     if (t_ownWork || g_off || g_engineStarting || !ctx) return false;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); if (!g_config.enabled) return false; }
+    if (kDlaaAddon) return ScalerGuarded(ctx, x, y, z);   // DLSS as the scaler: this addon's whole frame path
     if (!OwnsFrames()) return false;
     std::lock_guard<std::mutex> lock(g_frameMutex);
     if (!Tappable(ctx)) { ++g_otherPasses; return false; }

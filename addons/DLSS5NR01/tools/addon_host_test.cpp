@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
         auto Init2 = (PFN_Init)GetProcAddress(h2, "AddonInitialize"); Shut2 = (PFN_Void)GetProcAddress(h2, "AddonShutdown");
         if (!Init2 || !Shut2) { printf("exports of %s missing\n", secondDll.c_str()); return 1; }
         Init2(&host, ctx, (void*)af, (void*)ff, ud);
-        printf("[check-pair] second addon %s at its start: %s\n", secondDll.c_str(), host.Said("switched off at start:") ? "STEPPED ASIDE" : "DID NOT STEP ASIDE");
+        printf("[check-pair] second addon %s at its start: %s\n", secondDll.c_str(), host.Said("switched off at start:") ? "STEPPED ASIDE" : "BOTH ON");
     }
 
     auto panel = [&]() {
@@ -276,6 +276,63 @@ int main(int argc, char** argv) {
         std::swap(sPrev, sCur); std::this_thread::sleep_for(std::chrono::milliseconds(13));
     }
     dc->Flush(); std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    // nis=1: Lossless Scaling's NIS pass as it looks (the frame, NIS's two 2x64 RGBA32F coefficient tables, a 1.5x output, one thread group
+    // per 32x24 pixels), twice per real frame as with frame generation 2x. This fake pass paints its output magenta: the DLSS upscaler must
+    // take its place and write a real upscaled picture instead.
+    bool nisMode = false;
+    for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "nis=1")) nisMode = true;
+    if (nisMode) {
+        const UINT OW = W * 3 / 2, OH = H * 3 / 2;
+        ID3D11Texture2D* nisIn = MakeTex(dev, W, H, DXGI_FORMAT_R8G8B8A8_UNORM, false);
+        ID3D11Texture2D* coef1 = MakeTex(dev, 2, 64, DXGI_FORMAT_R32G32B32A32_FLOAT, false), * coef2 = MakeTex(dev, 2, 64, DXGI_FORMAT_R32G32B32A32_FLOAT, false);
+        ID3D11Texture2D* nisOut = MakeTex(dev, OW, OH, DXGI_FORMAT_R8G8B8A8_UNORM, true);
+        ID3D11ShaderResourceView* nisSrvs[3] = { srv(nisIn), srv(coef1), srv(coef2) }; ID3D11UnorderedAccessView* uNisOut = uav(nisOut);
+        ID3D11ComputeShader* csNis = MakeCS(dev, "Texture2D<float4> f:register(t0); Texture2D<float4> c1:register(t1); Texture2D<float4> c2:register(t2); RWTexture2D<float4> o:register(u0);"
+                                                 " [numthreads(32,24,1)] void main(uint3 id:SV_DispatchThreadID){ o[id.xy]=float4(1,0,1,1)+(f[uint2(0,0)]+c1[uint2(0,0)]+c2[uint2(0,0)])*0; }");
+        Fill(dc, nisIn, W, H);
+        auto nisPass = [&] {
+            dc->CSSetShaderResources(0, 3, nisSrvs); dc->CSSetUnorderedAccessViews(0, 1, &uNisOut, nullptr); dc->CSSetShader(csNis, nullptr, 0);
+            host.Dispatch(dc, (OW + 31) / 32, (OH + 23) / 24, 1);
+            dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls);
+        };
+        for (int fr = 0; fr < 150; ++fr) {
+            Fill(dc, cur, W, H);
+            dc->CSSetShaderResources(0, 1, &sCur); dc->CSSetUnorderedAccessViews(0, 4, uPyr, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W * 7 / 10 / 8, H * 7 / 10 / 8, 1);
+            ID3D11UnorderedAccessView* null4[4] = {}; dc->CSSetUnorderedAccessViews(0, 4, null4, nullptr); dc->CSSetShaderResources(0, 3, nulls);
+            dc->CSSetShaderResources(4, 1, &sPyr3); dc->CSSetUnorderedAccessViews(0, 1, &uFlow16, nullptr); dc->CSSetShader(csFlow16, nullptr, 0); host.Dispatch(dc, FLW / 8, FLH / 8, 1);
+            { ID3D11ShaderResourceView* n8[8] = {}; dc->CSSetShaderResources(0, 8, n8); } dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr);
+            nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(12));   // the generated frame
+            nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(12));   // the real one
+            if (fr % 30 == 0) frame("nis"); else emptyFrame();
+        }
+        dc->Flush(); std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        // read the output back: how much of it is the fake pass's magenta, and how close its average colour is to the frame's
+        D3D11_TEXTURE2D_DESC sd{}; nisOut->GetDesc(&sd); sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        ID3D11Texture2D* st = nullptr; dev->CreateTexture2D(&sd, nullptr, &st);
+        uint64_t magenta = 0; double sum[3] = {}, want[3] = {};
+        if (st) {
+            dc->CopyResource(st, nisOut);
+            D3D11_MAPPED_SUBRESOURCE m{};
+            if (SUCCEEDED(dc->Map(st, 0, D3D11_MAP_READ, 0, &m))) {
+                for (UINT y = 0; y < OH; ++y) for (UINT x = 0; x < OW; ++x) {
+                    const uint8_t* px = static_cast<const uint8_t*>(m.pData) + y * m.RowPitch + x * 4;
+                    if (px[0] == 255 && px[1] == 0 && px[2] == 255) ++magenta;
+                    for (int c = 0; c < 3; ++c) sum[c] += px[c];
+                }
+                dc->Unmap(st, 0);
+            }
+            st->Release();
+        }
+        for (UINT y = 0; y < H; ++y) for (UINT x = 0; x < W; ++x) { const uint32_t v = Pattern(x, y, W, H); want[0] += v & 255; want[1] += (v >> 8) & 255; want[2] += (v >> 16) & 255; }
+        double worst = 0;
+        for (int c = 0; c < 3; ++c) worst = std::max(worst, std::abs(sum[c] / (double(OW) * OH) - want[c] / (double(W) * H)));
+        const bool replaced = magenta < (uint64_t)OW * OH / 100 && worst < 6.0;
+        printf("[check-nis] %ux%u -> %ux%u: %.2f%% of the output is the fake NIS pass's magenta, average colour off by %.2f levels (%s)\n", W, H, OW, OH,
+               100.0 * magenta / (double(OW) * OH), worst, replaced ? "DLSS REPLACED NIS" : "NIS KEPT");
+        for (auto* v : nisSrvs) v->Release();
+        uNisOut->Release(); csNis->Release(); nisIn->Release(); coef1->Release(); coef2->Release(); nisOut->Release();
+    }
     {   // the tap must be read-only now: LS's frame textures keep the original pattern
         for (ID3D11Texture2D* t : { prev, cur }) { double mean = 0; uint64_t changed = CountChanged(dev, dc, t, W, H, &mean, nullptr);
             printf("[check] frame texture %p: %llu / %llu pixels differ from the pattern (%s)\n", (void*)t, (unsigned long long)changed, (unsigned long long)W * H, changed == 0 ? "TAP READ-ONLY" : "TAP WROTE INTO LS'S FRAME"); }
@@ -336,18 +393,6 @@ int main(int argc, char** argv) {
         }
         printf("[check-off] frame generation off for a second: %llu pixels changed on the last presents (%s)\n", (unsigned long long)stale, stale == 0 ? "OLD RESULT DROPPED" : "OLD RESULT STILL SHOWN");
 
-        if (!secondDll.empty()) {
-            char owner[32] = {}; GetEnvironmentVariableA("ECHO_ADDON_FRAME_OWNER", owner, sizeof owner);
-            const std::string first = owner;
-            SetEnvironmentVariableA("ECHO_ADDON_FRAME_OWNER", first == "DLSS5NR01" ? "DLSS4DLAA" : "DLSS5NR01");   // what the other's Enable box does
-            for (int fr = 0; fr < 12; ++fr) {
-                dc->CSSetShaderResources(0, 1, &sC2); dc->CSSetUnorderedAccessViews(0, 4, uP2, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W2 * 7 / 10 / 8, H2 * 7 / 10 / 8, 1);
-                ID3D11UnorderedAccessView* null4[4] = {}; dc->CSSetUnorderedAccessViews(0, 4, null4, nullptr); dc->CSSetShaderResources(0, 3, nulls);
-                std::this_thread::sleep_for(std::chrono::milliseconds(40));
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));   // it lets its model go on a thread of its own
-            printf("[check-pair] the other addon turned on: the one that ran (%s) %s\n", first.c_str(), host.Said("switched off: ") && host.Said("is on now") ? "HANDED OVER" : "KEPT THE FRAMES");
-        }
     }
     host.PublishEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, nullptr, 0);
     for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "exitmode=abrupt")) {

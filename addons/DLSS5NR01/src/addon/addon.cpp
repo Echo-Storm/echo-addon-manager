@@ -145,6 +145,7 @@ EAM_EXPORT void AddonShutdown() {
     Log("shutting down");
     g_off = true;
     ReleaseFrames();
+    if (kDlaaAddon) StopScaler();
     if (g_host) {
         g_host->SetPreDispatchCallback(nullptr, nullptr);
         g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent);
@@ -169,6 +170,6 @@ EAM_EXPORT const char* GetAddonVersion() { return "0.8.0"; }
 EAM_EXPORT const char* GetAddonAuthor() { return "Echo-Storm"; }
 EAM_EXPORT const char* GetAddonDescription() {
     return kDlaaAddon
-        ? "Runs NVIDIA DLSS anti-aliasing (DLAA) on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. NVIDIA's DLSS runtime is included."
+        ? "Upscales with NVIDIA DLSS Super Resolution in place of Lossless Scaling's NIS scaler, on every frame it presents, real and generated. NVIDIA's DLSS runtime is included. Work in progress."
         : "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. Needs your own copy of nvngx_dlssnr.dll (not included, never downloaded).";
 }

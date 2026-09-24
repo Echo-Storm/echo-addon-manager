@@ -121,8 +121,10 @@ void DrawPanel() {
         const bool present = GetFileAttributesW(runtime.c_str()) != INVALID_FILE_ATTRIBUTES;
         if (present) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kAccent), "NVIDIA's DLSS runtime is in place (it comes with this addon).");
         else ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "NVIDIA's DLSS runtime is missing: the addon's dlss folder should hold nvngx_dlss.dll. Reinstall the addon.");
-        Note("Needs an NVIDIA RTX graphics card (the one Lossless Scaling runs frame generation on). Turn on Enable below, then start your game and scale it as usual.");
+        Note("Needs an NVIDIA RTX graphics card. In Lossless Scaling choose NIS as the Scaling Type (DLSS takes the place of that pass), and let the game run in a window "
+             "smaller than your screen so there is something to upscale, for example 2560x1440 on a 4K screen. Frame generation can be on or off: with it on, its motion is used.");
     }
+    if (!kDlaaAddon) {   // looks are Neural Rendering's
     Block("Saved looks (load and save your settings)");
     Note("A look is a saved set of the sliders below. Pick one from the list to load it. Save updates the look you picked; Save as new keeps the sliders as they are now under a name of your choice.");
     ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
@@ -201,6 +203,8 @@ void DrawPanel() {
         }
     }
 
+    }
+
     Block(kProductName);
     const bool dlaa = kDlaaAddon;
     {
@@ -269,7 +273,21 @@ void DrawPanel() {
             "On is the default; the switch is here to compare the two.");
         if (!c.p.useFlow) ImGui::EndDisabled();
     }
-    if (eam::ui::SectionHeader("Quality and performance")) {
+    if (kDlaaAddon && eam::ui::SectionHeader("Upscaling")) {
+        const ScalerView v = GetScalerView();
+        if (v.starting) ImGui::TextDisabled("Loading NVIDIA's DLSS runtime...");
+        else if (v.failed) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "DLSS could not run: %s. Lossless Scaling's NIS runs as usual.", v.error.c_str());
+        else if (!v.nisSeen) ImGui::TextWrapped("Waiting for Lossless Scaling's NIS pass. Choose NIS as the Scaling Type and scale a game that runs in a window smaller than the screen.");
+        else if (!v.ready) ImGui::TextDisabled("NIS pass found (%ux%u -> %ux%u); DLSS is not running yet.", v.inW, v.inH, v.outW, v.outH);
+        else {
+            ImGui::TextWrapped("DLSS upscales %ux%u -> %ux%u (x%.2f) in place of NIS: %.2f ms a frame on the GPU, %llu frames so far%s.", v.inW, v.inH, v.outW, v.outH,
+                               v.inW ? (float)v.outW / v.inW : 0.0f, v.gpuMs, (unsigned long long)v.runs,
+                               v.perFrame > 1 ? " (real and generated frames alike)" : "");
+            if (g_compare.load() == 2) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "Showing Lossless Scaling's NIS for comparison (Before / after hotkey).");
+        }
+        Note("Compare with the Before / after hotkey (Compare and hotkeys): it switches between DLSS and Lossless Scaling's own NIS while you play.");
+    }
+    if (!kDlaaAddon && eam::ui::SectionHeader("Quality and performance")) {
         // The model costs ~10 ms + ~7 ms per megapixel on Ampere. The working scale is the only cost lever: past the
         // frame interval the model simply skips frames and the present side carries the last delta forward.
         if (dlaa) Note("DLAA works on the whole frame, so there is no model resolution to choose.");
@@ -326,7 +344,7 @@ void DrawPanel() {
         changed |= SL("Protect bright areas from", &c.p.hiProtect, 0.5f, 1.0f, c.p.hiProtect >= 0.999f ? "off" : "%.2f");
         Tip("The model's change fades out as a pixel's brightness rises from this level to white, so highlights are not crushed. At the far right (off) the change applies everywhere.");
     }
-    if (eam::ui::SectionHeader("Picture (sharpness, tone, colour, grain)")) {
+    if (!kDlaaAddon && eam::ui::SectionHeader("Picture (sharpness, tone, colour, grain)")) {
         // Compose side, applied to every presented frame, real and generated alike.
         changed |= SL("Sharpen", &c.p.sharpen, 0.0f, 1.0f, c.p.sharpen <= 0.001f ? "off" : "%.2f");
         Tip("Contrast-adaptive sharpening of every presented frame, after the model's change is added. The model and the upscale both soften the picture; a little sharpening (0.2 to 0.4) puts the bite back. Costs almost nothing.");
@@ -349,7 +367,7 @@ void DrawPanel() {
         { int gs = (int)c.p.grainSize; const int dgs = (int)kDefaults.grainSize; if (eam::ui::SliderInt("Grain size", &gs, 1, 4, "%d px", 0, &dgs)) { c.p.grainSize = (float)gs; changed = true; } }
         Tip("How big each grain speck is, in screen pixels. 1 is the finest; on a 4K screen 2 looks closest to film.");
     }
-    if (eam::ui::SectionHeader("Keep the HUD untouched")) {
+    if (!kDlaaAddon && eam::ui::SectionHeader("Keep the HUD untouched")) {
         Note("Areas where the picture stays exactly as Lossless Scaling made it (no model change, sharpening, tone, colour or grain): for action bars, the minimap, chat and text. Draw them on a snapshot of the game.");
         const bool busy = screenshot::Busy();
         if (busy) ImGui::BeginDisabled();
@@ -408,7 +426,7 @@ void DrawPanel() {
             fname(c.keyAB), fname(c.keySplit), fname(c.keySharpDn), fname(c.keySharpUp), fname(c.keyPreset), fname(c.keyShot), c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
         Note("A small square appears in the screen's top-left corner for a moment: green enhanced, red original, amber split, blue sharpen changed, purple preset.");
     }
-    if (eam::ui::SectionHeader("Screenshots")) {
+    if (!kDlaaAddon && eam::ui::SectionHeader("Screenshots")) {
         Note("Saves the picture as you see it, with the addon's result, the scaling and frame generation in it, as a PNG. It is taken at the next frame Lossless Scaling shows, so the game must be running and scaled.");
         const bool busy = screenshot::Busy();
         if (busy) ImGui::BeginDisabled();
@@ -431,7 +449,7 @@ void DrawPanel() {
         bool ok; const std::string result = screenshot::LastResult(ok);
         if (!result.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", result.c_str()); ImGui::PopStyleColor(); }
     }
-    if (eam::ui::SectionHeader("Games (a look per program)")) {
+    if (!kDlaaAddon && eam::ui::SectionHeader("Games (a look per program)")) {
         std::string cur; { std::lock_guard<std::mutex> lk(g_textMutex); cur = g_focusExe; }
         ImGui::Text("Program in focus: %s", cur.empty() ? "(none seen yet)" : cur.c_str());
         Tip("The program that had focus most recently, ignoring Lossless Scaling's own windows. While a game is being scaled this is the game.");
