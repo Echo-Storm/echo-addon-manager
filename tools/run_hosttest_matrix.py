@@ -205,6 +205,13 @@ def scenario_scaler(ctx, res, text, frame):
     nis = re.search(r'\[check-nis\].*', text)
     res.check('DLSS writes a real upscaled picture where the NIS pass would have', 'DLSS REPLACED NIS' in text, nis.group(0)[12:] if nis else 'no check line')
     res.check('...on every presented frame, real and generated', bool(re.search(r'DLSS scaler: \d+ frames upscaled, NIS passes seen \d+, 2 per real frame', text)))
+    detail = re.search(r'detail ([0-9.]+)', text)
+    if detail:
+        if 'sharpen=0.5' in ' '.join(ctx.get('keys', [])):
+            res.check('sharpening after DLSS raises the fine detail', 'scaler_detail' in ctx and float(detail.group(1)) > ctx['scaler_detail'] * 1.05,
+                      '%s against %.3f without' % (detail.group(1), ctx.get('scaler_detail', 0)))
+        elif 'dlaaPreset=13' not in ' '.join(ctx.get('keys', [])):
+            ctx['scaler_detail'] = float(detail.group(1))
 
 
 def scenario_pair(ctx, res, text, frame):
@@ -235,6 +242,7 @@ SCENARIOS = [
     ('selftest', ['selfTestOnStart=1'], scenario_selftest),
     ('scaler', ['addon=DLSS4DLAA.dll', 'nis=1'], scenario_scaler),
     ('scaler_m', ['addon=DLSS4DLAA.dll', 'nis=1', 'dlaaPreset=13'], scenario_scaler),
+    ('scaler_sharp', ['addon=DLSS4DLAA.dll', 'nis=1', 'sharpen=0.5'], scenario_scaler),
     ('pair', ['second=DLSS4DLAA.dll'], scenario_pair),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'snapshotOnStart=1', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),
@@ -326,6 +334,7 @@ def main():
         keys = [k.replace('@OUT@', a.out.replace('\\', '/')) for k in keys]
         rc, text, frame, secs = run_host(a.nr, a.snippet, keys, a.out, name)
         res = Result()
+        ctx['keys'] = keys
         basic(res, rc, text)
         if frame is None and name != 'ui_shot':
             res.check('present_gen.bmp written', False)

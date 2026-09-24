@@ -13,6 +13,11 @@
     copies the frame (and frame generation's flow) into shared textures, signals a shared fence, waits on the GPU for the upscaled picture and
     copies it into the pass's output: the same kind of calls Neural Rendering's bridge makes. DLSS itself, and a small motion-vector pass, run
     on the engine's own D3D12 queue (`engine/sr_engine.cpp`), which starts on a thread of its own. The test host checks that it does.
+  - **Sharpening** (the upscaler's panel, Upscaling): contrast-adaptive sharpening (the FidelityFX CAS formula) of DLSS's picture on the
+    engine's side, since DLSS 4 has none and Lossless Scaling's NIS does. The test host checks that it raises fine detail (+40% at 0.5).
+  - The model choice reads "DLSS model" (NVIDIA's default, or M from DLSS 4.5), and the log gives the game's frame time every 600 real frames
+    (average, fps, p50/p95/p99, worst) with DLSS's cost beside it; the Performance tab gets it as `frame_ms`.
+  - First live run (New Vegas, 2560x1440 -> 3840x2160, frame generation 2x): no crash; DLSS took 1.6 to 2.1 ms of GPU a presented frame.
   - The Before / after hotkey lets NIS run again, to compare in the game. If DLSS cannot run, NIS runs as usual.
   - It works beside DLSS 5 Neural Rendering (no longer "one addon at a time"); the addon list can switch it on again.
   - The test host has a fake NIS pass that paints its output magenta: DLSS replaces it with a real upscaled picture, on real and generated

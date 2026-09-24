@@ -32,6 +32,30 @@ void main(uint3 id : SV_DispatchThreadID) {
 )";
 struct MotionConstants { uint32_t w, h; float scale; uint32_t hasFlow; };
 
+// Contrast-adaptive sharpening of DLSS's picture (the AMD FidelityFX CAS formula, MIT; as Neural Rendering's compose uses it): the weight
+// shrinks where a channel is already near 0 or 1, so detail is sharpened without clipping.
+const char* kSharpenHlsl = R"(
+Texture2D<float4> tIn : register(t0);
+RWTexture2D<float4> uOut : register(u0);
+cbuffer C : register(b0) { uint2 size; float amount; uint unused; };
+float3 Sharpen(float3 n, float3 w, float3 c, float3 e, float3 s, float a) {
+    const float3 lo = min(min(min(w, c), min(e, n)), s);
+    const float3 hi = max(max(max(w, c), max(e, n)), s);
+    const float3 room = sqrt(saturate(min(lo, 1.0 - hi) / max(hi, 1e-4)));
+    const float3 k = room * (-1.0 / lerp(8.0, 5.0, a));
+    return saturate((n * k + w * k + e * k + s * k + c) / (1.0 + 4.0 * k));
+}
+[numthreads(8, 8, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= size.x || id.y >= size.y) return;
+    const int2 p = int2(id.xy), last = int2(size) - 1;
+    const float4 c = tIn[p];
+    uOut[p] = float4(Sharpen(tIn[clamp(p + int2(0, -1), 0, last)].rgb, tIn[clamp(p + int2(-1, 0), 0, last)].rgb, c.rgb,
+                             tIn[clamp(p + int2(1, 0), 0, last)].rgb, tIn[clamp(p + int2(0, 1), 0, last)].rgb, saturate(amount)), c.a);
+}
+)";
+struct SharpenConstants { uint32_t w, h; float amount; uint32_t unused; };
+
 const char* ResultName(NVSDK_NGX_Result r) {
     switch (r) {
     case NVSDK_NGX_Result_Success: return "Success";
@@ -111,15 +135,20 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
         SafeRelease(blob); SafeRelease(error); Fail("the motion pass's root signature"); return false;
     }
     SafeRelease(blob);
-    ID3DBlob* code = nullptr;
-    if (FAILED(D3DCompile(kMotionHlsl, strlen(kMotionHlsl), "sr_motion", nullptr, nullptr, "main", "cs_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code, &error))) {
-        Log("motion shader: %s", error ? static_cast<const char*>(error->GetBufferPointer()) : "?"); SafeRelease(error); Fail("the motion shader did not compile"); return false;
-    }
-    D3D12_COMPUTE_PIPELINE_STATE_DESC pso{}; pso.pRootSignature = m_rootSig; pso.CS = { code->GetBufferPointer(), code->GetBufferSize() };
-    const HRESULT psoResult = m_dev->CreateComputePipelineState(&pso, IID_PPV_ARGS(&m_motionPso));
-    SafeRelease(code);
-    if (FAILED(psoResult)) { Fail("the motion pass's pipeline 0x%08x", (unsigned)psoResult); return false; }
-    D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors = 2 * kSlots; heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    auto build = [&](const char* source, const char* name, ID3D12PipelineState** out) {
+        ID3DBlob* code = nullptr; ID3DBlob* err = nullptr;
+        if (FAILED(D3DCompile(source, strlen(source), name, nullptr, nullptr, "main", "cs_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code, &err))) {
+            Log("%s: %s", name, err ? static_cast<const char*>(err->GetBufferPointer()) : "?"); SafeRelease(err); Fail("the %s shader did not compile", name); return false;
+        }
+        D3D12_COMPUTE_PIPELINE_STATE_DESC pso{}; pso.pRootSignature = m_rootSig; pso.CS = { code->GetBufferPointer(), code->GetBufferSize() };
+        const HRESULT h = m_dev->CreateComputePipelineState(&pso, IID_PPV_ARGS(out));
+        SafeRelease(code);
+        if (FAILED(h)) { Fail("the %s pipeline 0x%08x", name, (unsigned)h); return false; }
+        return true;
+    };
+    if (!build(kMotionHlsl, "sr_motion", &m_motionPso) || !build(kSharpenHlsl, "sr_sharpen", &m_sharpenPso)) return false;
+    // per allocator slot: the flow's view, the motion vectors', and the sharpening pass's input and output
+    D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors = 4 * kSlots; heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     if (FAILED(m_dev->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&m_heap)))) { Fail("CreateDescriptorHeap"); return false; }
     m_descriptorSize = m_dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
@@ -146,7 +175,7 @@ void SrEngine::Shutdown() {
     if (m_params) { NVSDK_NGX_D3D12_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(m_params)); m_params = nullptr; }
     if (m_dev) NVSDK_NGX_D3D12_Shutdown1(m_dev);
     SafeRelease(m_motion); SafeRelease(m_depth); SafeRelease(m_depthUpload);
-    SafeRelease(m_motionPso); SafeRelease(m_rootSig); SafeRelease(m_heap);
+    SafeRelease(m_motionPso); SafeRelease(m_sharpenPso); SafeRelease(m_unsharpened); m_unsharpenedW = m_unsharpenedH = 0; SafeRelease(m_rootSig); SafeRelease(m_heap);
     SafeRelease(m_timestamps); SafeRelease(m_timestampReadback);
     SafeRelease(m_list); for (auto*& a : m_alloc) SafeRelease(a);
     SafeRelease(m_fence); if (m_event) { CloseHandle(m_event); m_event = nullptr; }
@@ -233,6 +262,17 @@ bool SrEngine::EnsureInputs(uint32_t w, uint32_t h) {
     return true;
 }
 
+bool SrEngine::EnsureSharpenTarget(uint32_t w, uint32_t h, DXGI_FORMAT fmt) {
+    if (m_unsharpened && m_unsharpenedW == w && m_unsharpenedH == h && m_unsharpenedFmt == fmt) return true;
+    if (m_unsharpened) { WaitIdle(); SafeRelease(m_unsharpened); }
+    D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_RESOURCE_DESC d{}; d.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width = w; d.Height = h; d.DepthOrArraySize = 1; d.MipLevels = 1; d.SampleDesc.Count = 1;
+    d.Format = fmt; d.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    if (FAILED(m_dev->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &d, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&m_unsharpened)))) return false;
+    m_unsharpenedW = w; m_unsharpenedH = h; m_unsharpenedFmt = fmt;
+    return true;
+}
+
 bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t outH, unsigned preset) {
     if (m_feature && inW == m_inW && inH == m_inH && outW == m_outW && outH == m_outH && preset == m_preset) return true;
     LARGE_INTEGER f, a, b; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
@@ -273,25 +313,35 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
 
 // ---- one frame
 
-bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT, ID3D12Resource* out, uint32_t outW, uint32_t outH,
-                   ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, bool reset,
+bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT, ID3D12Resource* out, uint32_t outW, uint32_t outH, DXGI_FORMAT outFormat,
+                   ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, float sharpen, bool reset,
                    ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue) {
     if (!m_ready) return false;
     const bool fresh = !m_feature || inW != m_inW || inH != m_inH || outW != m_outW || outH != m_outH || preset != m_preset;
     if (!EnsureFeature(inW, inH, outW, outH, preset)) return false;
+    const bool sharpening = sharpen > 0.001f && EnsureSharpenTarget(outW, outH, outFormat);   // DLSS writes there, the sharpening pass writes out
     const int slot = TakeSlot();
     if (slot < 0) return false;
     ReadTime(slot);
 
     // descriptors: the flow (or a null view) and the motion vectors
-    D3D12_CPU_DESCRIPTOR_HANDLE cpu = m_heap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr += static_cast<SIZE_T>(slot) * 2 * m_descriptorSize;
-    D3D12_GPU_DESCRIPTOR_HANDLE gpu = m_heap->GetGPUDescriptorHandleForHeapStart(); gpu.ptr += static_cast<UINT64>(slot) * 2 * m_descriptorSize;
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu = m_heap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr += static_cast<SIZE_T>(slot) * 4 * m_descriptorSize;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu = m_heap->GetGPUDescriptorHandleForHeapStart(); gpu.ptr += static_cast<UINT64>(slot) * 4 * m_descriptorSize;
     D3D12_SHADER_RESOURCE_VIEW_DESC sv{}; sv.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; sv.Texture2D.MipLevels = 1;
     m_dev->CreateShaderResourceView(flow, &sv, cpu);
     D3D12_CPU_DESCRIPTOR_HANDLE cpuUav = cpu; cpuUav.ptr += m_descriptorSize;
     D3D12_UNORDERED_ACCESS_VIEW_DESC uv{}; uv.Format = DXGI_FORMAT_R16G16_FLOAT; uv.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
     m_dev->CreateUnorderedAccessView(m_motion, nullptr, &uv, cpuUav);
+    if (sharpening) {   // the sharpening pass: DLSS's picture in, the shared output out
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuIn = cpu; cpuIn.ptr += 2 * m_descriptorSize;
+        D3D12_SHADER_RESOURCE_VIEW_DESC si{}; si.Format = outFormat; si.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        si.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; si.Texture2D.MipLevels = 1;
+        m_dev->CreateShaderResourceView(m_unsharpened, &si, cpuIn);
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuOut = cpu; cpuOut.ptr += 3 * m_descriptorSize;
+        D3D12_UNORDERED_ACCESS_VIEW_DESC uo{}; uo.Format = outFormat; uo.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+        m_dev->CreateUnorderedAccessView(out, nullptr, &uo, cpuOut);
+    }
 
     m_list->Reset(m_alloc[slot], nullptr);
     m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
@@ -318,7 +368,7 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT, 
     // 2. DLSS
     auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
     p->Set(NVSDK_NGX_Parameter_Color, in);
-    p->Set(NVSDK_NGX_Parameter_Output, out);
+    p->Set(NVSDK_NGX_Parameter_Output, sharpening ? m_unsharpened : out);
     p->Set(NVSDK_NGX_Parameter_Depth, m_depth);
     p->Set(NVSDK_NGX_Parameter_MotionVectors, m_motion);
     p->Set(NVSDK_NGX_Parameter_Jitter_Offset_X, 0.0f); p->Set(NVSDK_NGX_Parameter_Jitter_Offset_Y, 0.0f);
@@ -329,6 +379,22 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT, 
     p->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Width, inW);
     p->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Height, inH);
     const NVSDK_NGX_Result r = NVSDK_NGX_D3D12_EvaluateFeature_C(m_list, static_cast<NVSDK_NGX_Handle*>(m_feature), p, nullptr);
+
+    // 3. sharpening, from DLSS's picture into the shared output (DLSS leaves its own heap and root signature bound)
+    if (sharpening) {
+        Transition(m_unsharpened, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        m_list->SetDescriptorHeaps(1, heaps);
+        m_list->SetComputeRootSignature(m_rootSig);
+        m_list->SetPipelineState(m_sharpenPso);
+        D3D12_GPU_DESCRIPTOR_HANDLE gpuIn = gpu; gpuIn.ptr += 2 * m_descriptorSize;
+        D3D12_GPU_DESCRIPTOR_HANDLE gpuOut = gpu; gpuOut.ptr += 3 * m_descriptorSize;
+        m_list->SetComputeRootDescriptorTable(0, gpuIn);
+        m_list->SetComputeRootDescriptorTable(1, gpuOut);
+        const SharpenConstants sc{ outW, outH, sharpen, 0 };
+        m_list->SetComputeRoot32BitConstants(2, 4, &sc, 0);
+        m_list->Dispatch((outW + 7) / 8, (outH + 7) / 8, 1);
+        Transition(m_unsharpened, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
 
     Transition(in, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
     if (flow) Transition(flow, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);

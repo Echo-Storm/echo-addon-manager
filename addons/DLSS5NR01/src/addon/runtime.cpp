@@ -578,6 +578,29 @@ std::atomic<bool> g_srStarting{ false };
 ID3D11Device* g_linkDevice = nullptr;            // the device the link was made on (the link holds it)
 uint32_t g_nisSinceTap = 0, g_nisPerFrame = 0;   // NIS passes between two real frames: the presents per real frame
 uint64_t g_nisSeen = 0, g_scalerStatusAt = 0, g_upscaled = 0;
+// the game's frame time, from one real frame to the next (frame generation's capture pass), for the log and the Performance tab
+int64_t g_lastTapQpc = 0;
+std::vector<float> g_frameTimes;
+
+void NoteRealFrame() {
+    LARGE_INTEGER now, f; QueryPerformanceCounter(&now); QueryPerformanceFrequency(&f);
+    if (g_lastTapQpc) {
+        const float ms = static_cast<float>((now.QuadPart - g_lastTapQpc) * 1000.0 / f.QuadPart);
+        if (ms < 500.0f) {   // longer is a pause (loading, alt-tab), not a frame
+            g_frameTimes.push_back(ms);
+            if (g_host && g_host->GetHostVersion() >= 0x010000) g_host->PublishMetric(kAddonId, "frame_ms", ms, "ms");
+        }
+    }
+    g_lastTapQpc = now.QuadPart;
+    if (g_frameTimes.size() >= 600) {   // every 600 real frames: the spread of the game's frame times, and what DLSS cost meanwhile
+        std::vector<float> t = g_frameTimes; std::sort(t.begin(), t.end());
+        auto at = [&](double q) { return t[std::min(t.size() - 1, static_cast<size_t>(q * t.size()))]; };
+        double sum = 0; for (float v : t) sum += v;
+        Log("game frame time over %zu real frames: average %.1f ms (%.0f fps), p50 %.1f, p95 %.1f, p99 %.1f, worst %.1f | DLSS %.2f ms a presented frame, %u presented per real frame",
+            t.size(), sum / t.size(), 1000.0 * t.size() / sum, at(0.5), at(0.95), at(0.99), t.back(), g_sr.GpuMs(), g_nisPerFrame);
+        g_frameTimes.clear();
+    }
+}
 std::atomic<uint32_t> g_scaleInW{ 0 }, g_scaleInH{ 0 }, g_scaleOutW{ 0 }, g_scaleOutH{ 0 };
 
 void StartEngineFor(const LUID& card) {   // the engine's own device only: safe on a thread of its own
@@ -597,7 +620,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     std::lock_guard<std::mutex> lock(g_frameMutex);
     TapDecision d;
     g_tap.Observe(ctx, x, y, z, d);   // the flow and the real frames (nothing is handed to a model here)
-    if (d.isTap) { if (g_nisSinceTap) g_nisPerFrame = g_nisSinceTap; g_nisSinceTap = 0; }
+    if (d.isTap) { if (g_nisSinceTap) g_nisPerFrame = g_nisSinceTap; g_nisSinceTap = 0; NoteRealFrame(); }
     ReleaseDecision(d);
     LogPassTable();
 
@@ -625,7 +648,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
                 ID3D11Resource* flow = p.useFlow ? g_tap.NewestFlow(fw, fh) : nullptr;
                 const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;
                 t_ownWork = true;
-                replaced = g_link.Upscale(pass, flow, fw, fh, p.flowUnit, fraction, preset, g_resetRequested.exchange(false));
+                replaced = g_link.Upscale(pass, flow, fw, fh, p.flowUnit, fraction, preset, p.sharpen, g_resetRequested.exchange(false));
                 t_ownWork = false;
                 if (flow) flow->Release();
                 if (replaced) ++g_upscaled;

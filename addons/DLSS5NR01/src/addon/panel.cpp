@@ -235,7 +235,7 @@ void DrawPanel() {
     if (dlaa) {
         int preset = c.dlaaPreset == 13 ? 1 : 0;
         const char* presets[] = { "NVIDIA's default (K, DLSS 4)", "M (DLSS 4.5, second-generation transformer)" };
-        if (ImGui::Combo("DLAA model", &preset, presets, 2)) { c.dlaaPreset = preset == 1 ? 13u : 0u; changed = true; modelChanged = true; }
+        if (ImGui::Combo("DLSS model", &preset, presets, 2)) { c.dlaaPreset = preset == 1 ? 13u : 0u; changed = true; modelChanged = true; }
         Tip("Which DLSS model runs. K is NVIDIA's default for DLAA. M is DLSS 4.5's newer model: sharper and steadier in motion in games, and much heavier "
             "(about three times K's time). Compare them with the Before / after hotkey. Changing it restarts the engine.\n"
             "Lossless Scaling gives DLAA no camera jitter and no depth, so it smooths and steadies edges and shimmer but cannot add detail beyond the frame's own, as it does in a game that supports DLSS.");
@@ -285,6 +285,9 @@ void DrawPanel() {
                                v.perFrame > 1 ? " (real and generated frames alike)" : "");
             if (g_compare.load() == 2) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "Showing Lossless Scaling's NIS for comparison (Before / after hotkey).");
         }
+        changed |= SL("Sharpening", &c.p.sharpen, 0.0f, 1.0f, c.p.sharpen <= 0.001f ? "off" : "%.2f");
+        Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond. DLSS 4 has no sharpening of its own, "
+            "while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer next to NIS. Try 0.2 to 0.4.");
         Note("Compare with the Before / after hotkey (Compare and hotkeys): it switches between DLSS and Lossless Scaling's own NIS while you play.");
     }
     if (!kDlaaAddon && eam::ui::SectionHeader("Quality and performance")) {

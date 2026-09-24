@@ -33,9 +33,10 @@ public:
 
     // One upscaled frame. in: the frame (COMMON, the game's size); out: the picture (COMMON, the screen's size, writable); flow: frame
     // generation's flow (COMMON, RGBA16F) or null. The queue waits for copied >= copiedValue first and signals done = doneValue after.
-    // motionFraction: the part of a real frame between two presented frames. False when nothing was queued (done is then never signalled).
-    bool Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT inFormat, ID3D12Resource* out, uint32_t outW, uint32_t outH,
-             ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, bool reset,
+    // motionFraction: the part of a real frame between two presented frames. sharpen: contrast-adaptive sharpening of DLSS's picture (0 = off;
+    // DLSS 4 has none of its own, and Lossless Scaling's NIS does sharpen). False when nothing was queued (done is then never signalled).
+    bool Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT inFormat, ID3D12Resource* out, uint32_t outW, uint32_t outH, DXGI_FORMAT outFormat,
+             ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, float sharpen, bool reset,
              ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue);
 
     double GpuMs() const { return m_gpuMs; }   // DLSS and the motion pass, on the GPU, smoothed
@@ -46,6 +47,7 @@ private:
     static const int kSlots = 4;
     bool EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t outH, unsigned preset);
     bool EnsureInputs(uint32_t w, uint32_t h);
+    bool EnsureSharpenTarget(uint32_t w, uint32_t h, DXGI_FORMAT fmt);
     int TakeSlot();
     void ReadTime(int slot);
     bool WaitIdle();
@@ -65,7 +67,8 @@ private:
     ID3D12QueryHeap* m_timestamps = nullptr; ID3D12Resource* m_timestampReadback = nullptr; uint64_t m_timestampFreq = 1;
     double m_gpuMs = 0;
     // the motion pass
-    ID3D12RootSignature* m_rootSig = nullptr; ID3D12PipelineState* m_motionPso = nullptr;
+    ID3D12RootSignature* m_rootSig = nullptr; ID3D12PipelineState* m_motionPso = nullptr; ID3D12PipelineState* m_sharpenPso = nullptr;
+    ID3D12Resource* m_unsharpened = nullptr; uint32_t m_unsharpenedW = 0, m_unsharpenedH = 0; DXGI_FORMAT m_unsharpenedFmt = DXGI_FORMAT_UNKNOWN;   // DLSS's picture before sharpening
     ID3D12DescriptorHeap* m_heap = nullptr; uint32_t m_descriptorSize = 0;
     // DLSS
     void* m_params = nullptr;   // NVSDK_NGX_Parameter*

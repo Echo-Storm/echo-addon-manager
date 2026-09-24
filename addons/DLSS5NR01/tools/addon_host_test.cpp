@@ -314,7 +314,7 @@ int main(int argc, char** argv) {
         // read the output back: how much of it is the fake pass's magenta, and how close its average colour is to the frame's
         D3D11_TEXTURE2D_DESC sd{}; nisOut->GetDesc(&sd); sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
         ID3D11Texture2D* st = nullptr; dev->CreateTexture2D(&sd, nullptr, &st);
-        uint64_t magenta = 0; double sum[3] = {}, want[3] = {};
+        uint64_t magenta = 0; double sum[3] = {}, want[3] = {}, detail = 0;   // detail: the average step between neighbouring pixels (sharpening raises it)
         if (st) {
             dc->CopyResource(st, nisOut);
             D3D11_MAPPED_SUBRESOURCE m{};
@@ -323,6 +323,7 @@ int main(int argc, char** argv) {
                     const uint8_t* px = static_cast<const uint8_t*>(m.pData) + y * m.RowPitch + x * 4;
                     if (px[0] == 255 && px[1] == 0 && px[2] == 255) ++magenta;
                     for (int c = 0; c < 3; ++c) sum[c] += px[c];
+                    if (x + 1 < OW) detail += std::abs(int(px[4]) - int(px[0])) + std::abs(int(px[5]) - int(px[1])) + std::abs(int(px[6]) - int(px[2]));
                 }
                 dc->Unmap(st, 0);
             }
@@ -332,8 +333,8 @@ int main(int argc, char** argv) {
         double worst = 0;
         for (int c = 0; c < 3; ++c) worst = std::max(worst, std::abs(sum[c] / (double(OW) * OH) - want[c] / (double(W) * H)));
         const bool replaced = magenta < (uint64_t)OW * OH / 100 && worst < 6.0;
-        printf("[check-nis] %ux%u -> %ux%u: %.2f%% of the output is the fake NIS pass's magenta, average colour off by %.2f levels (%s)\n", W, H, OW, OH,
-               100.0 * magenta / (double(OW) * OH), worst, replaced ? "DLSS REPLACED NIS" : "NIS KEPT");
+        printf("[check-nis] %ux%u -> %ux%u: %.2f%% of the output is the fake NIS pass's magenta, average colour off by %.2f levels, detail %.3f (%s)\n", W, H, OW, OH,
+               100.0 * magenta / (double(OW) * OH), worst, detail / (3.0 * (OW - 1) * OH), replaced ? "DLSS REPLACED NIS" : "NIS KEPT");
         for (auto* v : nisSrvs) v->Release();
         uNisOut->Release(); csNis->Release(); nisIn->Release(); coef1->Release(); coef2->Release(); nisOut->Release();
     }

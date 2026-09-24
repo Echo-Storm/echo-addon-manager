@@ -121,7 +121,7 @@ void ScalerLink::Shutdown() {
     SafeRelease(m_ctx4); SafeRelease(m_dev); m_ctx = nullptr;
 }
 
-bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, bool reset) {
+bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, float sharpen, bool reset) {
     if (!IsReady() || !m_engine || !m_engine->IsReady()) return false;
     // the shared copies: the frame in its own (view) format, the picture in the output's, which DLSS writes through a UAV
     const DXGI_FORMAT inFmt = Bridge::ViewFormat(pass.inFmt), outFmt = Bridge::ViewFormat(pass.outFmt);
@@ -139,8 +139,8 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     const uint64_t n = ++m_frame;
     m_ctx4->Signal(m_copied.d3d11, n);
     m_ctx->Flush();   // the engine's queue waits for this signal: hand it to the GPU now
-    if (!m_engine->Run(m_in.d3d12, pass.inW, pass.inH, inFmt, m_out.d3d12, pass.outW, pass.outH, flowTex ? m_flow.d3d12 : nullptr, m_flow.w, m_flow.h,
-                       flowUnit, motionFraction, preset, reset, m_copied.d3d12, n, m_done.d3d12, n))
+    if (!m_engine->Run(m_in.d3d12, pass.inW, pass.inH, inFmt, m_out.d3d12, pass.outW, pass.outH, outFmt, flowTex ? m_flow.d3d12 : nullptr, m_flow.w, m_flow.h,
+                       flowUnit, motionFraction, preset, sharpen, reset, m_copied.d3d12, n, m_done.d3d12, n))
         return false;   // nothing to wait for: NIS runs
     m_ctx4->Wait(m_done.d3d11, n);   // a GPU wait: Lossless Scaling's queue holds until DLSS has written the picture
     m_ctx->CopyResource(pass.out, m_out.d3d11);
