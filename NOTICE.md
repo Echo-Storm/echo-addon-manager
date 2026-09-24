@@ -24,11 +24,28 @@ new. The original copyright and licence are in [LICENSE](LICENSE), which must st
 | [Dear ImGui](https://github.com/ocornut/imgui) (a pinned commit) | MIT | fetched by CMake, compiled into the manager and each addon that draws a panel |
 | [nlohmann/json](https://github.com/nlohmann/json) | MIT | `manager/third_party/nlohmann` |
 | [stb_image](https://github.com/nothings/stb) | public domain / MIT | `manager/third_party/stb_image.h` |
-| [MinHook](https://github.com/TsudaKageyu/minhook) | BSD-2-Clause | fetched by CMake for the manager's Windowed feature and for the Neural Rendering addon |
+| [MinHook](https://github.com/TsudaKageyu/minhook) | BSD-2-Clause | fetched by CMake for the manager (its code hooks and the Windowed feature) |
 | Icon shapes | drawn in the manner of the [Lucide](https://lucide.dev) set (ISC) | `manager/sdk/include/eam/icons.h` |
 
-## Not part of this repository
+## NVIDIA software in the release (not MIT)
+
+The Neural Rendering addon uses **NVIDIA DLSS** technology. NVIDIA, the NVIDIA logo and DLSS are trademarks of NVIDIA Corporation; this
+project is not affiliated with or endorsed by NVIDIA. Parts of NVIDIA's DLSS SDK, taken from NVIDIA's public repository
+([NVIDIA/DLSS](https://github.com/NVIDIA/DLSS), release 310.9.1) by `tools/fetch_ngx_sdk.ps1`, are in the released files:
+
+| What | Where in the release | Terms |
+|------|----------------------|-------|
+| NVIDIA's NGX SDK library (`nvsdk_ngx_s.lib`), as object code | linked into `addons/DLSS5NR01/DLSS5NR01.dll` and `nr_selftest.exe` | NVIDIA RTX SDKs licence |
+| NVIDIA's DLSS runtime (`nvngx_dlss.dll`), unmodified | `addons/DLSS5NR01/nvngx_dlss.dll`, once the DLAA model ships | NVIDIA RTX SDKs licence |
+| NVIDIA's licence text | `addons/DLSS5NR01/NVIDIA-LICENSE.txt` | |
+
+These are NVIDIA's, under NVIDIA's own licence, which comes with them. This project's MIT licence does not cover them and does not make them
+redistributable on its terms: they may be passed on only as part of this application and under NVIDIA's terms. They are not in this
+repository (the SDK folder is ignored by git); a build fetches them from NVIDIA with the script above, which checks each one against a pinned
+SHA-256.
+
+## Not part of this repository or the release
 
 - **Lossless Scaling** is its author's product. This project is unofficial and is not affiliated with or endorsed by them.
-- The **NVIDIA DLSS SDK** (needed only to build the Neural Rendering addon) and the **DLSSNR snippet** (`nvngx_dlssnr.dll`, needed
-  to run it) belong to NVIDIA. Neither is included, linked or distributed here, and this project does not say where to find them.
+- The **DLSS NR model** (`nvngx_dlssnr.dll`, needed to run DLSS 5 Neural Rendering) belongs to NVIDIA and is not a file NVIDIA offers for
+  redistribution. It is never included, downloaded or linked here, and this project does not say where to find it: the person supplies their own.

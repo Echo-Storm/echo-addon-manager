@@ -7,7 +7,7 @@ add_definitions(-DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN -DNOMINMAX -D_CRT_SEC
 set(NGX_DIR ${CMAKE_SOURCE_DIR}/external/ngx)
 set(NGX_LIB ${NGX_DIR}/lib/nvsdk_ngx_s.lib)
 if(NOT EXISTS ${NGX_LIB} OR NOT EXISTS ${NGX_DIR}/include/nvsdk_ngx.h)
-    message(FATAL_ERROR "NVIDIA DLSS SDK not found. Put its headers in external/ngx/include and nvsdk_ngx_s.lib in external/ngx/lib (see external/ngx/README.md). It is not redistributable, so it is not part of this repository.")
+    message(FATAL_ERROR "NVIDIA DLSS SDK not found. Put its headers in external/ngx/include and nvsdk_ngx_s.lib in external/ngx/lib (see external/ngx/README.md). It is NVIDIA's, under NVIDIA's licence, so it is not part of this repository: tools/fetch_ngx_sdk.ps1 fetches it.")
 endif()
 
 # ---- third party (fetched at configure time) ----

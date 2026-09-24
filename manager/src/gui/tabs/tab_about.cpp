@@ -96,6 +96,12 @@ void RenderTabAbout() {
     ImGui::Dummy(ImVec2(0, S(4)));
     if (eam::ui::Button("The original project", eam::ui::icons::kExternal, eam::ui::ButtonKind::Flat)) OpenUrl("https://github.com/FrankBarretta/LosslessProxy");
     ImGui::Dummy(ImVec2(0, S(10)));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+    ImGui::TextWrapped("NVIDIA DLSS: the Neural Rendering addon uses NVIDIA DLSS technology and includes NVIDIA's NGX SDK and DLSS runtime under "
+                       "NVIDIA's RTX SDKs licence (NVIDIA-LICENSE.txt in its folder). NVIDIA, the NVIDIA logo and DLSS are trademarks of NVIDIA "
+                       "Corporation. This project is not affiliated with or endorsed by NVIDIA.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0, S(4)));
     ImGui::TextDisabled("Also: Dear ImGui and nlohmann/json (MIT), stb_image (public domain), MinHook (BSD, used by Windowed mode).");
     ImGui::TextDisabled("Icon shapes are drawn in the manner of the Lucide set (ISC).");
     ImGui::TextDisabled("Lossless Scaling belongs to its author; this is an unofficial add-on for it.");

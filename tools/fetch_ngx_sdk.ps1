@@ -1,6 +1,8 @@
-# Fetches the NVIDIA DLSS SDK files that DLSS 5 Neural Rendering needs to BUILD (not to run) from NVIDIA's own public repository,
-# https://github.com/NVIDIA/DLSS, into addons\DLSS5NR01\external\ngx. Nothing is taken from anywhere else, and nothing is committed: that
-# folder is ignored by git, because the SDK is not ours to redistribute.
+# Fetches the NVIDIA DLSS SDK files the Neural Rendering addon needs from NVIDIA's own public repository, https://github.com/NVIDIA/DLSS, into
+# addons\DLSS5NR01\external\ngx: the headers and static library to build it, NVIDIA's DLSS runtime (nvngx_dlss.dll, for the DLAA model), and
+# NVIDIA's licence, which goes into the release next to them. Nothing is taken from anywhere else, and nothing is committed: that folder is
+# ignored by git. NVIDIA's licence allows the runtime and the library's object code to ship inside an application such as this one, under
+# its own terms (not this project's MIT licence); see NOTICE.md.
 #
 # The files are pinned to one commit of NVIDIA's repository and checked against SHA-256 values, so what you build against is what this
 # addon was built against. Files already in place that match are left alone.
@@ -31,7 +33,9 @@ $files = @(
     @{ Remote = 'include/nvsdk_ngx_helpers.h';           Local = 'include\nvsdk_ngx_helpers.h';           Sha = '5bcbadfe7478b802cf6d3aca4dc5ddd7d0889b99726e69c63f9e9bd555f44471' },
     @{ Remote = 'include/nvsdk_ngx_helpers_dlssd.h';     Local = 'include\nvsdk_ngx_helpers_dlssd.h';     Sha = 'a25fdda925b479dfe869593aeba311ef08793da54e0391f2fe2fe756cbef5532' },
     @{ Remote = 'include/nvsdk_ngx_params.h';            Local = 'include\nvsdk_ngx_params.h';            Sha = '943bc8cc5cdae03b6303016fbad3183636f2335ae27a2d18776798c3b4efabbc' },
-    @{ Remote = 'lib/Windows_x86_64/x64/nvsdk_ngx_s.lib'; Local = 'lib\nvsdk_ngx_s.lib';                  Sha = '4e5d355086d2bc11e1a0842457d2519ea528ee1f3e112c45679a84960c07dff3' }   # the /MT static library, x64
+    @{ Remote = 'lib/Windows_x86_64/x64/nvsdk_ngx_s.lib'; Local = 'lib\nvsdk_ngx_s.lib';                  Sha = '4e5d355086d2bc11e1a0842457d2519ea528ee1f3e112c45679a84960c07dff3' },   # the /MT static library, x64
+    @{ Remote = 'lib/Windows_x86_64/rel/nvngx_dlss.dll'; Local = 'bin\nvngx_dlss.dll';                    Sha = '3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983' },   # DLSS Super Resolution / DLAA 310.9.1.0, 59 MB
+    @{ Remote = 'LICENSE.txt';                           Local = 'LICENSE.txt';                            Sha = 'd4216e39ebef5f9b50a6712ebb37beeb5379862a67733a9999c651f21592aaf0' }    # NVIDIA RTX SDKs licence
 )
 
 # SHA-256 of a file as NVIDIA publishes it. Headers are compared with line endings ignored: NVIDIA's are LF, and git on Windows may have turned
@@ -107,4 +111,4 @@ foreach ($f in $missing) {
     if ((Sha $tmp) -ne $f.Sha) { Remove-Item -LiteralPath $tmp; throw "$($f.Remote) does not match the expected SHA-256; not using it." }
     Move-Item -LiteralPath $tmp -Destination $target -Force
 }
-Write-Host "Done: $($missing.Count) file(s) placed in $Dest. They are ignored by git; do not commit or redistribute them."
+Write-Host "Done: $($missing.Count) file(s) placed in $Dest. They are ignored by git: do not commit them. The release carries the runtime and the licence under NVIDIA's terms (see NOTICE.md)."

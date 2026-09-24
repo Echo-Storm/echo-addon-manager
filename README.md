@@ -190,7 +190,7 @@ powershell -File tools\package.ps1                       # the release zip, with
 ```
 
 Building Neural Rendering from source (not needed to use the release zip) also needs NVIDIA's DLSS SDK headers and static library in
-`addons/DLSS5NR01/external/ngx`: `tools\fetch_ngx_sdk.ps1` fetches them from NVIDIA's public repository after you accept NVIDIA's licence. They are not redistributable, so they are not in this repository.
+`addons/DLSS5NR01/external/ngx`: `tools\fetch_ngx_sdk.ps1` fetches them from NVIDIA's public repository after you accept NVIDIA's licence. They are NVIDIA's, under NVIDIA's licence, so they are not in this repository; the release carries the parts it needs under NVIDIA's terms (see NOTICE.md).
 `tools\deploy.ps1 -What all -LsDir <Lossless Scaling folder>` copies a build into a Lossless Scaling folder with backups and refuses to run while Lossless Scaling or your game is open.
 The installer is its own small CMake project in [`installer/`](installer/).
 
