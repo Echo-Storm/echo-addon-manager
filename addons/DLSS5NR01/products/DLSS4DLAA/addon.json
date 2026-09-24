@@ -5,5 +5,6 @@
   "description": "Runs NVIDIA DLSS anti-aliasing (DLAA) on Lossless Scaling's frames on the LSFG GPU and applies the result to every presented frame, real and generated, without ever making Lossless Scaling wait: smoother, steadier edges without changing the look. NVIDIA's DLSS runtime is included. Only one of this and DLSS 5 Neural Rendering works at a time.",
   "min_host_version": "1.2.0",
   "dependencies": [],
+  "conflicts": ["DLSS5NR01"],
   "tags": ["graphics", "dlss", "anti-aliasing"]
 }

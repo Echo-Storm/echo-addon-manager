@@ -6,5 +6,6 @@
   "renamed_from": ["LSP-NeuralRender"],
   "min_host_version": "1.2.0",
   "dependencies": [],
+  "conflicts": ["DLSS4DLAA"],
   "tags": ["graphics", "dlss", "neural-rendering"]
 }

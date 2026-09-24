@@ -55,6 +55,10 @@ EAM_EXPORT const char* GetAddonDescription() { return "Does something useful."; 
 the new one, and hides the old folders. `min_host_version` is compared with the **addon API** version (below), not with the manager's release number. An addon that needs a newer
 API than the running manager provides is not loaded, and its card says why. Optional keys: `"dll"` (a DLL name other than the folder's) and `"icon"`.
 
+`conflicts` (optional) lists the ids of addons that cannot run beside this one, for example two that work on the same frames. It is enough for one
+of the two to name the other. Turning either on in the manager turns the other off (a notice says so), and if both are on at start-up, the first
+in the list stays on. Supported from manager 0.8.0; an older manager ignores the key.
+
 ## Exports
 
 | Export | Signature | |

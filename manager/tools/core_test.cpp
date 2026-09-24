@@ -793,6 +793,22 @@ int main(int argc, char** argv) {
         Check("...but the choice is saved for the next start", present && !EnabledInFile(cfg, "restart"));
         mgr.ToggleAddon(IndexOf(mgr, "restart"), true);
 
+        // ---- addons that cannot run side by side (addon.json "conflicts", named by either one)
+        printf("== conflicting addons\n");
+        Find(mgr, "alpha")->manifest.conflicts = { "minok" };
+        std::vector<std::string> off = mgr.ToggleAddon(IndexOf(mgr, "alpha"), false);
+        off = mgr.ToggleAddon(IndexOf(mgr, "alpha"), true);
+        Check("turning an addon on turns off the one it conflicts with, and says which", Find(mgr, "alpha")->IsLoaded() && !Find(mgr, "minok")->enabled &&
+              !Find(mgr, "minok")->IsLoaded() && off.size() == 1 && !EnabledInFile(cfg, "minok"), off.empty() ? "none" : off[0]);
+        off = mgr.ToggleAddon(IndexOf(mgr, "minok"), true);
+        Check("...and the other way round, when only one of them names the other", Find(mgr, "minok")->IsLoaded() && !Find(mgr, "alpha")->enabled && off.size() == 1);
+        Find(mgr, "alpha")->enabled = true;   // both on, as an older config.json could have them
+        mgr.LoadAddons();
+        Check("both on at start: the first in the list stays on, the other is switched off", Find(mgr, "alpha")->IsLoaded() && !Find(mgr, "minok")->enabled && !EnabledInFile(cfg, "minok"));
+        Find(mgr, "alpha")->manifest.conflicts.clear();
+        mgr.ToggleAddon(IndexOf(mgr, "minok"), true);
+        Check("without a conflict both run", Find(mgr, "alpha")->IsLoaded() && Find(mgr, "minok")->IsLoaded());
+
         // ---- resources, settings panels
         printf("== resources and settings panels\n");
         const void* data = nullptr; uint32_t size = 0;
@@ -854,7 +870,7 @@ int main(int argc, char** argv) {
         ImGui::DestroyContext(ctx);
     }   // the manager unloads everything here, including the addon that faulted
 
-    Check("shutting down unloads what was loaded", Calls(alpha, "shutdown") == 3, std::to_string(Calls(alpha, "shutdown")));
+    Check("shutting down unloads what was loaded", Calls(alpha, "shutdown") == 5, std::to_string(Calls(alpha, "shutdown")));   // 2 switch-offs, 2 in the conflict checks, and this
 
     {   // an addon that forgets to take back its callbacks: after it is unloaded they would point into freed code (the dispatch one on Lossless Scaling's render thread)
         printf("== an addon that leaves its callbacks behind\n");

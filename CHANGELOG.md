@@ -19,9 +19,12 @@ The manager and Neural Rendering now show 0.8.0.
     nothing needs to be supplied.
   - Two models: NVIDIA's default (preset K, DLSS 4) and M (DLSS 4.5's second-generation transformer). Measured in the test host at
     1920x1080 on an RTX 4070 Ti SUPER: K about 4.5 ms, M about 15 ms.
-  - **Only one of the two addons works on the frames at a time**: both would tap the same passes and add their results on top of each other.
-    Turning one on switches the other off (its Enable box clears, it lets its model go, and says so in its panel and log); with both on at
-    start-up, the first to start keeps the frames.
+  - **Only one of the two addons runs at a time**: both would tap the same passes and add their results on top of each other. Turning one on in
+    the addon list turns the other off there (a notice says so); with both on at start-up, the first in the list stays on. This is the new
+    `conflicts` key of `addon.json` (docs/addon-authors.md), which any addon can use. Inside the addons a second guard does the same (the one
+    not in charge clears its Enable box and lets its model go), for managers that do not know the key yet.
+  - Measured on the test pattern: DLAA changes about 10% of the pixels (edges), by 0.5 levels on average, against Neural Rendering's 6.5 over
+    nearly all of them. On a frame that the game has already anti-aliased, and with no camera jitter to work with, its effect is small.
   - Once an addon has hooked Present its DLL stays in memory until Lossless Scaling closes, and its hook passes straight through when it is
     off. Unloading one addon of the pair (or any addon that hooked Present before something else did) could otherwise leave a hook calling into
     freed code. A newer build of an addon that was used in the session therefore takes effect after Lossless Scaling is restarted.

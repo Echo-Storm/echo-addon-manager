@@ -37,7 +37,8 @@ public:
     // settings stay in config.json, so installing it again brings them back.
     InstallResult RemoveAddon(int index);
 
-    void ToggleAddon(int index, bool enable);
+    // Turning an addon on turns off any addon it conflicts with (addon.json "conflicts", either way round); their names are returned.
+    std::vector<std::string> ToggleAddon(int index, bool enable);
     void LoadAddonNow(int index);   // load and start an enabled addon that is not loaded (auto-load off, or an earlier failure)
     void RenderAddonSettings(int index);
     bool InterceptResource(const wchar_t* name, const wchar_t* type, const void** outData, uint32_t* outSize);
@@ -53,6 +54,7 @@ private:
     void FillFromExports(AddonInfo& addon);                               // manifest fields the DLL can supply
     bool StartAddon(AddonInfo& addon, ImGuiContext* ctx);                 // AddonInitialize, guarded; needs the window thread's context
     void UnloadModule(AddonInfo& addon);
+    void SwitchOff(AddonInfo& addon);                                     // off in the list and in config.json, unloaded if it can be
     void ReleaseIcon(AddonInfo& addon);
 
     HostImpl* m_host;

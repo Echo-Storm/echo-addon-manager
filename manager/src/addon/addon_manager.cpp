@@ -283,8 +283,34 @@ void AddonManager::UnloadModule(AddonInfo& addon) {
     addon.faulted = false;
 }
 
+namespace {
+// Two addons that cannot run side by side (either one names the other under "conflicts").
+bool Conflict(const AddonInfo& a, const AddonInfo& b) {
+    auto names = [](const AddonInfo& x, const AddonInfo& y) {
+        return std::find(x.manifest.conflicts.begin(), x.manifest.conflicts.end(), y.id) != x.manifest.conflicts.end();
+    };
+    return &a != &b && (names(a, b) || names(b, a));
+}
+} // namespace
+
+void AddonManager::SwitchOff(AddonInfo& addon) {
+    addon.enabled = false;
+    if (!addon.RequiresRestart()) UnloadModule(addon);
+    ConfigManager::Instance().SetAddonEnabled(addon.id, false);
+}
+
 void AddonManager::LoadAddons() {
     std::lock_guard<std::mutex> lock(m_mutex);
+    // Two addons that conflict and are both switched on (from an older version, or config.json edited by hand): the first in the list stays on.
+    bool changed = false;
+    for (size_t i = 0; i < m_addons.size(); ++i)
+        for (size_t j = 0; j < i; ++j)
+            if (m_addons[i].enabled && m_addons[j].enabled && Conflict(m_addons[i], m_addons[j])) {
+                LOG_WARN("AddonManager", "'%s' and '%s' cannot run side by side: '%s' is switched off", m_addons[j].id.c_str(), m_addons[i].id.c_str(), m_addons[i].id.c_str());
+                SwitchOff(m_addons[i]);
+                changed = true;
+            }
+    if (changed) ConfigManager::Instance().Save();
     for (AddonInfo& addon : m_addons)
         if (addon.enabled && !addon.IsLoaded()) LoadModule(addon);
 }
@@ -304,10 +330,18 @@ void AddonManager::UnloadAddons() {
 // While it runs
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-void AddonManager::ToggleAddon(int index, bool enable) {
+std::vector<std::string> AddonManager::ToggleAddon(int index, bool enable) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (!InRange(m_addons, index)) return;
+    std::vector<std::string> switchedOff;
+    if (!InRange(m_addons, index)) return switchedOff;
     AddonInfo& addon = m_addons[index];
+    if (enable)   // first the addons it cannot run beside, so they have let go of whatever they held
+        for (AddonInfo& other : m_addons)
+            if (other.enabled && Conflict(addon, other)) {
+                LOG_INFO("AddonManager", "Turning '%s' off: it cannot run beside '%s'", other.id.c_str(), addon.id.c_str());
+                SwitchOff(other);
+                switchedOff.push_back(other.GetDisplayName());
+            }
     addon.enabled = enable;
 
     if (addon.RequiresRestart()) {
@@ -322,6 +356,7 @@ void AddonManager::ToggleAddon(int index, bool enable) {
 
     ConfigManager::Instance().SetAddonEnabled(addon.id, enable);
     ConfigManager::Instance().Save();
+    return switchedOff;
 }
 
 void AddonManager::LoadAddonNow(int index) {

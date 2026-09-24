@@ -155,7 +155,9 @@ static void SelectAddon(const AddonInfo& addon) {
 
 // The card and the detail pane both flip an addon through here, so they behave identically.
 static void ApplyToggle(AddonManager* manager, int index, bool enable) {
-    manager->ToggleAddon(index, enable);
+    const std::vector<std::string> off = manager->ToggleAddon(index, enable);
+    std::string also;   // the addons it cannot run beside, turned off
+    for (const std::string& name : off) also += (also.empty() ? "" : ", ") + name;
     if (manager->GetAddons()[index].RequiresRestart()) {
         widgets::ToastShow(enable ? "Restart Lossless Scaling to enable this addon"
                                   : "Restart Lossless Scaling to disable this addon",
@@ -164,6 +166,8 @@ static void ApplyToggle(AddonManager* manager, int index, bool enable) {
         const std::string& why = manager->GetAddons()[index].errorMessage;
         widgets::ToastShow(why.empty() ? "Addon enabled, but it could not be loaded" : why,
                            widgets::ToastType::Error, 6.0f);
+    } else if (!also.empty()) {
+        widgets::ToastShow("Addon enabled. Turned off " + also + ": the two cannot run at the same time.", widgets::ToastType::Success, 5.0f);
     } else {
         widgets::ToastShow(enable ? "Addon enabled" : "Addon disabled",
                            enable ? widgets::ToastType::Success : widgets::ToastType::Info);
