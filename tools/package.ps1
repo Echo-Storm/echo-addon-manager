@@ -49,7 +49,7 @@ foreach ($a in $addons) {
     Copy-Item "$($a.Dir)\addon.json" $dst
     if (Test-Path "$($a.Dir)\icon.png") { Copy-Item "$($a.Dir)\icon.png" $dst }
     if (Test-Path "$($a.Dir)\LICENSE") { Copy-Item "$($a.Dir)\LICENSE" "$dst\LICENSE.txt" }
-    if ($a.Extra) { foreach ($name in $a.Extra.Keys) { Need $a.Extra[$name] "$name for $($a.Id) (run tools\fetch_ngx_sdk.ps1)"; New-Item -ItemType Directory -Force (Split-Path "$dst\$name") | Out-Null; Copy-Item $a.Extra[$name] "$dst\$name" } }
+    if ($a.Extra) { foreach ($extra in $a.Extra.Keys) { Need $a.Extra[$extra] "$extra for $($a.Id) (run tools\fetch_ngx_sdk.ps1)"; New-Item -ItemType Directory -Force (Split-Path "$dst\$extra") | Out-Null; Copy-Item $a.Extra[$extra] "$dst\$extra" } }
     $included += $a.Id
 }
 if (-not ($included -contains 'DLSS5NR01')) { Write-Host 'Neural Rendering did not build: it is not in this package.' }
