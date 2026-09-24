@@ -7,6 +7,10 @@
   screen's size, one thread group per 32x24 pixels) and runs NVIDIA DLSS Super Resolution into the same output instead, on Lossless Scaling's
   own D3D11 device, on every presented frame, real and generated. Frame generation's optical flow is its motion (half a real frame apart at 2x);
   depth is flat and there is no camera jitter. Found in a New Vegas session log (2560x1440 -> 3840x2160, twice per real frame at 2x).
+  - First try crashed Lossless Scaling inside NVIDIA's D3D11 driver: DLSS was set up on a thread of its own, using Lossless Scaling's device
+    while its render thread used it too. The set-up now runs on the render thread (about 0.9 s, once, when the upscaler first starts; a thread
+    of our own only reads NVIDIA's runtime file ahead), and switching the addon off mid-session leaves NVIDIA's objects until Lossless Scaling
+    closes rather than tear them down from another thread.
   - The Before / after hotkey lets NIS run again, to compare in the game. If DLSS cannot run, NIS runs as usual.
   - It works beside DLSS 5 Neural Rendering (no longer "one addon at a time"); the addon list can switch it on again.
   - The test host has a fake NIS pass that paints its output magenta: DLSS replaces it with a real upscaled picture, on real and generated

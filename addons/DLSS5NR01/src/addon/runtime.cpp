@@ -564,28 +564,45 @@ void OnDeviceEvent(uint32_t id, const void*, uint32_t, void*) {
 // ---- DLSS as Lossless Scaling's scaler (the DLSS 4 addon; see scaler11.h)
 //
 // Every pass still goes through the frame tap, which follows frame generation's optical flow and tells real frames apart; the NIS pass is
-// replaced when DLSS is ready, and runs as usual until then (NVIDIA's runtime loads on a thread of its own), when DLSS fails, or while the
-// Before / after hotkey shows the original.
+// replaced when DLSS is ready, and runs as usual until then, when DLSS fails, or while the Before / after hotkey shows the original.
+//
+// Lossless Scaling's D3D11 device and context are only ever used on its render thread, here: a device is not safe to use from two threads
+// at once (setting DLSS up on a thread of its own crashed inside NVIDIA's driver, 2026-09-24). A thread of our own only reads NVIDIA's runtime
+// file beforehand, so that the set-up here, which loads it, is quick.
 
 namespace {
-Scaler11 g_scaler;                               // under g_frameMutex, once g_scalerStarting is false
-std::atomic<bool> g_scalerStarting{ false };
+Scaler11 g_scaler;                               // under g_frameMutex, on the render thread only
+std::atomic<bool> g_scalerStarting{ false };     // NVIDIA's runtime file is being read ahead
+bool g_scalerWarm = false;                       // ...and has been: the set-up may run
 ID3D11Device* g_scalerDevice = nullptr;          // the device it was started on (not AddRef'd: the scaler holds it)
 uint32_t g_nisSinceTap = 0, g_nisPerFrame = 0;   // NIS passes between two real frames: the presents per real frame
 uint64_t g_nisSeen = 0, g_scalerStatusAt = 0;
 std::atomic<uint32_t> g_scaleInW{ 0 }, g_scaleInH{ 0 }, g_scaleOutW{ 0 }, g_scaleOutH{ 0 };
 
-void StartScaler(ID3D11Device* dev) {   // under g_frameMutex
-    g_scalerDevice = dev;
+// Reads NVIDIA's runtime once, on a thread of its own, so the operating system has it in memory when NGX loads it (no graphics calls here).
+void WarmScalerRuntime() {
     g_scalerStarting = true;
-    dev->AddRef();
-    std::thread([dev] {
-        SetStatus("DLSS: loading NVIDIA's runtime...");
-        const bool ok = g_scaler.Init(dev, g_addonDir, g_addonDir + L"\\dlss", [](const char* m) { Log("%s", m); });
-        SetStatus(ok ? "DLSS ready: waiting for the NIS pass" : g_scaler.LastError());
-        dev->Release();
+    SetStatus("DLSS: reading NVIDIA's runtime...");
+    std::thread([] {
+        const std::wstring path = g_addonDir + L"\\dlss\\nvngx_dlss.dll";
+        HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+        if (f != INVALID_HANDLE_VALUE) {
+            std::vector<char> chunk(1 << 20); DWORD got = 0;
+            while (ReadFile(f, chunk.data(), static_cast<DWORD>(chunk.size()), &got, nullptr) && got) {}
+            CloseHandle(f);
+        }
         g_scalerStarting = false;
     }).detach();
+}
+
+bool StartScaler(ID3D11Device* dev) {   // on the render thread, under g_frameMutex
+    g_scalerDevice = dev;
+    LARGE_INTEGER f, a, b; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
+    const bool ok = g_scaler.Init(dev, g_addonDir, g_addonDir + L"\\dlss", [](const char* m) { Log("%s", m); });
+    QueryPerformanceCounter(&b);
+    Log("DLSS scaler set up on Lossless Scaling's render thread in %.0f ms", (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart);
+    SetStatus(ok ? "DLSS ready" : g_scaler.LastError());
+    return ok;
 }
 
 bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
@@ -603,6 +620,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     ReadHotkeys();
     bool replaced = false;
     ID3D11Device* dev = nullptr; ctx->GetDevice(&dev);
+    if (!g_scalerWarm && !g_scalerStarting) { WarmScalerRuntime(); g_scalerWarm = true; }
     if (!g_scalerStarting) {
         if (dev && dev != g_scalerDevice && !g_scaler.IsFailed()) {
             if (g_scaler.IsReady()) g_scaler.Shutdown();
@@ -662,7 +680,7 @@ ScalerView GetScalerView() {
 void StopScaler() {
     for (int i = 0; i < 500 && g_scalerStarting; ++i) Sleep(10);
     std::lock_guard<std::mutex> lock(g_frameMutex);
-    if (g_scaler.IsReady() || g_scaler.IsFailed()) g_scaler.Shutdown();
+    g_scaler.Abandon();   // not on the render thread: see Scaler11::Abandon
     g_scalerDevice = nullptr;
 }
 

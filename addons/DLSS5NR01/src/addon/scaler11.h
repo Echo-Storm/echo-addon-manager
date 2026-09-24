@@ -27,6 +27,9 @@ public:
     // NGX on Lossless Scaling's device; NVIDIA's runtime is looked for in runtimeDir (the addon's dlss folder).
     bool Init(ID3D11Device* dev, const std::wstring& dataPath, const std::wstring& runtimeDir, LogFn log);
     void Shutdown();
+    // Off the render thread (the addon switched off while Lossless Scaling runs): lets go of our own D3D11 objects only. NVIDIA's feature and
+    // NGX stay until the process ends, because tearing them down calls into the device from a second thread.
+    void Abandon();
     bool IsReady() const { return m_ready; }
     bool IsFailed() const { return m_failed; }
     const std::string& LastError() const { return m_error; }

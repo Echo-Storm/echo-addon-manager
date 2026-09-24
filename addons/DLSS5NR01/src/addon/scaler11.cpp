@@ -172,6 +172,16 @@ void Scaler11::Shutdown() {
     m_inW = m_inH = m_outW = m_outH = 0; m_preset = ~0u; m_ready = false;
 }
 
+void Scaler11::Abandon() {
+    if (m_feature || m_params) Log("DLSS scaler: switched off while Lossless Scaling runs; NVIDIA's DLSS objects stay until it closes");
+    m_feature = nullptr; m_params = nullptr;
+    SafeRelease(m_motionUav); SafeRelease(m_motion); SafeRelease(m_depth);
+    SafeRelease(m_motionShader); SafeRelease(m_constants); SafeRelease(m_sampler);
+    for (int i = 0; i < kQueries; ++i) { SafeRelease(m_disjoint[i]); SafeRelease(m_begin[i]); SafeRelease(m_end[i]); m_queryUsed[i] = false; }
+    SafeRelease(m_dev);
+    m_inW = m_inH = m_outW = m_outH = 0; m_preset = ~0u; m_ready = false;
+}
+
 // ---- the feature and its inputs
 
 bool Scaler11::EnsureInputs(uint32_t w, uint32_t h) {
