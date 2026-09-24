@@ -25,7 +25,7 @@ $nrBuild = "$root\addons\DLSS5NR01\build"
 # name, the changed paths that start it (regular expressions on forward-slash paths), and what it builds and runs
 $suites = [ordered]@{
     core      = @{ When = '^manager/(src|sdk)/|^manager/CMakeLists|^manager/tools/(core_test|test_addon|install_test|abi_)';
-                   Build = @('manager', 'eam_coretest', 'eam_installtest');
+                   Build = @('manager', 'Lossless', 'eam_coretest', 'eam_installtest');
                    Runs = @(@('core (addon handling, host, hooks)', "$mgr\eam_coretest.exe", @()), @('exit with the GPU sampler running', "$mgr\eam_coretest.exe", @('abrupt-gpu')),
                             @('install (addons, backups, diagnostics)', "$mgr\eam_installtest.exe", @())) }
     features  = @{ When = '^manager/src/(features|core|config)/|^manager/CMakeLists|^manager/tools/features_test';
@@ -39,7 +39,7 @@ $suites = [ordered]@{
                    Build = @('manager', 'eam_updatetest');
                    Runs = @(, @('update check (local server)', "$mgr\eam_updatetest.exe", @())) }
     gui       = @{ When = '^manager/src/gui/|^manager/sdk/include/eam/(widgets|icons)\.h|^manager/tools/gui_test';
-                   Build = @('manager', 'eam_guitest');
+                   Build = @('manager', 'Lossless', 'eam_guitest');
                    Runs = @(@('window (defaults)', "$mgr\eam_guitest.exe", @()), @('window (saved placement)', "$mgr\eam_guitest.exe", @('place')),
                             @('window (saved placement, interface size 150 %)', "$mgr\eam_guitest.exe", @('scaled'))) }
     installer = @{ When = '^installer/src/core/|^installer/tests/(installer_test|payload_test)|^installer/CMakeLists|^manager/sdk/include/eam/version\.h';

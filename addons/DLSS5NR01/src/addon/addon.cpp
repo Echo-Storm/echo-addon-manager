@@ -102,7 +102,8 @@ void Start(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void
 
     Loaded loaded = LoadSettings(host, kAddonId);
     { std::lock_guard<std::mutex> lock(g_settingsMutex); g_config = loaded.config; g_looks = std::move(loaded.looks);
-      g_config.model = kDlaaAddon ? 1 : 0; }   // each addon of the pair runs its own model
+      g_config.model = kDlaaAddon ? 1 : 0;     // each addon of the pair runs its own model
+      if (kWip && std::string(host->GetConfig(kAddonId, "wipRun", "0")) != "1") g_config.enabled = false; }   // see product.h
     SettleFramesAtStart();
     g_compare = loaded.compareStart; g_splitPos = loaded.splitStart;
     ApplyTapRoles();

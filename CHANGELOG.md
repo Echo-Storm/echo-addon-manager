@@ -10,7 +10,10 @@ The manager and Neural Rendering now show 0.8.0.
   - Without a snapshot the same editing works on an empty box of the frame's shape. The World of Warcraft starter layout, Clear all and edge softness stay, and the exact numbers are
     still there, folded under "Exact numbers".
   - The offline test host renders the panel with a real snapshot taken through the whole chain (the present, the GPU copy, the read-back, the manager's image).
-- **A new addon: DLSS 4 DLAA** (a first version to try). NVIDIA's DLSS anti-aliasing on Lossless Scaling's frames, for smoother, steadier edges
+- **A new addon: DLSS 4 DLAA, work in progress and switched off.** Tried in World of Warcraft at 4K (2026-09-24): it changed nothing visible while
+  costing 3 to 4 ms of GPU time a frame, because a captured frame gives DLSS no camera jitter and no depth. Its Enable box is greyed out (with a
+  note saying why), it never takes the frames, it declares no conflict for now, and the release package leaves it out (`package.ps1 -IncludeWip`
+  puts it in). The test host still runs it (`wipRun=1`). What it is: NVIDIA's DLSS anti-aliasing on Lossless Scaling's frames, for smoother, steadier edges
   without Neural Rendering's change of look, as its own entry in the addon list. It is built from Neural Rendering's sources, so it has the same
   pipeline and panel (the capture, Lossless Scaling's motion, the result added to every presented frame, the HUD areas, compare, screenshots,
   looks), with only the settings that apply to it. Lossless Scaling gives it no camera jitter and no depth, so it cannot add detail beyond the

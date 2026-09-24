@@ -4,7 +4,8 @@
 #   powershell -File tools\package.ps1 [-Version 0.7.0] [-SkipBuild]
 param(
     [string]$Version = '',
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$IncludeWip   # also package addons marked work in progress (DLSS 4 DLAA)
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -32,12 +33,13 @@ $addons = @(
        # NVIDIA's files, under NVIDIA's licence (NOTICE.md): the licence must travel with the binaries that contain NVIDIA's code
        Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt" } },
     # DLSS 4 DLAA: built from the same sources; its addon.json lives in products\DLSS4DLAA, and NVIDIA's DLSS runtime ships in its dlss folder
-    @{ Id = 'DLSS4DLAA'; Dir = "$root\addons\DLSS5NR01\products\DLSS4DLAA"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS4DLAA.dll');
+    @{ Id = 'DLSS4DLAA'; Wip = $true; Dir = "$root\addons\DLSS5NR01\products\DLSS4DLAA"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS4DLAA.dll');
        Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; 'LICENSE.txt' = "$root\addons\DLSS5NR01\LICENSE";
                   'dlss\nvngx_dlss.dll' = "$root\addons\DLSS5NR01\external\ngx\bin\nvngx_dlss.dll" } }
 )
 $included = @(); $skipped = @()
 foreach ($a in $addons) {
+    if ($a.Wip -and -not $IncludeWip) { Write-Host "$($a.Id) is work in progress: not packaged (-IncludeWip packages it)."; continue }
     $missing = @($a.Files | Where-Object { -not (Test-Path "$($a.Bin)\$_") })
     if ($missing.Count) { $skipped += $a.Id; continue }
     $dst = "$stage\addons\$($a.Id)"

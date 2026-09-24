@@ -205,7 +205,13 @@ void DrawPanel() {
     const bool dlaa = kDlaaAddon;
     {
         const std::string label = std::string("Enable ") + kProductName;
+        if (kWip) {
+            Note("Work in progress, switched off for now. On a captured frame DLSS gets no camera jitter and no depth from the game, and in testing "
+                 "(World of Warcraft at 4K) it changed nothing visible while costing 3 to 4 ms of GPU time a frame. It stays off until a way around that is found.");
+            ImGui::BeginDisabled();
+        }
         if (ImGui::Checkbox(label.c_str(), &c.enabled)) { changed = true; if (c.enabled) { ClaimFrames(); SwitchOn(); } else ReleaseFrames(); }
+        if (kWip) ImGui::EndDisabled();
         Tip("Master switch. Off = Lossless Scaling runs untouched and the model stops.\nTo compare before and after while playing, use the Before / after hotkey instead: it keeps the model running.\n"
             "Only one of DLSS 5 Neural Rendering and DLSS 4 DLAA works at a time: turning this on switches the other off.");
     }
