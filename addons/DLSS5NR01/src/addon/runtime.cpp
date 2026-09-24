@@ -638,6 +638,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
             else if (g_nisSeen == 1) SetStatus("waiting: Lossless Scaling's device is not an NVIDIA card");
         } else if (g_sr.IsReady()) {
             if (dev != g_linkDevice) {   // Lossless Scaling's (new) device: the link is made on it, here on its render thread
+                g_link.ReportDeviceChange();
                 g_link.Shutdown();
                 g_linkDevice = g_link.Init(dev, ctx, &g_sr, [](const char* m) { Log("%s", m); }) ? dev : nullptr;
             }

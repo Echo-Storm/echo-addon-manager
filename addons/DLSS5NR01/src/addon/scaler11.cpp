@@ -121,6 +121,17 @@ void ScalerLink::Shutdown() {
     SafeRelease(m_ctx4); SafeRelease(m_dev); m_ctx = nullptr;
 }
 
+void ScalerLink::ReportDeviceChange() {
+    if (!m_dev) return;
+    const HRESULT reason = m_dev->GetDeviceRemovedReason();
+    const char* name = reason == S_OK ? "not removed: Lossless Scaling replaced it itself"
+                     : reason == DXGI_ERROR_DEVICE_HUNG ? "HUNG (its GPU work stopped making progress)"
+                     : reason == DXGI_ERROR_DEVICE_RESET ? "RESET" : reason == DXGI_ERROR_DEVICE_REMOVED ? "REMOVED" : "other";
+    const uint64_t copied = m_copied.d3d11 ? m_copied.d3d11->GetCompletedValue() : 0, done = m_done.d3d11 ? m_done.d3d11->GetCompletedValue() : 0;
+    Log("DLSS upscaler: Lossless Scaling's device changed; the old one: 0x%08x %s. Frames handed over %llu, 'copied' reached %llu, 'done' reached %llu",
+        (unsigned)reason, name, (unsigned long long)m_frame, (unsigned long long)copied, (unsigned long long)done);
+}
+
 bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, float sharpen, bool reset) {
     if (!IsReady() || !m_engine || !m_engine->IsReady()) return false;
     // the shared copies: the frame in its own (view) format, the picture in the output's, which DLSS writes through a UAV

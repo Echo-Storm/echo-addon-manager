@@ -214,6 +214,12 @@ def scenario_scaler(ctx, res, text, frame):
             ctx['scaler_detail'] = float(detail.group(1))
 
 
+def scenario_scaler_noflow(ctx, res, text, frame):
+    # frame generation off: no capture or flow passes, NIS on the BGRA8 frame
+    nis = re.search(r'\[check-nis\].*', text)
+    res.check('with frame generation off (no flow, a BGRA8 frame) DLSS still replaces NIS', 'DLSS REPLACED NIS' in text, nis.group(0)[12:] if nis else 'no check line')
+
+
 def scenario_pair(ctx, res, text, frame):
     # both addons loaded and switched on: the upscaler works beside Neural Rendering, which keeps its frames
     res.check('neither steps aside', 'BOTH ON' in text)
@@ -243,6 +249,7 @@ SCENARIOS = [
     ('scaler', ['addon=DLSS4DLAA.dll', 'nis=1'], scenario_scaler),
     ('scaler_m', ['addon=DLSS4DLAA.dll', 'nis=1', 'dlaaPreset=13'], scenario_scaler),
     ('scaler_sharp', ['addon=DLSS4DLAA.dll', 'nis=1', 'sharpen=0.5'], scenario_scaler),
+    ('scaler_bgra', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_scaler_noflow),   # frame generation off: only NIS, on the BGRA8 capture
     ('pair', ['second=DLSS4DLAA.dll'], scenario_pair),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'snapshotOnStart=1', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),

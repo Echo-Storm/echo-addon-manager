@@ -28,6 +28,9 @@ public:
     // On Lossless Scaling's render thread: the shared fences between its device and the engine's.
     bool Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, SrEngine* engine, LogFn log);
     void Shutdown();
+    // Before letting go of a device Lossless Scaling has replaced: why it went (hung, reset, removed, or not at all), and how far the two
+    // fences had got, so the log says whether a wait was left unanswered.
+    void ReportDeviceChange();
     bool IsReady() const { return m_copied.d3d11 != nullptr; }
     ID3D11Device* Device() const { return m_dev; }
 

@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -288,7 +288,9 @@ int main(int argc, char** argv) {
     for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "nis=1")) nisMode = true;
     if (nisMode) {
         const UINT OW = W * 3 / 2, OH = H * 3 / 2;
-        ID3D11Texture2D* nisIn = MakeTex(dev, W, H, DXGI_FORMAT_R8G8B8A8_UNORM, false);
+        bool nisBgra = false;   // nisbgra=1: the frame in BGRA8, as Lossless Scaling hands it to NIS with frame generation off
+        for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "nisbgra=1")) nisBgra = true;
+        ID3D11Texture2D* nisIn = MakeTex(dev, W, H, nisBgra ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM, false);
         ID3D11Texture2D* coef1 = MakeTex(dev, 2, 64, DXGI_FORMAT_R32G32B32A32_FLOAT, false), * coef2 = MakeTex(dev, 2, 64, DXGI_FORMAT_R32G32B32A32_FLOAT, false);
         ID3D11Texture2D* nisOut = MakeTex(dev, OW, OH, DXGI_FORMAT_R8G8B8A8_UNORM, true);
         ID3D11ShaderResourceView* nisSrvs[3] = { srv(nisIn), srv(coef1), srv(coef2) }; ID3D11UnorderedAccessView* uNisOut = uav(nisOut);
@@ -300,7 +302,10 @@ int main(int argc, char** argv) {
             host.Dispatch(dc, (OW + 31) / 32, (OH + 23) / 24, 1);
             dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls);
         };
+        bool nisNoFlow = false;   // nisnoflow=1: frame generation off, so no capture or flow passes, only NIS
+        for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "nisnoflow=1")) nisNoFlow = true;
         for (int fr = 0; fr < 150; ++fr) {
+            if (nisNoFlow) { nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(16)); if (fr % 30 == 0) frame("nis"); else emptyFrame(); continue; }
             Fill(dc, cur, W, H);
             dc->CSSetShaderResources(0, 1, &sCur); dc->CSSetUnorderedAccessViews(0, 4, uPyr, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W * 7 / 10 / 8, H * 7 / 10 / 8, 1);
             ID3D11UnorderedAccessView* null4[4] = {}; dc->CSSetUnorderedAccessViews(0, 4, null4, nullptr); dc->CSSetShaderResources(0, 3, nulls);
@@ -329,7 +334,11 @@ int main(int argc, char** argv) {
             }
             st->Release();
         }
-        for (UINT y = 0; y < H; ++y) for (UINT x = 0; x < W; ++x) { const uint32_t v = Pattern(x, y, W, H); want[0] += v & 255; want[1] += (v >> 8) & 255; want[2] += (v >> 16) & 255; }
+        for (UINT y = 0; y < H; ++y) for (UINT x = 0; x < W; ++x) {
+            const uint32_t v = Pattern(x, y, W, H);   // in memory: B, G, R
+            if (nisBgra) { want[0] += (v >> 16) & 255; want[1] += (v >> 8) & 255; want[2] += v & 255; }   // the RGBA8 output holds R, G, B
+            else { want[0] += v & 255; want[1] += (v >> 8) & 255; want[2] += (v >> 16) & 255; }
+        }
         double worst = 0;
         for (int c = 0; c < 3; ++c) worst = std::max(worst, std::abs(sum[c] / (double(OW) * OH) - want[c] / (double(W) * H)));
         const bool replaced = magenta < (uint64_t)OW * OH / 100 && worst < 6.0;
