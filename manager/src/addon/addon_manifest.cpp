@@ -42,6 +42,7 @@ bool ReadManifest(const std::filesystem::path& file, AddonManifest& out, std::st
     TakeList(doc, "dependencies", out.dependencies);
     TakeList(doc, "renamed_from", out.renamedFrom);
     TakeList(doc, "conflicts", out.conflicts);
+    if (const auto it = doc.find("wip"); it != doc.end() && it->is_boolean()) out.wip = it->get<bool>();
     TakeList(doc, "tags", out.tags);
     out.parsed = true;
     return true;

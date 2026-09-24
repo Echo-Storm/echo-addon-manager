@@ -30,6 +30,7 @@ struct Chip { const char* text = nullptr; ImU32 colour = 0; };
 
 Chip ChipFor(const AddonInfo& a) {
     using namespace eam::ui::theme;
+    if (a.manifest.wip) return { "WIP", U(kWarn) };
     if (a.faulted) return { "ERROR", kChipRed };
     if (a.security == SecurityVerdict::Tampered) return { "TAMPERED", kChipRed };
     if (a.enabled && !a.IsLoaded()) return { a.RequiresRestart() ? "RESTART TO APPLY" : "NOT LOADED", U(kWarn) };
@@ -74,7 +75,8 @@ std::string SwitchTooltip(const AddonInfo& a) {
     std::string tip = a.GetDisplayName() + "\n\n";
     tip += a.manifest.description.empty() ? std::string("No description.") : a.manifest.description;
     tip += "\n\n";
-    tip += a.enabled ? "On: switch it off to stop using this addon." : "Off: switch it on to use this addon.";
+    if (a.manifest.wip) tip += "Work in progress: it cannot be switched on yet.";
+    else tip += a.enabled ? "On: switch it off to stop using this addon." : "Off: switch it on to use this addon.";
     if (a.RequiresRestart()) tip += "\nChanging this takes effect the next time Lossless Scaling starts.";
     return tip;
 }
@@ -128,11 +130,13 @@ bool AddonCard(AddonInfo& addon, int index, bool isSelected, bool* toggled) {
     char switchId[32];
     snprintf(switchId, sizeof switchId, "##toggle_%d", index);
     bool on = addon.enabled;
+    if (addon.manifest.wip) ImGui::BeginDisabled();
     if (ToggleSwitch(switchId, &on)) {
         addon.enabled = on;
         if (toggled) *toggled = true;
         clicked = true;
     }
+    if (addon.manifest.wip) ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled)) Tip(SwitchTooltip(addon).c_str());
 
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) clicked = true;   // anywhere on the card selects it

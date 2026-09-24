@@ -304,9 +304,12 @@ static void RenderDetail(AddonManager* manager, AddonInfo& addon, int index) {
     const float switchWidth = ImGui::GetFrameHeight() * 0.8f * 1.8f;
     ImGui::SameLine(ImGui::GetWindowWidth() - switchWidth - ImGui::GetStyle().WindowPadding.x - S(4));
     bool enabled = addon.enabled;
+    if (addon.manifest.wip) ImGui::BeginDisabled();
     if (widgets::ToggleSwitch("##detail_enable", &enabled))
         ApplyToggle(manager, index, enabled);
-    widgets::Tip("Turn this addon on or off. It loads or unloads at once, unless it says it needs Lossless Scaling restarted.");
+    if (addon.manifest.wip) ImGui::EndDisabled();
+    widgets::Tip(addon.manifest.wip ? "Work in progress: this addon cannot be switched on yet."
+                                    : "Turn this addon on or off. It loads or unloads at once, unless it says it needs Lossless Scaling restarted.");
 
     // Status line.
     ImGui::Dummy(ImVec2(0, S(2)));

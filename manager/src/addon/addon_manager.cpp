@@ -78,7 +78,7 @@ bool AddonManager::Inspect(const fs::path& folder, AddonInfo& info) {
             LOG_INFO("AddonManager", "Carried the settings of '%s' over to '%s'", old.c_str(), info.id.c_str());
             m_settingsMoved = true;
         }
-    info.enabled = ConfigManager::Instance().IsAddonEnabled(info.id, true);
+    info.enabled = !info.manifest.wip && ConfigManager::Instance().IsAddonEnabled(info.id, true);   // a work in progress stays off
     info.security = AddonSecurity::VerifyDll(info.dllPath, info.id);
     return true;
 }
@@ -335,6 +335,10 @@ std::vector<std::string> AddonManager::ToggleAddon(int index, bool enable) {
     std::vector<std::string> switchedOff;
     if (!InRange(m_addons, index)) return switchedOff;
     AddonInfo& addon = m_addons[index];
+    if (enable && addon.manifest.wip) {   // work in progress: it cannot be switched on (the switch is greyed out; this is the guard)
+        addon.enabled = false;
+        return switchedOff;
+    }
     if (enable)   // first the addons it cannot run beside, so they have let go of whatever they held
         for (AddonInfo& other : m_addons)
             if (other.enabled && Conflict(addon, other)) {

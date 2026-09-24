@@ -59,6 +59,9 @@ API than the running manager provides is not loaded, and its card says why. Opti
 of the two to name the other. Turning either on in the manager turns the other off (a notice says so), and if both are on at start-up, the first
 in the list stays on. Supported from manager 0.8.0; an older manager ignores the key.
 
+`wip` (optional, `true` or `false`) marks an addon as work in progress: the manager lists it with a WIP label, greys out its switch and never
+loads it. Supported from manager 0.8.0.
+
 ## Exports
 
 | Export | Signature | |

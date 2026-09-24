@@ -4,6 +4,7 @@
 //   eam_coretest.exe        (eam_testaddon.dll must sit beside it; the build puts it there)
 #include "src/addon/addon_dependency.h"
 #include "src/addon/addon_manager.h"
+#include "src/addon/addon_manifest.h"
 #include "src/addon/addon_security.h"
 #include "src/config/config_manager.h"
 #include "src/config/settings_backup.h"
@@ -808,6 +809,21 @@ int main(int argc, char** argv) {
         Find(mgr, "alpha")->manifest.conflicts.clear();
         mgr.ToggleAddon(IndexOf(mgr, "minok"), true);
         Check("without a conflict both run", Find(mgr, "alpha")->IsLoaded() && Find(mgr, "minok")->IsLoaded());
+
+        // ---- work in progress (addon.json "wip": true): listed, never switched on
+        printf("== work in progress\n");
+        {
+            const fs::path wipJson = A / "wip_manifest.json";
+            WriteFile(wipJson, "{ \"name\": \"W\", \"wip\": true }");
+            AddonManifest m; ReadManifest(wipJson, m);
+            AddonManifest plain; WriteFile(wipJson, "{ \"name\": \"W\" }"); ReadManifest(wipJson, plain);
+            Check("the wip key is read, and is off when absent", m.wip && !plain.wip);
+            fs::remove(wipJson);
+        }
+        Find(mgr, "beta")->manifest.wip = true;
+        mgr.ToggleAddon(IndexOf(mgr, "beta"), true);
+        Check("a work-in-progress addon cannot be switched on", !Find(mgr, "beta")->enabled && !Find(mgr, "beta")->IsLoaded() && Calls(beta, "init") == 0);
+        Find(mgr, "beta")->manifest.wip = false;
 
         // ---- resources, settings panels
         printf("== resources and settings panels\n");
