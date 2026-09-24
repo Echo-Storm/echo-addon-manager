@@ -14,7 +14,7 @@ new. The original copyright and licence are in [LICENSE](LICENSE), which must st
 |------|--------|---------|
 | `manager/` | Echo-Storm, on FrankBarretta's LosslessProxy | MIT, [LICENSE](LICENSE) |
 | `manager/src/features` (ReShade passthrough, Windowed mode) | FrankBarretta's addons, reworked and built in by Echo-Storm | MIT, [LICENSE](LICENSE) |
-| `addons/DLSS5NR01` | Echo-Storm; it began as andreiday's DLSS 5 plugin for LosslessProxy, with thanks | MIT, its `LICENSE` |
+| `addons/DLSS5NR01` | Echo-Storm; it began as andreiday's DLSS 5 plugin for LosslessProxy, with thanks. The same sources also build DLSS 4 DLAA (work in progress) | MIT, its `LICENSE` |
 | `tools/` | Echo-Storm | MIT |
 
 ## Third-party code that is built in or fetched at build time
@@ -36,8 +36,8 @@ project is not affiliated with or endorsed by NVIDIA. Parts of NVIDIA's DLSS SDK
 | What | Where in the release | Terms |
 |------|----------------------|-------|
 | NVIDIA's NGX SDK library (`nvsdk_ngx_s.lib`), as object code | linked into `addons/DLSS5NR01/DLSS5NR01.dll` and `nr_selftest.exe` | NVIDIA RTX SDKs licence |
-| NVIDIA's DLSS runtime (`nvngx_dlss.dll` 310.9.1), unmodified | `addons/DLSS5NR01/dlss/nvngx_dlss.dll`, for the DLAA model | NVIDIA RTX SDKs licence |
-| NVIDIA's licence text | `addons/DLSS5NR01/NVIDIA-LICENSE.txt` | |
+| NVIDIA's DLSS runtime (`nvngx_dlss.dll` 310.9.1), unmodified | `addons/DLSS4DLAA/dlss/nvngx_dlss.dll`, with the DLSS 4 DLAA addon when it is packaged (it is work in progress and not in the 0.8.0 release) | NVIDIA RTX SDKs licence |
+| NVIDIA's licence text | `NVIDIA-LICENSE.txt` in each of those addon folders | |
 
 These are NVIDIA's, under NVIDIA's own licence, which comes with them. This project's MIT licence does not cover them and does not make them
 redistributable on its terms: they may be passed on only as part of this application and under NVIDIA's terms. They are not in this

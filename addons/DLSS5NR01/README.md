@@ -63,11 +63,13 @@ walks through every setting, how to pick the working scale, and what each status
 ## Cost
 
 On an RTX 3090 a model run costs about 10 ms plus 7 ms per megapixel of model input, whatever the
-pixels are. The *Working scale* is the only cost lever: the frame is shrunk by it before the model
+pixels are; on an RTX 4070 Ti SUPER about 2.7 ms plus 1.8 ms per megapixel. The *Working scale* is the only cost lever: the frame is shrunk by it before the model
 sees it, and the delta is upsampled back at present time. At 5120x1440 a working scale of 0.35
 gives a 14 to 17 ms run, which keeps up with a 48 fps game. At a working scale past the frame
 interval the model skips frames and the previous delta is carried forward by the flow; the panel
-shows how many frames the model keeps up with.
+shows how many frames the model keeps up with. *Auto* (off by default) keeps the model within a time budget by lowering the
+working scale when it runs over and raising it back when there is room. Changing the working scale has the model made again on a
+thread of its own, so the game never stalls for it.
 
 Because the model shares the GPU with LSFG, a heavy model run can still delay LSFG's own work on
 the same card. *LS's GPU work first* raises Lossless Scaling's GPU priority so LSFG's passes and
@@ -104,11 +106,11 @@ including why each hook is the kind it is, is in [docs/architecture.md](docs/arc
 A short list of what is planned. Ideas are listed here so they are
 not lost; none of them is promised.
 
-- **Auto model resolution (TODO).** Pick *Model resolution* automatically: measure the model time and the frame interval
-  and lower or raise the working scale to keep the model running on every frame with a little headroom, instead of the
-  user finding the value by hand. Two things make this harder than it sounds: changing the scale rebuilds the model
-  (a short stall on Lossless Scaling's render thread), so it needs hysteresis and a minimum time between changes, and the
-  cost depends on the game's own GPU load, which moves with the scene. Not started.
+- **Auto model resolution: done in 0.8.0** (*Auto: keep the model within a time budget*). Room to grow: a budget per game,
+  and "keep a share of the GPU free" as well as a model time.
+- **DLSS 4 DLAA**, built from these sources as a second addon, is work in progress and switched off: on a captured frame DLSS gets
+  no camera jitter and no depth, and in testing it changed nothing visible. Next idea: DLSS as Lossless Scaling's upscaler
+  ([research](../../docs/dlss-4.5-research.md)).
 - One distribution with one look for the three addons (Neural Rendering, ReShade input passthrough, Windowed mode): done inside
   Echo Addon Manager.
 

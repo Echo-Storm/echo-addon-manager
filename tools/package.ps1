@@ -1,6 +1,7 @@
 # Builds Release and assembles dist\EchoAddonManager-<version>-x64.zip: the manager, the addons that build, EchoAddonManagerSetup.exe (one file that carries them all),
 # an install note, and the licences.
-# NVIDIA's DLSS SDK and the DLSSNR snippet are never packaged. Neural Rendering is left out (with a note) when it did not build.
+# The DLSSNR model is never packaged. NVIDIA's NGX library is linked into Neural Rendering and ships under NVIDIA's licence (NOTICE.md), with
+# NVIDIA-LICENSE.txt beside it. Neural Rendering is left out (with a note) when it did not build; work-in-progress addons unless -IncludeWip.
 #   powershell -File tools\package.ps1 [-Version 0.7.0] [-SkipBuild]
 param(
     [string]$Version = '',

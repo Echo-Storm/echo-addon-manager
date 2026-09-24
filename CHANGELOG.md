@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 (2026-09-23): the interface pass
+## 0.8.0 (2026-09-24): the interface pass
 
 The manager and Neural Rendering now show 0.8.0.
 
@@ -38,6 +38,8 @@ The manager and Neural Rendering now show 0.8.0.
   is in the release; NOTICE.md said it was not. It now lists what of NVIDIA's is in the release and that NVIDIA's licence, not MIT, covers it.
   The About tab credits NVIDIA DLSS, and `NVIDIA-LICENSE.txt` ships in the addon's folder. `tools/fetch_ngx_sdk.ps1` also fetches NVIDIA's
   licence and DLSS runtime, pinned and checked like the rest.
+- The Setup test hashes files through .NET: started from PowerShell 7, Windows PowerShell could not find `Get-FileHash` and the test stopped after its first install.
+- The README, the roadmap, NOTICE.md and Neural Rendering's README and user guide are brought up to date (auto quality, the HUD editor, screenshots, background model making, DLSS 4 DLAA).
 - The test host now saves its sample frame once the model runs steadily (the 210th present, not the 63rd), so a slower start no longer fails it.
 - **Changing the model resolution no longer stalls the game.** Making the model for a new working size (a changed Model resolution, a look with
   another one, auto quality, or a new frame size) took 180 to 225 ms, measured, on Lossless Scaling's own render thread, and everything froze

@@ -16,7 +16,12 @@ function Check($what, $ok, $detail = '') {
     if ($ok) { Write-Host "  PASS  $what" } else { Write-Host "  FAIL  $what  ($detail)"; $script:fail++ }
 }
 foreach ($f in @($setup, "$fakes\fake_original.dll", "$fakes\fake_original_new.dll", $ours)) { if (-not (Test-Path $f)) { Write-Host "  FAIL  not built: $f"; exit 1 } }
-function Hash($p) { if (Test-Path $p) { (Get-FileHash $p -Algorithm SHA256).Hash } else { '' } }
+# SHA-256 through .NET: Get-FileHash is missing when Windows PowerShell is started from PowerShell 7 (it inherits 7's module path)
+function Hash($p) {
+    if (-not (Test-Path $p)) { return '' }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes((Resolve-Path $p).Path))) -replace '-', '' } finally { $sha.Dispose() }
+}
 
 $tmp = Join-Path $env:TEMP "setup_exe_test_$PID"
 if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }

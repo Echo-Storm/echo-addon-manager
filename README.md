@@ -19,7 +19,7 @@ addons, a live view of frame time and GPU load while a game runs, and one-click 
 
 [![build](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml/badge.svg)](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml)
 
-Status: **0.7.0**, on the way to 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
+Status: **0.8.0**, on the way to 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
 
 ## Get started
 
@@ -95,7 +95,7 @@ And one **addon**, which is separate because it needs an NVIDIA GPU and a file y
 
 | Addon | What it does | Default |
 |-------|--------------|---------|
-| **DLSS 5 Neural Rendering** | Runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures and applies the result to every frame it presents, real and generated, without ever making Lossless Scaling wait. Saved looks, per-game looks, HUD protection drawn on a snapshot of the game, screenshots of what you see, shadows and highlights, colour, film grain and temporal smoothing. Needs an NVIDIA RTX GPU and a copy of `nvngx_dlssnr.dll` that you supply. [More](addons/DLSS5NR01/README.md) | on |
+| **DLSS 5 Neural Rendering** | Runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures and applies the result to every frame it presents, real and generated, without ever making Lossless Scaling wait. Saved looks, per-game looks, HUD protection drawn on a snapshot of the game, screenshots of what you see, an auto mode that keeps the model within a time budget, shadows and highlights, colour, film grain and temporal smoothing. Changing the model resolution never stalls the game. Needs an NVIDIA RTX GPU and a copy of `nvngx_dlssnr.dll` that you supply. [More](addons/DLSS5NR01/README.md) | on |
 
 **HUD protection, drawn on the game.** In Neural Rendering's panel, *Take a snapshot* shows the game as you see it, and you draw the areas the enhancement must leave
 exactly as they are (action bars, chat, the minimap, quest text): drag to add an area, drag it to move it, drag an edge or corner to resize it, right-click to remove it.

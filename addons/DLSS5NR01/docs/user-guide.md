@@ -132,7 +132,10 @@ What each of these measurably does, knob by knob, is in [dlssnr-knobs.md](dlssnr
 
 | Control | Default | What it does |
 |---|---|---|
-| Model resolution | 0.35 | The frame is shrunk by this before the model sees it. The only cost lever. |
+| Model resolution | 0.35 | The frame is shrunk by this before the model sees it. The only cost lever. Changing it has the model made again in the background (a fraction of a second, during which the last result carries on): the game does not stall. With Auto on, this is the most Auto uses. |
+| Auto: keep the model within a time budget | off | Lowers the model resolution while the model takes longer than the budget, and raises it back toward your own setting when there is room. It changes slowly (down after 3 s over the budget, up after 10 s well under it, only up when the expected time still fits) and ignores loading screens and pauses. Nothing that changes the look is touched. The panel shows the resolution it runs at and its recent changes. |
+| Time budget | 5.0 ms | The model time Auto keeps to. Half the frame time is a good start: 8 ms at 60 fps, 5 ms at 100 fps. |
+| Lowest model resolution | 0.25 | Auto never goes below this. |
 | Model passes | 1 | How many times the model reworks each frame (1 to 4); every pass takes the previous result as its input, so the effect compounds. Each extra pass costs roughly another model run: watch the model time and the "keeps up with" line. If the model cannot keep up it skips frames and the last result is carried forward. Compare with the Before / after hotkey: more passes can look over-processed. |
 | Give Lossless Scaling GPU priority | on | Raises Lossless Scaling's D3D11 device to GPU thread priority +7 so LSFG's own passes and presents pre-empt the model on the shared GPU. Leave it on unless you are measuring. |
 | Blend amount | 1.00 | How much of the delta is added at present time. Above 1 exaggerates the model's edit. |
@@ -153,19 +156,31 @@ What each of these measurably does, knob by knob, is in [dlssnr-knobs.md](dlssnr
 | Diagnostic view | Result | *Original* shows the frame untouched, *Delta x4* the delta amplified, *Frame role* tints real frames green and generated frames red, *LSFG flow* shows the flow field. |
 
 The lines above the controls are live: the model input size in megapixels, the measured model
-time next to the estimate (10 ms + 7 ms per megapixel on Ampere), the frame interval, how many
+time next to the estimate (10 ms + 7 ms per megapixel on Ampere; about 2.7 ms + 1.8 ms on an RTX 4070 Ti SUPER), the frame interval, how many
 frames the model keeps up with, how long after the submit the GPU started and finished, and how
 many presents were composed with which pattern. A warning appears when the model runs on fewer
 than half of the frames.
 
 ### Keep the HUD untouched
 
-Up to six rectangles (given as fractions of the screen: left, top, right, bottom) inside which the picture stays exactly as
-Lossless Scaling made it: no model change, sharpening, tone, colour or grain. Use them for the action bars, minimap, chat and
-any text the model might soften. *Edge softness* fades the enhancement in over a few pixels outside a rectangle instead of a
-hard edge. *Show the areas on screen* tints and outlines the rectangles in green so they can be lined up with the HUD (display
-only, not saved). *WoW starter layout* fills four rectangles where World of Warcraft's default interface sits; it is a starting
-point, not a measurement of anyone's own layout. The rectangles are saved with presets, so each game can have its own.
+Up to six areas inside which the picture stays exactly as Lossless Scaling made it: no model change, sharpening, tone, colour
+or grain. Use them for the action bars, minimap, chat and any text the model might soften.
+
+Draw them on a picture of the game: **Take a snapshot** puts the game, as it is shown, in the panel. **Drag** on it to add an area,
+drag an area to move it, drag an edge or corner to resize it, and **right-click** an area to remove it; the change is saved when
+the mouse is let go. Without a snapshot the same editing works on an empty box of the frame's shape. *Edge softness* fades the
+enhancement in over a few pixels outside an area instead of a hard edge. *Show the areas in the game* tints and outlines them in
+green (display only, not saved). *WoW starter layout* fills four areas where World of Warcraft's default interface sits; it is a
+starting point, not a measurement of anyone's own layout. The exact numbers (fractions of the screen: left, top, right, bottom)
+are still there, folded under *Exact numbers*. The areas are saved with looks, so each game can have its own.
+
+### Screenshots
+
+**Take a screenshot** (or **Ctrl+Shift+F11** in the game; the key can be changed) saves the picture as it is shown, with the
+model's result, the scaling and frame generation in it, as a PNG. It is copied on the GPU and written on a thread of its own, so the
+game does not stall. Files are named after the game and the time and go to `Pictures\Lossless Scaling`, or a folder you choose.
+8-bit, 10-bit and half-float frames are handled (HDR highlights are cut, not tone-mapped). The in-game corner marker never ends up
+in the picture.
 
 ### Compare and hotkeys
 
@@ -197,8 +212,8 @@ A preset is a named look: style, intensity, the local strengths, the skin and ma
 scale, apply strength, max delta, highlight protection and sharpen. **Save current as preset** stores the sliders as they
 are now (saving under an existing name overwrites it); **Apply** loads one; **Delete** removes it. The **next preset**
 hotkey (default Ctrl+Shift+F10) cycles through them in order, which is the quickest way to judge two looks in the game.
-Compare, hotkey and tap settings are not part of a preset. A preset with a different working scale makes the model
-rebuild, which costs a short hitch on the frame it happens.
+Compare, hotkey and tap settings are not part of a preset. A preset with a different working scale has the model made
+again in the background, which takes a fraction of a second; the game does not stall.
 
 Presets are stored in `addons\config.json` under this addon (`presetNames` plus one `preset.<name>` string each). Since 0.4.0
 a preset also carries shadows, highlights, grain, temporal smoothing and the HUD rectangles. Presets saved by an older version
@@ -210,8 +225,8 @@ The panel shows the program that has focus (Lossless Scaling's own windows are i
 game). Link a program's exe name to a preset and, with *Switch to a program's saved look when it takes focus* on, that preset is
 applied when the program takes focus (once per change of program, so tweaks you make afterwards stay). *Save the current look for
 the program in focus* stores the sliders as a preset named after the program and links it in one step; programs can also be added
-by typing the exe name. Matching ignores case. Applying a preset with a different working scale makes the model rebuild for a
-moment. The focus is polled every few dozen presents, so a switch takes a fraction of a second. Stored as `gameList` and
+by typing the exe name. Matching ignores case. Applying a preset with a different working scale has the model made again in the
+background. The focus is polled every few dozen presents, so a switch takes a fraction of a second. Stored as `gameList` and
 `game.<exe>` keys next to the presets.
 
 ### Choosing the working scale
