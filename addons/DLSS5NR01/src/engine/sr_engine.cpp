@@ -1,0 +1,350 @@
+#include "engine/sr_engine.h"
+#include <d3dcompiler.h>
+#include <algorithm>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <vector>
+#include "nvsdk_ngx.h"
+#include "nvsdk_ngx_defs.h"
+#include "nvsdk_ngx_params.h"
+
+namespace {
+
+constexpr unsigned long long kAppId = 0x24480452ull;   // the upscaler's NGX application id (Neural Rendering's is ...451)
+constexpr DWORD kSlotWaitMs = 500, kIdleWaitMs = 5000;
+
+template <class T> void SafeRelease(T*& p) { if (p) { p->Release(); p = nullptr; } }
+
+// Frame generation's flow (xy: from this frame to the one before, in units of 1/flowUnit of a flow pixel) as DLSS motion vectors in pixels of
+// the game's frame: where each pixel was in the presented frame before, a fraction of a real frame ago. Zero without flow.
+const char* kMotionHlsl = R"(
+Texture2D<float4> tFlow : register(t0);
+RWTexture2D<float2> uMotion : register(u0);
+SamplerState sLinear : register(s0);
+cbuffer C : register(b0) { uint2 size; float scale; uint hasFlow; };
+[numthreads(8, 8, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= size.x || id.y >= size.y) return;
+    const float2 uv = (float2(id.xy) + 0.5) / float2(size);
+    uMotion[id.xy] = hasFlow != 0 ? tFlow.SampleLevel(sLinear, uv, 0).xy * scale : float2(0, 0);
+}
+)";
+struct MotionConstants { uint32_t w, h; float scale; uint32_t hasFlow; };
+
+const char* ResultName(NVSDK_NGX_Result r) {
+    switch (r) {
+    case NVSDK_NGX_Result_Success: return "Success";
+    case NVSDK_NGX_Result_FAIL_FeatureNotSupported: return "FeatureNotSupported";
+    case NVSDK_NGX_Result_FAIL_PlatformError: return "PlatformError";
+    case NVSDK_NGX_Result_FAIL_FeatureNotFound: return "FeatureNotFound (nvngx_dlss.dll missing?)";
+    case NVSDK_NGX_Result_FAIL_InvalidParameter: return "InvalidParameter";
+    case NVSDK_NGX_Result_FAIL_NotInitialized: return "NotInitialized";
+    case NVSDK_NGX_Result_FAIL_UnsupportedInputFormat: return "UnsupportedInputFormat";
+    case NVSDK_NGX_Result_FAIL_RWFlagMissing: return "RWFlagMissing";
+    case NVSDK_NGX_Result_FAIL_OutOfDate: return "OutOfDate (update the NVIDIA driver)";
+    default: return "error";
+    }
+}
+
+} // namespace
+
+void SrEngine::Log(const char* fmt, ...) {
+    if (!m_log) return;
+    char text[512]; va_list a; va_start(a, fmt); vsnprintf(text, sizeof text, fmt, a); va_end(a);
+    m_log(text);
+}
+
+void SrEngine::Fail(const char* fmt, ...) {
+    char text[256]; va_list a; va_start(a, fmt); vsnprintf(text, sizeof text, fmt, a); va_end(a);
+    m_error = text; m_failed = true; m_ready = false;
+    Log("DLSS upscaler FAILED: %s", text);
+}
+
+// ---- starting and stopping
+
+bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::wstring& runtimeDir, LogFn log) {
+    m_log = std::move(log); m_failed = false; m_error.clear();
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) { Fail("CreateDXGIFactory1"); return false; }
+    IDXGIAdapter1* adapter = nullptr;
+    for (UINT i = 0; !adapter; ++i) {
+        IDXGIAdapter1* a = nullptr;
+        if (factory->EnumAdapters1(i, &a) == DXGI_ERROR_NOT_FOUND) break;
+        DXGI_ADAPTER_DESC1 desc; a->GetDesc1(&desc);
+        if (desc.AdapterLuid.LowPart == card.LowPart && desc.AdapterLuid.HighPart == card.HighPart) adapter = a; else a->Release();
+    }
+    factory->Release();
+    if (!adapter) { Fail("no graphics card with LUID %08x:%08x", card.HighPart, card.LowPart); return false; }
+    const HRESULT hr = D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_dev));
+    adapter->Release();
+    if (FAILED(hr)) { Fail("D3D12CreateDevice 0x%08x", (unsigned)hr); return false; }
+
+    D3D12_COMMAND_QUEUE_DESC queue{}; queue.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    if (FAILED(m_dev->CreateCommandQueue(&queue, IID_PPV_ARGS(&m_queue)))) { Fail("CreateCommandQueue"); return false; }
+    for (auto*& a : m_alloc) if (FAILED(m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&a)))) { Fail("CreateCommandAllocator"); return false; }
+    if (FAILED(m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_alloc[0], nullptr, IID_PPV_ARGS(&m_list)))) { Fail("CreateCommandList"); return false; }
+    m_list->Close();
+    if (FAILED(m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence))) || !(m_event = CreateEventW(nullptr, FALSE, FALSE, nullptr))) { Fail("CreateFence"); return false; }
+    D3D12_QUERY_HEAP_DESC queries{}; queries.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP; queries.Count = 2 * kSlots;
+    m_dev->CreateQueryHeap(&queries, IID_PPV_ARGS(&m_timestamps));
+    D3D12_HEAP_PROPERTIES readback{}; readback.Type = D3D12_HEAP_TYPE_READBACK;
+    D3D12_RESOURCE_DESC buffer{}; buffer.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; buffer.Width = 16 * kSlots; buffer.Height = 1; buffer.DepthOrArraySize = 1;
+    buffer.MipLevels = 1; buffer.SampleDesc.Count = 1; buffer.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    m_dev->CreateCommittedResource(&readback, D3D12_HEAP_FLAG_NONE, &buffer, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_timestampReadback));
+    m_queue->GetTimestampFrequency(&m_timestampFreq);
+
+    // the motion pass: t0 the flow, u0 the motion vectors, four constants, a linear sampler
+    D3D12_DESCRIPTOR_RANGE srv{}; srv.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; srv.NumDescriptors = 1;
+    D3D12_DESCRIPTOR_RANGE uav{}; uav.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV; uav.NumDescriptors = 1;
+    D3D12_ROOT_PARAMETER params[3]{};
+    params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; params[0].DescriptorTable = { 1, &srv };
+    params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; params[1].DescriptorTable = { 1, &uav };
+    params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; params[2].Constants.Num32BitValues = 4;
+    for (auto& p : params) p.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    D3D12_STATIC_SAMPLER_DESC sampler{}; sampler.Filter = D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT; sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    sampler.AddressU = sampler.AddressV = sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    const D3D12_ROOT_SIGNATURE_DESC rootDesc{ 3, params, 1, &sampler, D3D12_ROOT_SIGNATURE_FLAG_NONE };
+    ID3DBlob* blob = nullptr; ID3DBlob* error = nullptr;
+    if (FAILED(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error)) ||
+        FAILED(m_dev->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&m_rootSig)))) {
+        SafeRelease(blob); SafeRelease(error); Fail("the motion pass's root signature"); return false;
+    }
+    SafeRelease(blob);
+    ID3DBlob* code = nullptr;
+    if (FAILED(D3DCompile(kMotionHlsl, strlen(kMotionHlsl), "sr_motion", nullptr, nullptr, "main", "cs_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code, &error))) {
+        Log("motion shader: %s", error ? static_cast<const char*>(error->GetBufferPointer()) : "?"); SafeRelease(error); Fail("the motion shader did not compile"); return false;
+    }
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso{}; pso.pRootSignature = m_rootSig; pso.CS = { code->GetBufferPointer(), code->GetBufferSize() };
+    const HRESULT psoResult = m_dev->CreateComputePipelineState(&pso, IID_PPV_ARGS(&m_motionPso));
+    SafeRelease(code);
+    if (FAILED(psoResult)) { Fail("the motion pass's pipeline 0x%08x", (unsigned)psoResult); return false; }
+    D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors = 2 * kSlots; heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    if (FAILED(m_dev->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&m_heap)))) { Fail("CreateDescriptorHeap"); return false; }
+    m_descriptorSize = m_dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+    // NGX, with NVIDIA's runtime from the addon's dlss folder
+    const wchar_t* paths[] = { runtimeDir.c_str() };
+    NVSDK_NGX_FeatureCommonInfo info{}; info.PathListInfo.Path = paths; info.PathListInfo.Length = 1;
+    NVSDK_NGX_Result r = NVSDK_NGX_D3D12_Init(kAppId, dataPath.c_str(), m_dev, &info);
+    if (NVSDK_NGX_FAILED(r)) { Fail("NGX Init: %s", ResultName(r)); return false; }
+    NVSDK_NGX_Parameter* p = nullptr;
+    if (NVSDK_NGX_FAILED(NVSDK_NGX_D3D12_AllocateParameters(&p)) || !p) { Fail("NGX parameters"); return false; }
+    m_params = p;
+    int available = 0;
+    NVSDK_NGX_Parameter* caps = nullptr;
+    if (NVSDK_NGX_SUCCEED(NVSDK_NGX_D3D12_GetCapabilityParameters(&caps)) && caps) { caps->Get(NVSDK_NGX_Parameter_SuperSampling_Available, &available); NVSDK_NGX_D3D12_DestroyParameters(caps); }
+    if (!available) { Fail("DLSS Super Resolution is not available on this graphics card or driver"); return false; }
+    m_ready = true;
+    Log("DLSS upscaler ready on its own D3D12 device (runtime from %ls)", runtimeDir.c_str());
+    return true;
+}
+
+void SrEngine::Shutdown() {
+    if (m_queue) WaitIdle();
+    if (m_feature) { NVSDK_NGX_D3D12_ReleaseFeature(static_cast<NVSDK_NGX_Handle*>(m_feature)); m_feature = nullptr; }
+    if (m_params) { NVSDK_NGX_D3D12_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(m_params)); m_params = nullptr; }
+    if (m_dev) NVSDK_NGX_D3D12_Shutdown1(m_dev);
+    SafeRelease(m_motion); SafeRelease(m_depth); SafeRelease(m_depthUpload);
+    SafeRelease(m_motionPso); SafeRelease(m_rootSig); SafeRelease(m_heap);
+    SafeRelease(m_timestamps); SafeRelease(m_timestampReadback);
+    SafeRelease(m_list); for (auto*& a : m_alloc) SafeRelease(a);
+    SafeRelease(m_fence); if (m_event) { CloseHandle(m_event); m_event = nullptr; }
+    SafeRelease(m_queue); SafeRelease(m_dev);
+    for (auto& v : m_slotDone) v = 0;
+    m_fenceValue = 0; m_nextSlot = 0; m_inW = m_inH = m_outW = m_outH = 0; m_preset = ~0u; m_ready = false;
+}
+
+ID3D12Resource* SrEngine::OpenSharedTexture(HANDLE h) {
+    ID3D12Resource* r = nullptr;
+    if (FAILED(m_dev->OpenSharedHandle(h, IID_PPV_ARGS(&r)))) Log("DLSS upscaler: a shared texture could not be opened");
+    return r;
+}
+ID3D12Fence* SrEngine::OpenSharedFence(HANDLE h) {
+    ID3D12Fence* f = nullptr;
+    if (FAILED(m_dev->OpenSharedHandle(h, IID_PPV_ARGS(&f)))) Log("DLSS upscaler: a shared fence could not be opened");
+    return f;
+}
+
+bool SrEngine::WaitIdle() {
+    if (!m_queue || !m_fence) return true;
+    m_queue->Signal(m_fence, ++m_fenceValue);
+    if (m_fence->GetCompletedValue() < m_fenceValue) { m_fence->SetEventOnCompletion(m_fenceValue, m_event); WaitForSingleObject(m_event, kIdleWaitMs); }
+    return m_fence->GetCompletedValue() >= m_fenceValue;
+}
+void SrEngine::Drain() { WaitIdle(); }
+
+void SrEngine::Transition(ID3D12Resource* r, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to) {
+    D3D12_RESOURCE_BARRIER b{}; b.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    b.Transition = { r, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, from, to };
+    m_list->ResourceBarrier(1, &b);
+}
+
+int SrEngine::TakeSlot() {
+    const int slot = m_nextSlot;
+    if (m_slotDone[slot] && m_fence->GetCompletedValue() < m_slotDone[slot]) {
+        m_fence->SetEventOnCompletion(m_slotDone[slot], m_event);
+        WaitForSingleObject(m_event, kSlotWaitMs);
+        if (m_fence->GetCompletedValue() < m_slotDone[slot]) return -1;   // still on the GPU: this frame is left to NIS
+    }
+    m_nextSlot = (slot + 1) % kSlots;
+    m_alloc[slot]->Reset();
+    return slot;
+}
+
+void SrEngine::ReadTime(int slot) {
+    if (!m_slotDone[slot] || !m_timestampReadback) return;
+    const D3D12_RANGE range{ static_cast<SIZE_T>(slot) * 16, static_cast<SIZE_T>(slot) * 16 + 16 };
+    uint64_t* t = nullptr;
+    if (FAILED(m_timestampReadback->Map(0, &range, reinterpret_cast<void**>(&t)))) return;
+    const uint64_t t0 = t[slot * 2], t1 = t[slot * 2 + 1];
+    const D3D12_RANGE none{ 0, 0 };
+    m_timestampReadback->Unmap(0, &none);
+    if (t1 > t0 && m_timestampFreq) { const double ms = (t1 - t0) * 1000.0 / m_timestampFreq; m_gpuMs = m_gpuMs == 0 ? ms : m_gpuMs * 0.9 + ms * 0.1; }
+}
+
+// ---- the feature and its inputs (on the caller's thread; our own device only)
+
+bool SrEngine::EnsureInputs(uint32_t w, uint32_t h) {
+    if (m_motion && m_inW == w && m_inH == h) return true;
+    SafeRelease(m_motion); SafeRelease(m_depth); SafeRelease(m_depthUpload);
+    D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_RESOURCE_DESC d{}; d.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width = w; d.Height = h; d.DepthOrArraySize = 1; d.MipLevels = 1; d.SampleDesc.Count = 1;
+    d.Format = DXGI_FORMAT_R16G16_FLOAT; d.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    if (FAILED(m_dev->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &d, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(&m_motion)))) return false;
+    d.Format = DXGI_FORMAT_R32_FLOAT; d.Flags = D3D12_RESOURCE_FLAG_NONE;
+    if (FAILED(m_dev->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &d, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_depth)))) return false;
+    // flat depth (DLSS reads it; Lossless Scaling has none), uploaded once
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{}; UINT rows = 0; UINT64 rowBytes = 0, total = 0;
+    m_dev->GetCopyableFootprints(&d, 0, 1, 0, &layout, &rows, &rowBytes, &total);
+    D3D12_HEAP_PROPERTIES upload{}; upload.Type = D3D12_HEAP_TYPE_UPLOAD;
+    D3D12_RESOURCE_DESC buf{}; buf.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; buf.Width = total; buf.Height = 1; buf.DepthOrArraySize = 1; buf.MipLevels = 1;
+    buf.SampleDesc.Count = 1; buf.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    if (FAILED(m_dev->CreateCommittedResource(&upload, D3D12_HEAP_FLAG_NONE, &buf, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_depthUpload)))) return false;
+    uint8_t* mapped = nullptr;
+    m_depthUpload->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
+    const std::vector<float> row(w, 0.5f);
+    for (UINT y = 0; y < rows; ++y) memcpy(mapped + layout.Offset + y * layout.Footprint.RowPitch, row.data(), w * 4);
+    m_depthUpload->Unmap(0, nullptr);
+    D3D12_TEXTURE_COPY_LOCATION to{}; to.pResource = m_depth; to.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    D3D12_TEXTURE_COPY_LOCATION from{}; from.pResource = m_depthUpload; from.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; from.PlacedFootprint = layout;
+    m_list->CopyTextureRegion(&to, 0, 0, 0, &from, nullptr);
+    Transition(m_depth, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    return true;
+}
+
+bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t outH, unsigned preset) {
+    if (m_feature && inW == m_inW && inH == m_inH && outW == m_outW && outH == m_outH && preset == m_preset) return true;
+    LARGE_INTEGER f, a, b; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
+    if (!WaitIdle()) { Fail("the GPU did not finish the earlier work"); return false; }
+    for (auto& v : m_slotDone) v = 0;
+    if (m_feature) { NVSDK_NGX_D3D12_ReleaseFeature(static_cast<NVSDK_NGX_Handle*>(m_feature)); m_feature = nullptr; }
+    m_alloc[0]->Reset();
+    m_list->Reset(m_alloc[0], nullptr);
+    if (!EnsureInputs(inW, inH)) { m_list->Close(); Fail("the motion-vector and depth textures could not be made"); return false; }
+    auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
+    const float ratio = std::max(static_cast<float>(outW) / inW, static_cast<float>(outH) / inH);
+    const NVSDK_NGX_PerfQuality_Value quality = ratio <= 1.55f ? NVSDK_NGX_PerfQuality_Value_MaxQuality : ratio <= 1.75f ? NVSDK_NGX_PerfQuality_Value_Balanced
+                                              : ratio <= 2.2f ? NVSDK_NGX_PerfQuality_Value_MaxPerf : NVSDK_NGX_PerfQuality_Value_UltraPerformance;
+    p->Set(NVSDK_NGX_Parameter_CreationNodeMask, 1u); p->Set(NVSDK_NGX_Parameter_VisibilityNodeMask, 1u);
+    p->Set(NVSDK_NGX_Parameter_Width, inW); p->Set(NVSDK_NGX_Parameter_Height, inH);
+    p->Set(NVSDK_NGX_Parameter_OutWidth, outW); p->Set(NVSDK_NGX_Parameter_OutHeight, outH);
+    p->Set(NVSDK_NGX_Parameter_PerfQualityValue, static_cast<int>(quality));
+    p->Set(NVSDK_NGX_Parameter_DLSS_Feature_Create_Flags, static_cast<int>(NVSDK_NGX_DLSS_Feature_Flags_MVLowRes));   // motion at the game's size
+    p->Set(NVSDK_NGX_Parameter_DLSS_Enable_Output_Subrects, 0);
+    for (const char* key : { NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_DLAA, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Quality,
+                             NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Balanced, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Performance,
+                             NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraPerformance, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraQuality })
+        p->Set(key, preset);
+    NVSDK_NGX_Handle* handle = nullptr;
+    const NVSDK_NGX_Result r = NVSDK_NGX_D3D12_CreateFeature(m_list, NVSDK_NGX_Feature_SuperSampling, p, &handle);
+    m_list->Close();
+    ID3D12CommandList* lists[] = { m_list };
+    m_queue->ExecuteCommandLists(1, lists);
+    WaitIdle();
+    SafeRelease(m_depthUpload);
+    QueryPerformanceCounter(&b);
+    if (NVSDK_NGX_FAILED(r) || !handle) { Fail("CreateFeature(DLSS): %s", ResultName(r)); return false; }
+    m_feature = handle; m_inW = inW; m_inH = inH; m_outW = outW; m_outH = outH; m_preset = preset;
+    m_buildMs = (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
+    Log("DLSS upscaler: %ux%u -> %ux%u (x%.2f), preset %u, made in %.0f ms", inW, inH, outW, outH, ratio, preset, m_buildMs);
+    return true;
+}
+
+// ---- one frame
+
+bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT, ID3D12Resource* out, uint32_t outW, uint32_t outH,
+                   ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, bool reset,
+                   ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue) {
+    if (!m_ready) return false;
+    const bool fresh = !m_feature || inW != m_inW || inH != m_inH || outW != m_outW || outH != m_outH || preset != m_preset;
+    if (!EnsureFeature(inW, inH, outW, outH, preset)) return false;
+    const int slot = TakeSlot();
+    if (slot < 0) return false;
+    ReadTime(slot);
+
+    // descriptors: the flow (or a null view) and the motion vectors
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu = m_heap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr += static_cast<SIZE_T>(slot) * 2 * m_descriptorSize;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu = m_heap->GetGPUDescriptorHandleForHeapStart(); gpu.ptr += static_cast<UINT64>(slot) * 2 * m_descriptorSize;
+    D3D12_SHADER_RESOURCE_VIEW_DESC sv{}; sv.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; sv.Texture2D.MipLevels = 1;
+    m_dev->CreateShaderResourceView(flow, &sv, cpu);
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuUav = cpu; cpuUav.ptr += m_descriptorSize;
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uv{}; uv.Format = DXGI_FORMAT_R16G16_FLOAT; uv.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    m_dev->CreateUnorderedAccessView(m_motion, nullptr, &uv, cpuUav);
+
+    m_list->Reset(m_alloc[slot], nullptr);
+    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+    // the shared textures come in COMMON
+    Transition(in, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if (flow) Transition(flow, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Transition(out, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    // 1. motion vectors
+    Transition(m_motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    ID3D12DescriptorHeap* heaps[] = { m_heap };
+    m_list->SetDescriptorHeaps(1, heaps);
+    m_list->SetComputeRootSignature(m_rootSig);
+    m_list->SetPipelineState(m_motionPso);
+    m_list->SetComputeRootDescriptorTable(0, gpu);
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuUav = gpu; gpuUav.ptr += m_descriptorSize;
+    m_list->SetComputeRootDescriptorTable(1, gpuUav);
+    const float unit = flowUnit > 0.1f ? flowUnit : 2.0f;
+    const MotionConstants c{ inW, inH, flow && flowW ? static_cast<float>(inW) / (unit * flowW) * motionFraction : 0.0f, flow && flowW && flowH ? 1u : 0u };
+    m_list->SetComputeRoot32BitConstants(2, 4, &c, 0);
+    m_list->Dispatch((inW + 7) / 8, (inH + 7) / 8, 1);
+    Transition(m_motion, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    // 2. DLSS
+    auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
+    p->Set(NVSDK_NGX_Parameter_Color, in);
+    p->Set(NVSDK_NGX_Parameter_Output, out);
+    p->Set(NVSDK_NGX_Parameter_Depth, m_depth);
+    p->Set(NVSDK_NGX_Parameter_MotionVectors, m_motion);
+    p->Set(NVSDK_NGX_Parameter_Jitter_Offset_X, 0.0f); p->Set(NVSDK_NGX_Parameter_Jitter_Offset_Y, 0.0f);
+    p->Set(NVSDK_NGX_Parameter_MV_Scale_X, 1.0f); p->Set(NVSDK_NGX_Parameter_MV_Scale_Y, 1.0f);
+    p->Set(NVSDK_NGX_Parameter_Reset, (reset || fresh) ? 1 : 0);
+    p->Set(NVSDK_NGX_Parameter_Sharpness, 0.0f);
+    p->Set(NVSDK_NGX_Parameter_DLSS_Pre_Exposure, 1.0f);
+    p->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Width, inW);
+    p->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Height, inH);
+    const NVSDK_NGX_Result r = NVSDK_NGX_D3D12_EvaluateFeature_C(m_list, static_cast<NVSDK_NGX_Handle*>(m_feature), p, nullptr);
+
+    Transition(in, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+    if (flow) Transition(flow, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+    Transition(out, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
+    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+    m_list->ResolveQueryData(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, m_timestampReadback, static_cast<UINT64>(slot) * 16);
+    m_list->Close();
+
+    // submitted even when DLSS failed, so "done" is always signalled for a queued run
+    m_queue->Wait(copied, copiedValue);
+    ID3D12CommandList* lists[] = { m_list };
+    m_queue->ExecuteCommandLists(1, lists);
+    m_queue->Signal(done, doneValue);
+    m_queue->Signal(m_fence, ++m_fenceValue);
+    m_slotDone[slot] = m_fenceValue;
+    if (NVSDK_NGX_FAILED(r)) { Fail("EvaluateFeature(DLSS): %s", ResultName(r)); return false; }
+    ++m_runs;
+    return true;
+}

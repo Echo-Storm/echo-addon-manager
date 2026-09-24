@@ -7,10 +7,12 @@
   screen's size, one thread group per 32x24 pixels) and runs NVIDIA DLSS Super Resolution into the same output instead, on Lossless Scaling's
   own D3D11 device, on every presented frame, real and generated. Frame generation's optical flow is its motion (half a real frame apart at 2x);
   depth is flat and there is no camera jitter. Found in a New Vegas session log (2560x1440 -> 3840x2160, twice per real frame at 2x).
-  - First try crashed Lossless Scaling inside NVIDIA's D3D11 driver: DLSS was set up on a thread of its own, using Lossless Scaling's device
-    while its render thread used it too. The set-up now runs on the render thread (about 0.9 s, once, when the upscaler first starts; a thread
-    of our own only reads NVIDIA's runtime file ahead), and switching the addon off mid-session leaves NVIDIA's objects until Lossless Scaling
-    closes rather than tear them down from another thread.
+  - **DLSS now runs on a D3D12 device of our own, never on Lossless Scaling's.** Running NVIDIA's D3D11 DLSS on Lossless Scaling's device crashed
+    it three times on 2026-09-24, within seconds of the first upscaled frame and each time somewhere else (NVIDIA's driver, NVIDIA's API,
+    Lossless Scaling's own checks); setting it up on the render thread did not help. Now, at the NIS pass, Lossless Scaling's context only
+    copies the frame (and frame generation's flow) into shared textures, signals a shared fence, waits on the GPU for the upscaled picture and
+    copies it into the pass's output: the same kind of calls Neural Rendering's bridge makes. DLSS itself, and a small motion-vector pass, run
+    on the engine's own D3D12 queue (`engine/sr_engine.cpp`), which starts on a thread of its own. The test host checks that it does.
   - The Before / after hotkey lets NIS run again, to compare in the game. If DLSS cannot run, NIS runs as usual.
   - It works beside DLSS 5 Neural Rendering (no longer "one addon at a time"); the addon list can switch it on again.
   - The test host has a fake NIS pass that paints its output magenta: DLSS replaces it with a real upscaled picture, on real and generated

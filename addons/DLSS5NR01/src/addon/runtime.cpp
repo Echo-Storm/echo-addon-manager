@@ -13,6 +13,7 @@
 #include "addon/present_hook.h"
 #include "addon/screenshot.h"
 #include "addon/scaler11.h"
+#include "engine/sr_engine.h"
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -561,48 +562,35 @@ void OnDeviceEvent(uint32_t id, const void*, uint32_t, void*) {
     // machine), not from these events, which come for every device Lossless Scaling makes.
 }
 
-// ---- DLSS as Lossless Scaling's scaler (the DLSS 4 addon; see scaler11.h)
+// ---- DLSS as Lossless Scaling's scaler (the DLSS 4 Upscaler; see scaler11.h and engine/sr_engine.h)
 //
 // Every pass still goes through the frame tap, which follows frame generation's optical flow and tells real frames apart; the NIS pass is
 // replaced when DLSS is ready, and runs as usual until then, when DLSS fails, or while the Before / after hotkey shows the original.
 //
-// Lossless Scaling's D3D11 device and context are only ever used on its render thread, here: a device is not safe to use from two threads
-// at once (setting DLSS up on a thread of its own crashed inside NVIDIA's driver, 2026-09-24). A thread of our own only reads NVIDIA's runtime
-// file beforehand, so that the set-up here, which loads it, is quick.
+// NVIDIA's DLSS code runs only on the engine's own D3D12 device (started on a thread of its own: it touches no other device). Lossless
+// Scaling's D3D11 device and context are used only here, on its render thread, and only for copies, one fence signal and one GPU-side wait.
+// (DLSS run on Lossless Scaling's D3D11 device itself crashed it three times, 2026-09-24.)
 
 namespace {
-Scaler11 g_scaler;                               // under g_frameMutex, on the render thread only
-std::atomic<bool> g_scalerStarting{ false };     // NVIDIA's runtime file is being read ahead
-bool g_scalerWarm = false;                       // ...and has been: the set-up may run
-ID3D11Device* g_scalerDevice = nullptr;          // the device it was started on (not AddRef'd: the scaler holds it)
+SrEngine g_sr;                                   // DLSS on our own device; ready once g_srStarting is false
+ScalerLink g_link;                               // Lossless Scaling's side: under g_frameMutex, on the render thread only
+std::atomic<bool> g_srStarting{ false };
+ID3D11Device* g_linkDevice = nullptr;            // the device the link was made on (the link holds it)
 uint32_t g_nisSinceTap = 0, g_nisPerFrame = 0;   // NIS passes between two real frames: the presents per real frame
-uint64_t g_nisSeen = 0, g_scalerStatusAt = 0;
+uint64_t g_nisSeen = 0, g_scalerStatusAt = 0, g_upscaled = 0;
 std::atomic<uint32_t> g_scaleInW{ 0 }, g_scaleInH{ 0 }, g_scaleOutW{ 0 }, g_scaleOutH{ 0 };
 
-// Reads NVIDIA's runtime once, on a thread of its own, so the operating system has it in memory when NGX loads it (no graphics calls here).
-void WarmScalerRuntime() {
-    g_scalerStarting = true;
-    SetStatus("DLSS: reading NVIDIA's runtime...");
-    std::thread([] {
-        const std::wstring path = g_addonDir + L"\\dlss\\nvngx_dlss.dll";
-        HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-        if (f != INVALID_HANDLE_VALUE) {
-            std::vector<char> chunk(1 << 20); DWORD got = 0;
-            while (ReadFile(f, chunk.data(), static_cast<DWORD>(chunk.size()), &got, nullptr) && got) {}
-            CloseHandle(f);
-        }
-        g_scalerStarting = false;
+void StartEngineFor(const LUID& card) {   // the engine's own device only: safe on a thread of its own
+    g_srStarting = true;
+    SetStatus("DLSS: starting...");
+    std::thread([card] {
+        LARGE_INTEGER f, a, b; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
+        const bool ok = g_sr.Init(card, g_addonDir, g_addonDir + L"\\dlss", [](const char* m) { Log("%s", m); });
+        QueryPerformanceCounter(&b);
+        Log("DLSS upscaler: engine %s in %.0f ms, on a thread of its own", ok ? "started" : "failed", (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart);
+        SetStatus(ok ? "DLSS ready" : g_sr.LastError());
+        g_srStarting = false;
     }).detach();
-}
-
-bool StartScaler(ID3D11Device* dev) {   // on the render thread, under g_frameMutex
-    g_scalerDevice = dev;
-    LARGE_INTEGER f, a, b; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
-    const bool ok = g_scaler.Init(dev, g_addonDir, g_addonDir + L"\\dlss", [](const char* m) { Log("%s", m); });
-    QueryPerformanceCounter(&b);
-    Log("DLSS scaler set up on Lossless Scaling's render thread in %.0f ms", (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart);
-    SetStatus(ok ? "DLSS ready" : g_scaler.LastError());
-    return ok;
 }
 
 bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
@@ -620,23 +608,29 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     ReadHotkeys();
     bool replaced = false;
     ID3D11Device* dev = nullptr; ctx->GetDevice(&dev);
-    if (!g_scalerWarm && !g_scalerStarting) { WarmScalerRuntime(); g_scalerWarm = true; }
-    if (!g_scalerStarting) {
-        if (dev && dev != g_scalerDevice && !g_scaler.IsFailed()) {
-            if (g_scaler.IsReady()) g_scaler.Shutdown();
-            if (CardOf(dev).nvidia) StartScaler(dev);
-            else { g_scalerDevice = dev; SetStatus("waiting: Lossless Scaling's device is not an NVIDIA card"); }
-        } else if (g_scaler.IsReady() && g_compare.load() != 2) {   // "original only" lets NIS run, for comparing
-            NrParams p; unsigned preset;
-            { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; }
-            uint32_t fw = 0, fh = 0;
-            ID3D11Resource* flow = p.useFlow ? g_tap.NewestFlow(fw, fh) : nullptr;
-            const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;
-            t_ownWork = true;
-            replaced = g_scaler.Run(ctx, pass, flow, fw, fh, p.flowUnit, fraction, preset, g_resetRequested.exchange(false));
-            t_ownWork = false;
-            if (flow) flow->Release();
-            if (!replaced && g_scaler.IsFailed()) SetStatus(g_scaler.LastError());
+    if (!g_srStarting && dev) {
+        if (!g_sr.IsReady() && !g_sr.IsFailed()) {
+            const Card card = CardOf(dev);
+            if (card.nvidia) StartEngineFor(card.luid);
+            else if (g_nisSeen == 1) SetStatus("waiting: Lossless Scaling's device is not an NVIDIA card");
+        } else if (g_sr.IsReady()) {
+            if (dev != g_linkDevice) {   // Lossless Scaling's (new) device: the link is made on it, here on its render thread
+                g_link.Shutdown();
+                g_linkDevice = g_link.Init(dev, ctx, &g_sr, [](const char* m) { Log("%s", m); }) ? dev : nullptr;
+            }
+            if (g_linkDevice == dev && g_compare.load() != 2) {   // "original only" lets NIS run, for comparing
+                NrParams p; unsigned preset;
+                { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; }
+                uint32_t fw = 0, fh = 0;
+                ID3D11Resource* flow = p.useFlow ? g_tap.NewestFlow(fw, fh) : nullptr;
+                const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;
+                t_ownWork = true;
+                replaced = g_link.Upscale(pass, flow, fw, fh, p.flowUnit, fraction, preset, g_resetRequested.exchange(false));
+                t_ownWork = false;
+                if (flow) flow->Release();
+                if (replaced) ++g_upscaled;
+                if (!replaced && g_sr.IsFailed()) SetStatus(g_sr.LastError());
+            }
         }
     }
     if (dev) dev->Release();
@@ -646,16 +640,16 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
         g_scalerStatusAt = now;
         char text[160];
         if (replaced) {
-            snprintf(text, sizeof text, "DLSS %ux%u -> %ux%u, %.1f ms", g_scaleInW.load(), g_scaleInH.load(), g_scaleOutW.load(), g_scaleOutH.load(), g_scaler.GpuMs());
+            snprintf(text, sizeof text, "DLSS %ux%u -> %ux%u, %.1f ms", g_scaleInW.load(), g_scaleInH.load(), g_scaleOutW.load(), g_scaleOutH.load(), g_sr.GpuMs());
             g_host->SetStatus(kAddonId, text, 1);
-            if (g_host->GetHostVersion() >= 0x010000) g_host->PublishMetric(kAddonId, "dlss_ms", g_scaler.GpuMs(), "ms");
+            if (g_host->GetHostVersion() >= 0x010000) g_host->PublishMetric(kAddonId, "dlss_ms", g_sr.GpuMs(), "ms");
             SetStatus(text);
         } else if (g_compare.load() == 2) g_host->SetStatus(kAddonId, "Showing Lossless Scaling's NIS (Before / after)", 0);
     }
-    if (g_scaler.Runs() == 1 || (replaced && g_scaler.Runs() % 3000 == 0))
-        Log("DLSS scaler: %llu frames upscaled, NIS passes seen %llu, %u per real frame, DLSS %.2f ms", (unsigned long long)g_scaler.Runs(),
-            (unsigned long long)g_nisSeen, g_nisPerFrame, g_scaler.GpuMs());
-    return replaced;   // true: Lossless Scaling's NIS pass is skipped, DLSS has written its output
+    if (replaced && (g_upscaled == 1 || g_upscaled % 3000 == 0))
+        Log("DLSS scaler: %llu frames upscaled, NIS passes seen %llu, %u per real frame, DLSS %.2f ms", (unsigned long long)g_upscaled,
+            (unsigned long long)g_nisSeen, g_nisPerFrame, g_sr.GpuMs());
+    return replaced;   // true: Lossless Scaling's NIS pass is skipped, DLSS's picture is in its output
 }
 
 bool ScalerFault(unsigned code) {
@@ -670,18 +664,19 @@ bool ScalerGuarded(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z)
 
 ScalerView GetScalerView() {
     ScalerView v;
-    v.starting = g_scalerStarting; v.ready = !v.starting && g_scaler.IsReady(); v.failed = !v.starting && g_scaler.IsFailed();
-    if (v.failed) v.error = g_scaler.LastError();
+    v.starting = g_srStarting; v.ready = !v.starting && g_sr.IsReady(); v.failed = !v.starting && g_sr.IsFailed();
+    if (v.failed) v.error = g_sr.LastError();
     v.inW = g_scaleInW; v.inH = g_scaleInH; v.outW = g_scaleOutW; v.outH = g_scaleOutH;
-    v.gpuMs = v.ready ? g_scaler.GpuMs() : 0; v.runs = v.ready ? g_scaler.Runs() : 0; v.nisSeen = g_nisSeen; v.perFrame = g_nisPerFrame;
+    v.gpuMs = v.ready ? g_sr.GpuMs() : 0; v.runs = g_upscaled; v.nisSeen = g_nisSeen; v.perFrame = g_nisPerFrame;
     return v;
 }
 
 void StopScaler() {
-    for (int i = 0; i < 500 && g_scalerStarting; ++i) Sleep(10);
+    for (int i = 0; i < 500 && g_srStarting; ++i) Sleep(10);
     std::lock_guard<std::mutex> lock(g_frameMutex);
-    g_scaler.Abandon();   // not on the render thread: see Scaler11::Abandon
-    g_scalerDevice = nullptr;
+    g_link.Shutdown();   // releases only (the engine is drained first)
+    g_linkDevice = nullptr;
+    g_sr.Shutdown();     // our own device
 }
 
 bool OnPass(uint32_t x, uint32_t y, uint32_t z, void*) {

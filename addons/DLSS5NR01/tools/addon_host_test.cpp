@@ -121,6 +121,7 @@ static uint64_t CountChanged(ID3D11Device* dev, ID3D11DeviceContext* dc, ID3D11T
 }
 
 int main(int argc, char** argv) {
+    setvbuf(stdout, nullptr, _IONBF, 0);   // unbuffered: a crash must not swallow the last lines
     const char* dllPath = argc > 1 ? argv[1] : "DLSS5NR01.dll";
     HMODULE h = LoadLibraryA(dllPath); if (!h) { printf("LoadLibrary failed %lu\n", GetLastError()); return 1; }
     auto Init = (PFN_Init)GetProcAddress(h, "AddonInitialize"); auto Shut = (PFN_Void)GetProcAddress(h, "AddonShutdown"); auto Render = (PFN_Void)GetProcAddress(h, "AddonRenderSettings"); auto Caps = (PFN_Caps)GetProcAddress(h, "GetAddonCapabilities");
@@ -154,7 +155,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -191,7 +192,10 @@ int main(int argc, char** argv) {
     // device on adapter 0 (the display 3090) and DEVICE_READY
     IDXGIFactory2* f = nullptr; CreateDXGIFactory1(IID_PPV_ARGS(&f)); IDXGIAdapter1* a = nullptr; f->EnumAdapters1(0, &a);
     ID3D11Device* dev = nullptr; ID3D11DeviceContext* dc = nullptr; D3D_FEATURE_LEVEL fl;
-    if (FAILED(D3D11CreateDevice(a, D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &dev, &fl, &dc))) { printf("device failed\n"); return 1; }
+    UINT deviceFlags = 0;   // devflags=<n>: create the device as Lossless Scaling might (1 = D3D11_CREATE_DEVICE_SINGLETHREADED)
+    for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "devflags=", 9)) deviceFlags = (UINT)atoi(argv[i] + 9);
+    if (FAILED(D3D11CreateDevice(a, D3D_DRIVER_TYPE_UNKNOWN, nullptr, deviceFlags, nullptr, 0, D3D11_SDK_VERSION, &dev, &fl, &dc))) { printf("device failed\n"); return 1; }
+    if (deviceFlags) printf("[hosttest] device created with flags 0x%x\n", deviceFlags);
     ID3D11Multithread* mt = nullptr; dc->QueryInterface(IID_PPV_ARGS(&mt)); mt->SetMultithreadProtected(TRUE); mt->Release();   // like LS/WGC
     host.dev = dev; host.ctx = dc; host.PublishEvent(EAM_EVENT_D3D11_DEVICE_READY, nullptr, 0);
     for (int i = 0; i < 40; ++i) { frame("engine loading"); std::this_thread::sleep_for(std::chrono::milliseconds(250)); }
