@@ -3,6 +3,7 @@
 // FrameTap auto-assignment, the read-only tap, the D3D11<->D3D12 bridge, NR itself, the Present hook and the
 // present-time compose (generated frames first, the real frame last, like LSFG X3).
 #include <windows.h>
+#include <intrin.h>
 #include <d3d11_4.h>
 #include <dxgi1_6.h>
 #include <d3dcompiler.h>
@@ -27,7 +28,9 @@ struct FakeHost : IHost {
     struct Sub { uint32_t id; EamEventCallback cb; void* ud; };
     std::vector<Sub> subs; std::map<std::string, std::string> cfg; void* dev = nullptr; void* ctx = nullptr;
     std::string lastPattern;
-    void Log(EamLogLevel, const char* m) override { printf("[addon] %s\n", m); fflush(stdout); }
+    void Log(EamLogLevel, const char* m) override { printf("[addon] %s\n", m); fflush(stdout); logged.push_back(m); }
+    std::vector<std::string> logged;
+    bool Said(const char* text) const { for (const auto& l : logged) if (l.find(text) != std::string::npos) return true; return false; }
     const char* GetConfig(const char*, const char* k, const char* d) override { auto it = cfg.find(k); return it == cfg.end() ? d : it->second.c_str(); }
     void SetConfig(const char*, const char* k, const char* v) override { cfg[k] = v; }
     void SaveConfig() override {}
@@ -38,8 +41,14 @@ struct FakeHost : IHost {
     void* GetD3D11Device() override { return dev; }
     void* GetD3D11DeviceContext() override { return ctx; }
     // Dispatch callbacks, as the manager runs them: around each of "Lossless Scaling's" passes (the test's), with the context known inside.
-    EamPreDispatchCallback pre = nullptr; void* preUser = nullptr; ID3D11DeviceContext* dispatching = nullptr; uint32_t dispatches = 0;
-    void SetPreDispatchCallback(EamPreDispatchCallback cb, void* ud) override { pre = cb; preUser = ud; }
+    struct Pre { HMODULE module; EamPreDispatchCallback cb; void* ud; };
+    std::vector<Pre> pres; ID3D11DeviceContext* dispatching = nullptr; uint32_t dispatches = 0;
+    void SetPreDispatchCallback(EamPreDispatchCallback cb, void* ud) override {
+        HMODULE module = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)_ReturnAddress(), &module);
+        for (size_t i = 0; i < pres.size();) if (pres[i].module == module) pres.erase(pres.begin() + i); else ++i;
+        if (cb) pres.push_back({ module, cb, ud });
+    }
     void SetPostDispatchCallback(EamPostDispatchCallback, void*) override {}
     void* GetCurrentComputeShader() override { return nullptr; }
     uint32_t GetDispatchCount() override { return dispatches; }
@@ -62,7 +71,8 @@ struct FakeHost : IHost {
     void Dispatch(ID3D11DeviceContext* c, UINT x, UINT y, UINT z) {
         ++dispatches; dispatching = c;
         const auto t0 = std::chrono::steady_clock::now();
-        const bool skip = pre && pre(x, y, z, preUser);
+        bool skip = false;
+        for (const Pre& p : pres) skip = p.cb(x, y, z, p.ud) || skip;
         longestCallMs = std::max(longestCallMs, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
         dispatching = nullptr;
         if (!skip) c->Dispatch(x, y, z);
@@ -144,17 +154,28 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
     Init(&host, ctx, (void*)af, (void*)ff, ud);
+    // second=<dll>: the other addon of the pair, loaded as well. Only one may work on the frames: the second, found the first in charge at its
+    // start, must switch itself off.
+    PFN_Void Shut2 = nullptr; std::string secondDll;
+    for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "second=", 7)) secondDll = argv[i] + 7;
+    if (!secondDll.empty()) {
+        HMODULE h2 = LoadLibraryA(secondDll.c_str()); if (!h2) { printf("LoadLibrary %s failed %lu\n", secondDll.c_str(), GetLastError()); return 1; }
+        auto Init2 = (PFN_Init)GetProcAddress(h2, "AddonInitialize"); Shut2 = (PFN_Void)GetProcAddress(h2, "AddonShutdown");
+        if (!Init2 || !Shut2) { printf("exports of %s missing\n", secondDll.c_str()); return 1; }
+        Init2(&host, ctx, (void*)af, (void*)ff, ud);
+        printf("[check-pair] second addon %s at its start: %s\n", secondDll.c_str(), host.Said("switched off at start:") ? "STEPPED ASIDE" : "DID NOT STEP ASIDE");
+    }
 
     auto panel = [&]() {
         if (shotMode) {
             ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ImVec2((float)shotW, 0.0f));
             ImGui::Begin("Addon Manager", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
-            for (const char* h : { "Model (what it does to the picture)", "Quality and performance", "Picture (sharpness, tone, colour, grain)", "Keep the HUD untouched", "Compare and hotkeys", "Games (a look per program)", "Frame detection (advanced)", "Technical status", "Advanced" })
+            for (const char* h : { "Model (what it does to the picture)", "Motion", "Quality and performance", "Picture (sharpness, tone, colour, grain)", "Keep the HUD untouched", "Compare and hotkeys", "Games (a look per program)", "Frame detection (advanced)", "Technical status", "Advanced" })
                 if (openSections) ImGui::GetStateStorage()->SetInt(ImGui::GetID(h), 1);
         } else { ImGui::SetNextWindowSize(ImVec2(900, 700)); ImGui::Begin("Addon Manager"); }
         Render(); ImGui::End();
@@ -314,6 +335,19 @@ int main(int argc, char** argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
         }
         printf("[check-off] frame generation off for a second: %llu pixels changed on the last presents (%s)\n", (unsigned long long)stale, stale == 0 ? "OLD RESULT DROPPED" : "OLD RESULT STILL SHOWN");
+
+        if (!secondDll.empty()) {
+            char owner[32] = {}; GetEnvironmentVariableA("ECHO_ADDON_FRAME_OWNER", owner, sizeof owner);
+            const std::string first = owner;
+            SetEnvironmentVariableA("ECHO_ADDON_FRAME_OWNER", first == "DLSS5NR01" ? "DLSS4DLAA" : "DLSS5NR01");   // what the other's Enable box does
+            for (int fr = 0; fr < 12; ++fr) {
+                dc->CSSetShaderResources(0, 1, &sC2); dc->CSSetUnorderedAccessViews(0, 4, uP2, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W2 * 7 / 10 / 8, H2 * 7 / 10 / 8, 1);
+                ID3D11UnorderedAccessView* null4[4] = {}; dc->CSSetUnorderedAccessViews(0, 4, null4, nullptr); dc->CSSetShaderResources(0, 3, nulls);
+                std::this_thread::sleep_for(std::chrono::milliseconds(40));
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));   // it lets its model go on a thread of its own
+            printf("[check-pair] the other addon turned on: the one that ran (%s) %s\n", first.c_str(), host.Said("switched off: ") && host.Said("is on now") ? "HANDED OVER" : "KEPT THE FRAMES");
+        }
     }
     host.PublishEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, nullptr, 0);
     for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "exitmode=abrupt")) {
@@ -323,6 +357,7 @@ int main(int argc, char** argv) {
         ExitProcess(0);
     }
     Shut();
+    if (Shut2) Shut2();
     if (shotMode) shot.Shutdown();
     sc->Release(); DestroyWindow(hwnd);
     ImGui::DestroyContext(ctx);

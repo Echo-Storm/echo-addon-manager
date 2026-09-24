@@ -36,8 +36,8 @@ target_compile_definitions(nr_selftest PRIVATE NR_ADDON_VERSION_TEXT="${CMAKE_MA
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/addon.json)
 add_dependencies(nr_selftest nr_forwarder)
 
-# ---- the addon ----
-add_library(DLSS5NR01 SHARED
+# ---- the addons: DLSS 5 Neural Rendering (DLSS5NR01) and DLSS 4 DLAA (DLSS4DLAA), from the same sources (src/addon/product.h) ----
+set(NR_ADDON_SOURCES
     src/addon/addon.cpp src/addon/runtime.cpp src/addon/panel.cpp src/addon/tasks.cpp src/addon/settings.cpp src/addon/log.cpp
     src/addon/screenshot.cpp src/addon/screenshot_pixels.cpp src/addon/hud_editor.cpp src/addon/auto_quality.cpp
     src/addon/bridge.cpp src/addon/frame_tap.cpp
@@ -46,21 +46,28 @@ add_library(DLSS5NR01 SHARED
     src/engine/dlaa_model.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
-target_include_directories(DLSS5NR01 PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
-target_link_libraries(DLSS5NR01 PRIVATE ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32 shell32 comdlg32 windowscodecs)
-set_target_properties(DLSS5NR01 PROPERTIES PREFIX "" OUTPUT_NAME "DLSS5NR01")
-# Keep a PDB and a linker map next to the Release DLL so the offsets in a crash backtrace can be resolved.
-if(MSVC)
-    target_compile_options(DLSS5NR01 PRIVATE $<$<CONFIG:Release>:/Zi>)
-    target_link_options(DLSS5NR01 PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF /MAP>)
-endif()
+function(nr_addon target)
+    add_library(${target} SHARED ${NR_ADDON_SOURCES})
+    target_include_directories(${target} PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
+    target_link_libraries(${target} PRIVATE ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32 shell32 comdlg32 windowscodecs)
+    set_target_properties(${target} PROPERTIES PREFIX "" OUTPUT_NAME "${target}")
+    # Keep a PDB and a linker map next to the Release DLL so the offsets in a crash backtrace can be resolved.
+    if(MSVC)
+        target_compile_options(${target} PRIVATE $<$<CONFIG:Release>:/Zi>)
+        target_link_options(${target} PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF /MAP>)
+    endif()
+endfunction()
+
+nr_addon(DLSS5NR01)
 add_dependencies(DLSS5NR01 nr_forwarder)
-# NVIDIA's DLSS runtime for the DLAA model, in a dlss folder next to the built addon (as in the release). NGX is pointed there only when DLAA
-# runs: it loads every runtime in the folders it searches, and 59 MB is no reason to slow Neural Rendering's start.
+
+nr_addon(DLSS4DLAA)
+target_compile_definitions(DLSS4DLAA PRIVATE NR_PRODUCT_DLAA)
+# NVIDIA's DLSS runtime, in a dlss folder next to the built addon (as in the release), where the DLAA addon points NGX
 if(EXISTS ${NGX_DIR}/bin/nvngx_dlss.dll)
-    add_custom_command(TARGET DLSS5NR01 POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:DLSS5NR01>/dlss
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGX_DIR}/bin/nvngx_dlss.dll $<TARGET_FILE_DIR:DLSS5NR01>/dlss)
+    add_custom_command(TARGET DLSS4DLAA POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:DLSS4DLAA>/dlss
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGX_DIR}/bin/nvngx_dlss.dll $<TARGET_FILE_DIR:DLSS4DLAA>/dlss)
 endif()
 
 # ---- offline test host: loads the built addon with a fake IHost, headless ImGui and a synthetic LSFG pattern ----
@@ -70,7 +77,7 @@ add_executable(nr_hosttest tools/addon_host_test.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp)
 target_include_directories(nr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${CMAKE_SOURCE_DIR}/../../manager/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(nr_hosttest PRIVATE d3d11 dxgi d3dcompiler)
-add_dependencies(nr_hosttest DLSS5NR01)
+add_dependencies(nr_hosttest DLSS5NR01 DLSS4DLAA)
 
 # ---- offline test of the frame tap (which pass is the capture, the motion hand-over, presents); a D3D11 device, no model, no SDK at run time ----
 add_executable(nr_taptest tools/tap_test.cpp src/addon/frame_tap.cpp)

@@ -13,7 +13,11 @@ using PresentFn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT);
 using Present1Fn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain1*, UINT, UINT, const DXGI_PRESENT_PARAMETERS*);
 constexpr int kPresentSlot = 8, kPresent1Slot = 22;
 
-// The originals stay set after Uninstall: something that hooked after us may still call through our functions, and must reach the real Present.
+// Once patched, the table keeps our functions for the life of the process, and this DLL is pinned so they stay in memory: something that
+// hooked after us (the other addon of the pair, an overlay) calls on through them to the real Present, even after the manager unloads this
+// addon. Uninstall only clears the callback, which makes them pass straight through, and a second Install (the addon started again) only
+// sets it again: patching a second time would make a loop of the hook chain.
+void** g_patched = nullptr;
 PresentFn g_present = nullptr;
 Present1Fn g_present1 = nullptr;
 void** g_table = nullptr;
@@ -82,6 +86,7 @@ void** FindSwapChainTable(ID3D11Device* dev, const PresentHook::LogFn& log) {
 
 bool PresentHook::Install(ID3D11Device* dev, Callback cb, LogFn log) {
     if (g_table) return true;
+    if (g_patched) { g_callback.store(cb, std::memory_order_release); g_table = g_patched; log("PresentHook: our functions are still in the table: in use again"); return true; }
     void** const table = FindSwapChainTable(dev, log);
     if (!table) return false;
     g_callback.store(cb, std::memory_order_release);
@@ -89,7 +94,9 @@ bool PresentHook::Install(ID3D11Device* dev, Callback cb, LogFn log) {
     if (!present) { log("PresentHook: the swap chain's function table could not be made writable"); g_callback.store(nullptr); return false; }
     g_present = (PresentFn)present;
     g_present1 = (Present1Fn)Swap(table, kPresent1Slot, (void*)&OnPresent1);   // null: Present1 is simply not seen
-    g_table = table;
+    g_table = g_patched = table;
+    HMODULE self = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, reinterpret_cast<LPCWSTR>(&OnPresent), &self);
     const uintptr_t base = (uintptr_t)GetModuleHandleW(L"dxgi.dll");
     char text[200];
     snprintf(text, sizeof text, "PresentHook: patched the swap chain table %p: Present (dxgi+0x%llx) and Present1 (dxgi+0x%llx)", (void*)table,
@@ -99,11 +106,7 @@ bool PresentHook::Install(ID3D11Device* dev, Callback cb, LogFn log) {
 }
 
 void PresentHook::Uninstall() {
-    g_callback.store(nullptr, std::memory_order_release);
-    if (!g_table) return;
-    // Only a slot that still holds ours is put back: one that another hook has since taken is left to it.
-    if (g_table[kPresentSlot] == (void*)&OnPresent) Swap(g_table, kPresentSlot, (void*)g_present);
-    if (g_present1 && g_table[kPresent1Slot] == (void*)&OnPresent1) Swap(g_table, kPresent1Slot, (void*)g_present1);
+    g_callback.store(nullptr, std::memory_order_release);   // our functions stay in the table and pass straight through (see above)
     g_table = nullptr;
 }
 

@@ -11,6 +11,7 @@
 #include "addon/compose11.h"
 #include "addon/frame_tap.h"
 #include "addon/requirements.h"
+#include "addon/product.h"
 #include "addon/settings.h"
 #include "engine/nr_engine.h"
 #include <atomic>
@@ -20,7 +21,6 @@
 
 namespace nr {
 
-inline constexpr const char* kAddonId = "DLSS5NR01";
 
 extern IHost* g_host;
 extern std::wstring g_lsDir, g_addonDir;
@@ -73,7 +73,15 @@ void ApplyTapRoles();
 
 // runtime.cpp
 void StartEngine(LUID card);
-void RestartEngine();                      // on the card the frames come from
+void RestartEngine();
+// Only one addon of the pair works on the frames (runtime.cpp): who has them, taking and giving them up, the check on the frame path, and the
+// start (an addon that is on but finds the other one in charge switches itself off).
+std::string FrameOwner();
+void ClaimFrames();
+void ReleaseFrames();
+bool OwnsFrames();
+void SettleFramesAtStart();
+void ForgetFramePath();   // the frame path's device state, as at a device change                      // on the card the frames come from
 void OnDeviceEvent(uint32_t id, const void* data, uint32_t size, void* user);
 bool OnPass(uint32_t x, uint32_t y, uint32_t z, void* user);   // the manager's pre-dispatch callback
 std::string PassText(const DispatchSig& sig);                    // the views of a pass, for the log and the panel

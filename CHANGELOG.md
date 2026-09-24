@@ -10,17 +10,23 @@ The manager and Neural Rendering now show 0.8.0.
   - Without a snapshot the same editing works on an empty box of the frame's shape. The World of Warcraft starter layout, Clear all and edge softness stay, and the exact numbers are
     still there, folded under "Exact numbers".
   - The offline test host renders the panel with a real snapshot taken through the whole chain (the present, the GPU copy, the read-back, the manager's image).
-- **A second model: DLSS DLAA** (Neural Rendering's panel, Model; a first version to try). NVIDIA's DLSS anti-aliasing on the captured frame, for
-  smoother, steadier edges without Neural Rendering's change of look. It runs in the same pipeline (the capture, Lossless Scaling's motion, the
-  result added to every presented frame, the HUD areas, compare, screenshots). Lossless Scaling gives it no camera jitter and no depth, so it
-  cannot add detail beyond the frame's own as it does in a game with DLSS; how it looks has to be judged in a game.
-  - NVIDIA's DLSS runtime 310.9.1 (`nvngx_dlss.dll`) now comes with the addon, in its `dlss` folder, under NVIDIA's licence
-    (`NVIDIA-LICENSE.txt`); nothing needs to be supplied for DLAA. NGX searches that folder only when DLAA runs.
-  - Two DLAA models: NVIDIA's default (preset K, DLSS 4) and M (DLSS 4.5's second-generation transformer). Measured in the test host at
+- **A new addon: DLSS 4 DLAA** (a first version to try). NVIDIA's DLSS anti-aliasing on Lossless Scaling's frames, for smoother, steadier edges
+  without Neural Rendering's change of look, as its own entry in the addon list. It is built from Neural Rendering's sources, so it has the same
+  pipeline and panel (the capture, Lossless Scaling's motion, the result added to every presented frame, the HUD areas, compare, screenshots,
+  looks), with only the settings that apply to it. Lossless Scaling gives it no camera jitter and no depth, so it cannot add detail beyond the
+  frame's own as it does in a game with DLSS; how it looks has to be judged in a game.
+  - NVIDIA's DLSS runtime 310.9.1 (`nvngx_dlss.dll`) comes with it, in its `dlss` folder, under NVIDIA's licence (`NVIDIA-LICENSE.txt`):
+    nothing needs to be supplied.
+  - Two models: NVIDIA's default (preset K, DLSS 4) and M (DLSS 4.5's second-generation transformer). Measured in the test host at
     1920x1080 on an RTX 4070 Ti SUPER: K about 4.5 ms, M about 15 ms.
-  - Neural Rendering's own settings (style, intensity, model resolution, auto quality, passes) are greyed out while DLAA is chosen. Changing
-    the model restarts the engine.
-  - The test host runs DLAA with both models; the everyday quick set includes it.
+  - **Only one of the two addons works on the frames at a time**: both would tap the same passes and add their results on top of each other.
+    Turning one on switches the other off (its Enable box clears, it lets its model go, and says so in its panel and log); with both on at
+    start-up, the first to start keeps the frames.
+  - Once an addon has hooked Present its DLL stays in memory until Lossless Scaling closes, and its hook passes straight through when it is
+    off. Unloading one addon of the pair (or any addon that hooked Present before something else did) could otherwise leave a hook calling into
+    freed code. A newer build of an addon that was used in the session therefore takes effect after Lossless Scaling is restarted.
+  - The test host runs DLAA with both models, and both addons loaded together (the second steps aside at start, the first hands over when the
+    other is turned on); the everyday quick set includes DLAA and the pair.
 - **NOTICE.md corrected, and NVIDIA credited.** `DLSS5NR01.dll` and `nr_selftest.exe` link NVIDIA's NGX SDK library, so NVIDIA's object code
   is in the release; NOTICE.md said it was not. It now lists what of NVIDIA's is in the release and that NVIDIA's licence, not MIT, covers it.
   The About tab credits NVIDIA DLSS, and `NVIDIA-LICENSE.txt` ships in the addon's folder. `tools/fetch_ngx_sdk.ps1` also fetches NVIDIA's

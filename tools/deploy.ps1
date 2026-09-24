@@ -3,9 +3,9 @@
 #     sessions get lost;
 #   * refuses while Lossless Scaling itself is running (it holds the DLLs open), unless -StopLS is given AND the game is not running;
 #   * backs the old file up into <LS folder>\backups\ (never deletes) with a timestamp before replacing it.
-#   powershell -File deploy.ps1 -What host|nr|all [-StopLS] [-LsDir '<Lossless Scaling folder>']   (or set the LS_DIR environment variable) [-Game WowB]
+#   powershell -File deploy.ps1 -What host|nr|dlaa|all [-StopLS] [-LsDir '<Lossless Scaling folder>']   (or set the LS_DIR environment variable) [-Game WowB]
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('host', 'nr', 'all')][string]$What,
+    [Parameter(Mandatory = $true)][ValidateSet('host', 'nr', 'dlaa', 'all')][string]$What,
     [switch]$StopLS,
     [string]$LsDir = $(if ($env:LS_DIR) { $env:LS_DIR } else { 'C:\Program Files (x86)\Steam\steamapps\common\Lossless Scaling' }),
     [string]$Game = 'WowB'
@@ -14,7 +14,10 @@ $root = Split-Path $PSScriptRoot -Parent   # the repository folder
 $items = @{
     host     = @{ Src = "$root\manager\build\Release\Lossless.dll"; Dst = "$LsDir\Lossless.dll"; Extra = @("$root\manager\manager-icon.ico", "$root\manager\manager-icon.png") }
     nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_dlss5nr01.dll", "$root\addons\DLSS5NR01\build\Release\nr_selftest.exe", "$root\addons\DLSS5NR01\addon.json",
-                  @{ Src = "$root\addons\DLSS5NR01\build\Release\dlss\nvngx_dlss.dll"; Rel = 'dlss\nvngx_dlss.dll' }, @{ Src = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; Rel = 'NVIDIA-LICENSE.txt' }) }
+                  @{ Src = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; Rel = 'NVIDIA-LICENSE.txt' }) }
+    dlaa     = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS4DLAA.dll"; Dst = "$LsDir\addons\DLSS4DLAA\DLSS4DLAA.dll"; Extra = @("$root\addons\DLSS5NR01\products\DLSS4DLAA\addon.json",
+                  @{ Src = "$root\addons\DLSS5NR01\build\Release\dlss\nvngx_dlss.dll"; Rel = 'dlss\nvngx_dlss.dll' }, @{ Src = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; Rel = 'NVIDIA-LICENSE.txt' },
+                  @{ Src = "$root\addons\DLSS5NR01\LICENSE"; Rel = 'LICENSE.txt' }) }
 }
 if (-not (Test-Path "$LsDir\Lossless.dll")) { Write-Host "No Lossless Scaling folder at $LsDir (pass -LsDir or set LS_DIR)."; exit 4 }
 if (Get-Process $Game -ErrorAction SilentlyContinue) { Write-Host "$Game is running: not touching the Lossless Scaling folder. Close the game first."; exit 2 }
@@ -24,7 +27,7 @@ if ($ls) {
     Stop-Process -Id $ls.Id; Start-Sleep 2
 }
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$names = if ($What -eq 'all') { @('host', 'nr') } else { @($What) }
+$names = if ($What -eq 'all') { @('host', 'nr', 'dlaa') } else { @($What) }
 foreach ($n in $names) {
     $it = $items[$n]
     if (-not (Test-Path $it.Src)) { Write-Host "[$n] not built: $($it.Src)"; continue }
@@ -73,6 +76,14 @@ if ($names -contains 'nr') {
         New-Item -ItemType Directory -Force $aside | Out-Null
         Move-Item $stale "$aside\nvngx.dll_lspnr.dll"
         Write-Host "[nr] moved the old helper DLL nvngx.dll_lspnr.dll to $aside"
+    }
+    # NVIDIA's DLSS runtime was in Neural Rendering's folder for one build (0.8.0 before DLAA became its own addon): it belongs to DLSS4DLAA now
+    $staleDlss = "$LsDir\addons\DLSS5NR01\dlss"
+    if (Test-Path $staleDlss) {
+        $aside = "$LsDir\backups\retired-addons-$stamp"
+        New-Item -ItemType Directory -Force $aside | Out-Null
+        Move-Item $staleDlss "$aside\DLSS5NR01-dlss"
+        Write-Host "[nr] moved the DLSS runtime folder out of Neural Rendering's folder (DLSS 4 DLAA has its own) to $aside"
     }
 }
 if ($ls) { Write-Host 'Lossless Scaling was stopped; start it again yourself.' }

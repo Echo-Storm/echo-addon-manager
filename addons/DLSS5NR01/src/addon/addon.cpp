@@ -96,18 +96,23 @@ void Start(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void
     g_addonDir = FolderOf(self);
     OpenLog(g_lsDir, host);
     InstallCrashReports();
+    // A second start of the same DLL (the manager unloaded it, but its Present hook pinned it in memory) begins from a clean slate.
+    SwitchOn();
+    ForgetFramePath();
 
     Loaded loaded = LoadSettings(host, kAddonId);
-    { std::lock_guard<std::mutex> lock(g_settingsMutex); g_config = loaded.config; g_looks = std::move(loaded.looks); }
+    { std::lock_guard<std::mutex> lock(g_settingsMutex); g_config = loaded.config; g_looks = std::move(loaded.looks);
+      g_config.model = kDlaaAddon ? 1 : 0; }   // each addon of the pair runs its own model
+    SettleFramesAtStart();
     g_compare = loaded.compareStart; g_splitPos = loaded.splitStart;
     ApplyTapRoles();
-    ScanRequirements();
+    if (!kDlaaAddon) ScanRequirements();   // Neural Rendering's model file, helper and self-test; DLAA's runtime ships with it
     // a switch for the offline test host: run the compatibility test without a click
     if (std::string(host->GetConfig(kAddonId, "selfTestOnStart", "0")) == "1") RunSelfTest();
     if (std::string(host->GetConfig(kAddonId, "snapshotOnStart", "0")) == "1") screenshot::RequestSnapshot();   // likewise: a snapshot for the HUD editor
     host->SubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent, nullptr);
     host->SubscribeEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent, nullptr);
-    Log("DLSS5NR01 initialised (host version 0x%x), addon dir %ls", host->GetHostVersion(), g_addonDir.c_str());
+    Log("%s initialised (host version 0x%x), addon dir %ls", kAddonId, host->GetHostVersion(), g_addonDir.c_str());
     // Lossless Scaling's passes come from the manager's dispatch callback; the present hook needs a device to find DXGI's table, so it is put
     // in place at the first tapped frame. No device is taken from the host here: the newest one it has seen may be gone already (Lossless
     // Scaling makes and drops devices as it starts and stops scaling); devices are only touched in the events or from a live pass.
@@ -138,6 +143,7 @@ EAM_EXPORT void AddonInitialize(IHost* host, ImGuiContext* ctx, void* allocFunc,
 EAM_EXPORT void AddonShutdown() {
     Log("shutting down");
     g_off = true;
+    ReleaseFrames();
     if (g_host) {
         g_host->SetPreDispatchCallback(nullptr, nullptr);
         g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent);
@@ -157,7 +163,11 @@ EAM_EXPORT void AddonShutdown() {
 
 EAM_EXPORT void AddonRenderSettings() { DrawPanel(); }
 EAM_EXPORT uint32_t GetAddonCapabilities() { return EAM_CAP_HAS_SETTINGS | EAM_CAP_D3D11_DEVICE_ACCESS | EAM_CAP_DISPATCH_HOOK; }
-EAM_EXPORT const char* GetAddonName() { return "DLSS 5 Neural Rendering"; }
+EAM_EXPORT const char* GetAddonName() { return kProductName; }
 EAM_EXPORT const char* GetAddonVersion() { return "0.8.0"; }
 EAM_EXPORT const char* GetAddonAuthor() { return "Echo-Storm"; }
-EAM_EXPORT const char* GetAddonDescription() { return "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. Needs your own copy of nvngx_dlssnr.dll (not included, never downloaded)."; }
+EAM_EXPORT const char* GetAddonDescription() {
+    return kDlaaAddon
+        ? "Runs NVIDIA DLSS anti-aliasing (DLAA) on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. NVIDIA's DLSS runtime is included."
+        : "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. Needs your own copy of nvngx_dlssnr.dll (not included, never downloaded).";
+}

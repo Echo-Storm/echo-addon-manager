@@ -60,15 +60,14 @@ void DrawPanel() {
         std::string why; { std::lock_guard<std::mutex> lock(g_textMutex); why = g_offReason; }
         ImGui::PushStyleColor(ImGuiCol_Text, eam::ui::theme::V(eam::ui::theme::kDanger)); ImGui::Text("DISABLED: %s", why.c_str()); ImGui::PopStyleColor();
         ImGui::SameLine(); if (ImGui::SmallButton("Re-arm")) SwitchOn();
-        Tip("Turn Neural Render back on after it switched itself off. If it switches off again, the reason above is still true.");
+        Tip("Turn it back on after it switched itself off. If it switches off again, the reason above is still true.");
     }
     else { ImGui::PushStyleColor(ImGuiCol_Text, g_runs ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::Text("%s", status.c_str()); ImGui::PopStyleColor(); }
     if (g_engine.IsFailed()) { ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "engine: %s", g_engine.Stats().lastError); ImGui::SameLine(); if (ImGui::SmallButton("Retry engine")) RestartEngine(); Tip("Try to start the DLSS model again on the current graphics card."); }
-    {   // ---- Requirements: what this needs, what was found, and what to do about anything missing
+    if (!kDlaaAddon) {   // ---- Requirements: what this needs, what was found, and what to do about anything missing
         const bool have = RequirementsScanned();
         const req::Report rep = Requirements({ g_engine.IsFailed(), g_engine.IsReady(), g_runs > 0, g_engine.Stats().lastError });
         Block("Requirements");
-        if (c.model == 1) Note("The DLAA model is selected: it needs none of the below. NVIDIA's DLSS runtime for it comes with this addon (its dlss folder). What follows is for DLSS 5 Neural Rendering.");
         ImGui::TextWrapped("You provide the model file yourself: nvngx_dlssnr.dll is not included with this addon and is never downloaded.");
         ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.25f));
         Note("1. Put your copy of nvngx_dlssnr.dll in the Lossless Scaling folder, next to LosslessScaling.exe. The Browse button below copies it there for you.");
@@ -115,6 +114,14 @@ void DrawPanel() {
             { bool ok; const std::string msg = BrowseResult(ok);
               if (!msg.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", msg.c_str()); ImGui::PopStyleColor(); } }
         }
+    }
+    else {   // ---- DLAA's requirements: an NVIDIA RTX card, and NVIDIA's runtime, which ships in the addon's dlss folder
+        Block("Requirements");
+        const std::wstring runtime = g_addonDir + L"\\dlss\\nvngx_dlss.dll";
+        const bool present = GetFileAttributesW(runtime.c_str()) != INVALID_FILE_ATTRIBUTES;
+        if (present) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kAccent), "NVIDIA's DLSS runtime is in place (it comes with this addon).");
+        else ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "NVIDIA's DLSS runtime is missing: the addon's dlss folder should hold nvngx_dlss.dll. Reinstall the addon.");
+        Note("Needs an NVIDIA RTX graphics card (the one Lossless Scaling runs frame generation on). Turn on Enable below, then start your game and scale it as usual.");
     }
     Block("Saved looks (load and save your settings)");
     Note("A look is a saved set of the sliders below. Pick one from the list to load it. Save updates the look you picked; Save as new keeps the sliders as they are now under a name of your choice.");
@@ -194,9 +201,14 @@ void DrawPanel() {
         }
     }
 
-    Block("Neural Rendering");
-    changed |= ImGui::Checkbox("Enable DLSS 5 Neural Rendering", &c.enabled);
-    Tip("Master switch. Off = Lossless Scaling runs untouched and the model stops.\nTo compare before and after while playing, use the Before / after hotkey instead: it keeps the model running.");
+    Block(kProductName);
+    const bool dlaa = kDlaaAddon;
+    {
+        const std::string label = std::string("Enable ") + kProductName;
+        if (ImGui::Checkbox(label.c_str(), &c.enabled)) { changed = true; if (c.enabled) { ClaimFrames(); SwitchOn(); } else ReleaseFrames(); }
+        Tip("Master switch. Off = Lossless Scaling runs untouched and the model stops.\nTo compare before and after while playing, use the Before / after hotkey instead: it keeps the model running.\n"
+            "Only one of DLSS 5 Neural Rendering and DLSS 4 DLAA works at a time: turning this on switches the other off.");
+    }
     ImGui::SameLine(); if (ImGui::SmallButton("Reset history")) g_resetRequested = true;
     Tip("The model blends each frame with the ones before it. Press this after a scene cut, or if a ghost or smear seems stuck on screen.");
     ImGui::SameLine();
@@ -204,30 +216,28 @@ void DrawPanel() {
         const float was = c.p.workingScale; const NrParams keep = c.p; c.p = NrParams(); c.p.hudCount = keep.hudCount; memcpy(c.p.hud, keep.hud, sizeof c.p.hud); c.p.hudFeather = keep.hudFeather; c.lsFirst = true; changed = true; if (c.p.workingScale != was) createChanged = true;
     }
     Tip("Put the look and quality sliders back to this addon's defaults. Your presets, hotkeys and the advanced settings are not touched.");
-    bool modelChanged = false;
-    {
-        const char* models[] = { "DLSS 5 Neural Rendering (your model file)", "DLSS DLAA (anti-aliasing; included)" };
-        if (ImGui::Combo("Model", &c.model, models, 2)) { changed = true; modelChanged = true; }
-        Tip("DLSS 5 Neural Rendering changes the look of the picture (lighting, materials, faces) and needs your own nvngx_dlssnr.dll.\n"
-            "DLSS DLAA is NVIDIA's DLSS anti-aliasing: it smooths and steadies edges and shimmer without changing the look. NVIDIA's runtime for it comes with this addon. "
-            "Lossless Scaling gives it no camera jitter and no depth, so it cannot add detail beyond the frame's own, as it does in a game that supports DLSS.\n"
-            "Changing the model restarts the engine.");
-        if (c.model == 1) {
-            int preset = c.dlaaPreset == 13 ? 1 : 0;
-            const char* presets[] = { "NVIDIA's default (K, DLSS 4)", "M (DLSS 4.5, second-generation transformer)" };
-            if (ImGui::Combo("DLAA model", &preset, presets, 2)) { c.dlaaPreset = preset == 1 ? 13u : 0u; changed = true; modelChanged = true; }
-            Tip("Which DLSS model DLAA uses. K is NVIDIA's default for DLAA. M is DLSS 4.5's newer model: sharper and steadier in motion in games, and heavier. Compare them with the Before / after hotkey.");
-        }
+    {   // the other addon of the pair
+        const std::string owner = FrameOwner();
+        if (!owner.empty() && owner != kAddonId)
+            Note("%s is on now. Turning this on switches it off: only one of the two works on the frames at a time.", ProductNameOf(owner.c_str()));
     }
-    const bool dlaa = c.model == 1;
+    bool modelChanged = false;
+    if (dlaa) {
+        int preset = c.dlaaPreset == 13 ? 1 : 0;
+        const char* presets[] = { "NVIDIA's default (K, DLSS 4)", "M (DLSS 4.5, second-generation transformer)" };
+        if (ImGui::Combo("DLAA model", &preset, presets, 2)) { c.dlaaPreset = preset == 1 ? 13u : 0u; changed = true; modelChanged = true; }
+        Tip("Which DLSS model runs. K is NVIDIA's default for DLAA. M is DLSS 4.5's newer model: sharper and steadier in motion in games, and much heavier "
+            "(about three times K's time). Compare them with the Before / after hotkey. Changing it restarts the engine.\n"
+            "Lossless Scaling gives DLAA no camera jitter and no depth, so it smooths and steadies edges and shimmer but cannot add detail beyond the frame's own, as it does in a game that supports DLSS.");
+    }
 
     Block("Settings");
     Note("Open a section to change it. Sliders: double-click to reset, Ctrl+click to type a value, Ctrl+scroll to fine-tune. The small tick marks the default.");
     ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
-    if (eam::ui::SectionHeader("Model (what it does to the picture)")) {
+    if (eam::ui::SectionHeader(dlaa ? "Motion" : "Model (what it does to the picture)")) {
         // Read by the model at every evaluate: changes apply on the next frame. Ranges are what the model honours
         // (docs/dlssnr-knobs.md): intensity clamps at 1, the local strengths do not clamp at all.
-        if (dlaa) { Note("These settings are Neural Rendering's; DLAA has none of them. Motion still applies."); ImGui::BeginDisabled(); }
+        if (!dlaa) {
         int style = (int)c.p.style; const char* styles[] = { "Standard", "Natural", "Cinematic" };
         if (ImGui::Combo("Style", &style, styles, 3)) { c.p.style = style; changed = true; }
         Tip("The model's three looks. Standard is the default. Natural compresses highlights by about 10% and can read as a dark vignette. Cinematic is the third variant.");
@@ -242,7 +252,7 @@ void DrawPanel() {
         bool am = c.p.useAutoMask != 0;
         if (ImGui::Checkbox("Detect skin automatically", &am)) { c.p.useAutoMask = am; changed = true; }
         Tip("Let the model find skin and faces on its own (the 'auto mask'). The effect is small; it is on by default.");
-        if (dlaa) ImGui::EndDisabled();
+        }
         changed |= ImGui::Checkbox("Use Lossless Scaling's motion data", &c.p.useFlow);
         Tip("Feeds the motion Lossless Scaling's frame generation measures (its optical flow) to the model as motion vectors, and uses it to slide the enhancement onto the generated in-between frames. Turn it off only to test without motion.");
         { const NrStats& fs = g_engine.Stats(); ImGui::SameLine(); if (fs.hasFlow) ImGui::TextDisabled("(flow %ux%u)", fs.flowW, fs.flowH); else ImGui::TextDisabled("(no flow texture seen yet)"); }
@@ -256,7 +266,8 @@ void DrawPanel() {
     if (eam::ui::SectionHeader("Quality and performance")) {
         // The model costs ~10 ms + ~7 ms per megapixel on Ampere. The working scale is the only cost lever: past the
         // frame interval the model simply skips frames and the present side carries the last delta forward.
-        if (dlaa) { Note("DLAA always works on the whole frame: the model resolution, auto quality and passes are Neural Rendering's."); ImGui::BeginDisabled(); }
+        if (dlaa) Note("DLAA works on the whole frame, so there is no model resolution to choose.");
+        else {
         createChanged |= SL("Model resolution", &c.p.workingScale, 0.25f, 1.0f, "%.2f x the frame");
         Tip("The frame is shrunk by this before the model sees it, and the model's change is stretched back up to the picture. 1.00 = the model sees the whole frame: best detail, costs the most. This is the only setting that changes the cost.\nOn an RTX 4070 Ti SUPER the model takes roughly 2.7 ms plus 1.8 ms per megapixel.\nChanging it has the model made again in the background: for a fraction of a second the last result carries on, and the game does not stall.\nWith Auto on, this is the most it uses.");
         changed |= ImGui::Checkbox("Auto: keep the model within a time budget", &c.autoQuality);
@@ -278,7 +289,7 @@ void DrawPanel() {
                 ImGui::TreePop();
             }
         }
-        if (dlaa) ImGui::EndDisabled();
+        }
         {
             const NrStats& st = g_engine.Stats();
             if (g_bridge.Width()) {
@@ -292,10 +303,10 @@ void DrawPanel() {
                 if (seen > 30 && runs * 2 < seen) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "the model runs on fewer than half of the frames: the delta is carried across frames by the flow. Lower the working scale for a fresher result.");
             } else ImGui::TextDisabled("(no frame tapped yet)");
         }
-        if (dlaa) ImGui::BeginDisabled();
+        if (!dlaa) {
         { int ps = (int)c.p.passes; const int dps = (int)kDefaults.passes; if (eam::ui::SliderInt("Model passes", &ps, 1, 4, "%d", 0, &dps)) { c.p.passes = (uint32_t)ps; changed = true; } }
         Tip("How many times the model reworks each frame; every pass takes the previous result as its input. 1 = normal. 2 to 4 make the effect stronger (and can start to look over-processed, so compare with the Before / after hotkey).\nEach extra pass costs roughly another model run: watch the model time and the 'keeps up with' line below. If the model cannot keep up it skips frames, and the last result is carried forward.");
-        if (dlaa) ImGui::EndDisabled();
+        }
         changed |= SL("Temporal smoothing", &c.p.deltaSmooth, 0.0f, 0.9f, c.p.deltaSmooth <= 0.001f ? "off" : "%.2f");
         Tip("Blends the model's change for this frame with its change for the previous one, moved along with the picture by Lossless Scaling's motion data. It calms shimmer and crawling in fine detail (distant roads, fences, foliage) at the price of a little softness or ghosting when the camera moves fast. 0 = off; try 0.3 first. Costs almost nothing.");
         changed |= ImGui::Checkbox("Give Lossless Scaling GPU priority", &c.lsFirst);
@@ -370,7 +381,7 @@ void DrawPanel() {
     if (eam::ui::SectionHeader("Compare and hotkeys")) {
         int cm = g_compare; const char* cms[] = { "Enhanced", "Split: left original | right enhanced", "Original only (before)" };
         if (ImGui::Combo("Compare view", &cm, cms, 3)) g_compare = cm;
-        Tip("Enhanced = normal. Split = left of the line is the original, right is enhanced. Original only = as if Neural Render were off (it saves the compose work but the model keeps running). Display only; not saved.");
+        Tip("Enhanced = normal. Split = left of the line is the original, right is enhanced. Original only = as if the addon were off (it saves the compose work but the model keeps running). Display only; not saved.");
         float sp = g_splitPos; { const float dsp = 0.5f; if (eam::ui::SliderFloat("Split position", &sp, 0.05f, 0.95f, "%.2f", 0, &dsp)) g_splitPos = sp; }
         Tip("Where the split line sits, from the left edge (0) to the right edge (1) of the screen.");
         Note("Display only: the model keeps running, so switching is instant. Not saved: Lossless Scaling always starts enhanced.");
@@ -392,7 +403,7 @@ void DrawPanel() {
         Note("A small square appears in the screen's top-left corner for a moment: green enhanced, red original, amber split, blue sharpen changed, purple preset.");
     }
     if (eam::ui::SectionHeader("Screenshots")) {
-        Note("Saves the picture as you see it, with Neural Rendering, the scaling and frame generation in it, as a PNG. It is taken at the next frame Lossless Scaling shows, so the game must be running and scaled.");
+        Note("Saves the picture as you see it, with the addon's result, the scaling and frame generation in it, as a PNG. It is taken at the next frame Lossless Scaling shows, so the game must be running and scaled.");
         const bool busy = screenshot::Busy();
         if (busy) ImGui::BeginDisabled();
         if (eam::ui::Button(busy ? "Taking it..." : "Take a screenshot", eam::ui::icons::kCheck, eam::ui::ButtonKind::Primary)) screenshot::Request();
@@ -519,7 +530,7 @@ void DrawPanel() {
         if (ImGui::Combo("Diagnostic view", &dv, views, 6)) { c.p.debugView = dv; changed = true; }
         Tip("Shows what the addon is doing instead of the finished picture: the original frame, the model's change amplified 4x, which frames are real or generated, or the motion data. Leave on Result for normal use.");
         changed |= SL("Slow-model watchdog (ms)", &c.watchdogMs, 20.0f, 200.0f, "%.0f");
-        Tip("If the model takes longer than this for 30 frames in a row, Neural Render switches itself off so it can never hurt your frame rate. It re-arms itself after 10 seconds, up to three times per session.");
+        Tip("If the model takes longer than this for 30 frames in a row, the addon switches itself off so it can never hurt your frame rate. It re-arms itself after 10 seconds, up to three times per session.");
         char sp[512]; strncpy(sp, c.snippetPath.c_str(), sizeof sp); sp[sizeof sp - 1] = 0;
         if (ImGui::InputText("Model file path (blank = Lossless Scaling folder)", sp, sizeof sp)) { c.snippetPath = sp; changed = true; }
         if (ImGui::IsItemDeactivatedAfterEdit()) { { std::lock_guard<std::mutex> lk(g_settingsMutex); g_config.snippetPath = c.snippetPath; } ScanRequirements(); }
@@ -534,7 +545,7 @@ void DrawPanel() {
     }
 
     if (changed || createChanged || tapChanged) Commit(c, tapChanged, createChanged);
-    if (modelChanged) RestartEngine();   // the model is chosen when the engine starts
+    if (modelChanged) RestartEngine();   // the DLAA model is chosen when the engine starts
 }
 
 } // namespace nr

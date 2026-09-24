@@ -1,4 +1,5 @@
 #include "addon/log.h"
+#include "addon/product.h"
 #include <eam/addon_sdk.h>
 #include <windows.h>
 #include <atomic>
@@ -57,10 +58,10 @@ void OpenLog(const std::wstring& lsDir, IHost* host) {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_host = host;
     CreateDirectoryW((lsDir + L"\\logs").c_str(), nullptr);
-    std::wstring path = lsDir + L"\\logs\\DLSS5NR01.log";
+    std::wstring path = lsDir + L"\\logs\\" + kAddonIdW + L".log";
     // A second copy of Lossless Scaling that is starting up finds the file open: it writes beside it instead of wiping the running session's.
     if (!MoveFileExW(path.c_str(), (path + L".old").c_str(), MOVEFILE_REPLACE_EXISTING) && GetLastError() != ERROR_FILE_NOT_FOUND)
-        path = lsDir + L"\\logs\\DLSS5NR01-" + std::to_wstring(GetCurrentProcessId()) + L".log";
+        path = lsDir + L"\\logs\\" + kAddonIdW + L"-" + std::to_wstring(GetCurrentProcessId()) + L".log";
     g_file = _wfopen(path.c_str(), L"w");
 }
 

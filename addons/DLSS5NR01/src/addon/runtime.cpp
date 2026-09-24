@@ -434,11 +434,69 @@ void OnPresent(IDXGISwapChain* sc) {
     }
     if (g_off || g_engineStarting || !sc) return;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); if (!g_config.enabled) return; }
+    if (!OwnsFrames()) return;
     std::lock_guard<std::mutex> lock(g_frameMutex);
     PresentGuarded(sc);
 }
 
 } // namespace
+
+// ---- one addon of the pair at a time
+//
+// DLSS 5 Neural Rendering and DLSS 4 DLAA are built from these same sources as two addons. Both would tap the same passes of Lossless Scaling
+// and add their results on top of each other, so only one works on the frames: the one named in a variable of the process, which both DLLs
+// read. Turning one on takes the frames over (ClaimFrames); the other notices within a quarter of a second, switches itself off (its Enable box
+// clears, and is saved that way) and lets its model go, so it holds no video memory.
+
+namespace {
+constexpr const char* kOwnerVariable = "ECHO_ADDON_FRAME_OWNER";
+std::atomic<uint64_t> g_ownerCheckedAt{ 0 };
+std::atomic<bool> g_ownsFrames{ false };
+
+void LetFramesGo() {   // off the frame path: the model and the bridge go, as when Lossless Scaling drops its device
+    std::thread([] {
+        std::lock_guard<std::mutex> lock(g_frameMutex);
+        ForgetDevice();
+        if (g_engine.IsReady() || g_engine.IsFailed()) g_engine.Shutdown();
+        g_engineCardKnown = false;
+    }).detach();
+}
+} // namespace
+
+std::string FrameOwner() {
+    char name[32] = {};
+    const DWORD n = GetEnvironmentVariableA(kOwnerVariable, name, sizeof name);
+    return n > 0 && n < sizeof name ? name : "";
+}
+void ClaimFrames() { SetEnvironmentVariableA(kOwnerVariable, kAddonId); g_ownsFrames = true; g_ownerCheckedAt = GetTickCount64(); }
+void ReleaseFrames() { if (FrameOwner() == kAddonId) SetEnvironmentVariableA(kOwnerVariable, nullptr); g_ownsFrames = false; }
+
+bool OwnsFrames() {   // the caller has checked that this addon is on
+    const uint64_t now = GetTickCount64();
+    if (now - g_ownerCheckedAt.load() < 250) return g_ownsFrames;
+    g_ownerCheckedAt = now;
+    const std::string owner = FrameOwner();
+    if (owner.empty()) { ClaimFrames(); return true; }
+    if (owner == kAddonId) { g_ownsFrames = true; return true; }
+    // the other addon was turned on: this one steps aside
+    { std::lock_guard<std::mutex> lock(g_settingsMutex); g_config.enabled = false; }   // so this runs once
+    g_ownsFrames = false;
+    Log("switched off: %s is on now (only one of the two works on the frames)", ProductNameOf(owner.c_str()));
+    SetStatus(std::string("off: ") + ProductNameOf(owner.c_str()) + " is on");
+    LetFramesGo();
+    return false;
+}
+
+void SettleFramesAtStart() {
+    bool on; { std::lock_guard<std::mutex> lock(g_settingsMutex); on = g_config.enabled; }
+    if (!on) return;
+    const std::string owner = FrameOwner();
+    if (owner.empty() || owner == kAddonId) { ClaimFrames(); return; }
+    { std::lock_guard<std::mutex> lock(g_settingsMutex); g_config.enabled = false; }
+    Log("switched off at start: %s is on (only one of the two works on the frames)", ProductNameOf(owner.c_str()));
+}
+
+void ForgetFramePath() { std::lock_guard<std::mutex> lock(g_frameMutex); ForgetDevice(); }
 
 std::string PassText(const DispatchSig& sig) {
     std::string text;
@@ -510,6 +568,7 @@ bool OnPass(uint32_t x, uint32_t y, uint32_t z, void*) {
     auto* const ctx = static_cast<ID3D11DeviceContext*>(g_host ? g_host->GetDispatchingContext() : nullptr);
     if (t_ownWork || g_off || g_engineStarting || !ctx) return false;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); if (!g_config.enabled) return false; }
+    if (!OwnsFrames()) return false;
     std::lock_guard<std::mutex> lock(g_frameMutex);
     if (!Tappable(ctx)) { ++g_otherPasses; return false; }
     TapGuarded(ctx, x, y, z);
