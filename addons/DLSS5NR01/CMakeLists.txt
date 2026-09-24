@@ -43,6 +43,7 @@ add_library(DLSS5NR01 SHARED
     src/addon/bridge.cpp src/addon/frame_tap.cpp
     src/addon/present_hook.cpp src/addon/compose11.cpp src/addon/requirements.cpp
     src/engine/nr_engine.cpp
+    src/engine/dlaa_model.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(DLSS5NR01 PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
@@ -54,6 +55,13 @@ if(MSVC)
     target_link_options(DLSS5NR01 PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF /MAP>)
 endif()
 add_dependencies(DLSS5NR01 nr_forwarder)
+# NVIDIA's DLSS runtime for the DLAA model, in a dlss folder next to the built addon (as in the release). NGX is pointed there only when DLAA
+# runs: it loads every runtime in the folders it searches, and 59 MB is no reason to slow Neural Rendering's start.
+if(EXISTS ${NGX_DIR}/bin/nvngx_dlss.dll)
+    add_custom_command(TARGET DLSS5NR01 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:DLSS5NR01>/dlss
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGX_DIR}/bin/nvngx_dlss.dll $<TARGET_FILE_DIR:DLSS5NR01>/dlss)
+endif()
 
 # ---- offline test host: loads the built addon with a fake IHost, headless ImGui and a synthetic LSFG pattern ----
 add_executable(nr_hosttest tools/addon_host_test.cpp

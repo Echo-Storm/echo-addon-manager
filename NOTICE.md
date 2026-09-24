@@ -36,7 +36,7 @@ project is not affiliated with or endorsed by NVIDIA. Parts of NVIDIA's DLSS SDK
 | What | Where in the release | Terms |
 |------|----------------------|-------|
 | NVIDIA's NGX SDK library (`nvsdk_ngx_s.lib`), as object code | linked into `addons/DLSS5NR01/DLSS5NR01.dll` and `nr_selftest.exe` | NVIDIA RTX SDKs licence |
-| NVIDIA's DLSS runtime (`nvngx_dlss.dll`), unmodified | `addons/DLSS5NR01/nvngx_dlss.dll`, once the DLAA model ships | NVIDIA RTX SDKs licence |
+| NVIDIA's DLSS runtime (`nvngx_dlss.dll` 310.9.1), unmodified | `addons/DLSS5NR01/dlss/nvngx_dlss.dll`, for the DLAA model | NVIDIA RTX SDKs licence |
 | NVIDIA's licence text | `addons/DLSS5NR01/NVIDIA-LICENSE.txt` | |
 
 These are NVIDIA's, under NVIDIA's own licence, which comes with them. This project's MIT licence does not cover them and does not make them

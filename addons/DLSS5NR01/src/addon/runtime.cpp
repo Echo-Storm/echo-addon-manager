@@ -194,7 +194,7 @@ void Tap(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
 
     NrParams p; float watchdogMs; bool lsFirst; AutoQuality::Settings autoSettings;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); p = g_config.p; watchdogMs = g_config.watchdogMs; lsFirst = g_config.lsFirst;
-      autoSettings = { g_config.autoQuality, g_config.autoBudgetMs, g_config.autoFloor }; }
+      autoSettings = { g_config.autoQuality && g_config.model == 0, g_config.autoBudgetMs, g_config.autoFloor }; }   // DLAA works on the whole frame
     const float ceiling = p.workingScale;
     if (autoSettings.on) { std::lock_guard<std::mutex> lock(g_autoMutex); if (g_auto.Scale() > 0) p.workingScale = std::min(ceiling, g_auto.Scale()); }
     g_bridge.SetLsGpuPriority(lsFirst ? 7 : 0);
@@ -462,6 +462,8 @@ void StartEngine(LUID card) {
         try {
             { std::lock_guard<std::mutex> lock(g_frameMutex); g_bridge.Shutdown(); if (g_engine.IsReady() || g_engine.IsFailed()) g_engine.Shutdown(); }
             SetStatus("engine: loading model...");
+            { std::lock_guard<std::mutex> lock(g_settingsMutex);
+              g_engine.SetModel(g_config.model == 1 ? NrEngine::Model::Dlaa : NrEngine::Model::NeuralRendering, g_config.dlaaPreset); }
             const bool ok = g_engine.Init(card, g_addonDir + L"\\" NR_FORWARDER_FILENAME, ModelPath(), g_addonDir, g_lsDir, [](const char* m) { Log("%s", m); });
             g_engineCard = card; g_engineCardKnown = true;
             if (!ok) {

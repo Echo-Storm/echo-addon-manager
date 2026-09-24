@@ -144,6 +144,8 @@ Loaded LoadSettings(IHost* host, const char* id) {
     HudFromText(text("hud"), c.p);
 
     c.enabled = flag("enabled", true);
+    c.model = std::clamp(integer("model", 0), 0, 1);
+    c.dlaaPreset = static_cast<unsigned>(std::clamp(integer("dlaaPreset", 0), 0, 15));
     c.lsFirst = flag("lsFirst", true);
     c.freshFlow = flag("freshFlow", true);
     c.hotkeys = flag("hotkeys", true);
@@ -181,6 +183,7 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
     putFlag("useFlow", c.p.useFlow);
     put("hud", HudToText(c.p));
 
+    put("model", std::to_string(c.model)); put("dlaaPreset", std::to_string(c.dlaaPreset));
     putFlag("enabled", c.enabled); putFlag("lsFirst", c.lsFirst); putFlag("freshFlow", c.freshFlow); putFlag("hotkeys", c.hotkeys);
     put("keyAB", std::to_string(c.keyAB)); put("keySplit", std::to_string(c.keySplit)); put("keySharpDn", std::to_string(c.keySharpDn));
     put("keySharpUp", std::to_string(c.keySharpUp)); put("keyPreset", std::to_string(c.keyPreset)); put("keyShot", std::to_string(c.keyShot));

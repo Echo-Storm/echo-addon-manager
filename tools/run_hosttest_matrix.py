@@ -194,6 +194,16 @@ def scenario_flow_previous(ctx, res, text, frame):
     res.check('...and it still changes the picture', np.abs(frame - ctx['pat']).mean() > 0.3)
 
 
+def scenario_dlaa(ctx, res, text, frame):
+    # DLAA through NVIDIA's DLSS runtime on the whole frame: it must start without the Neural Rendering model file, run, and change the picture
+    # only a little (it smooths edges; it does not restyle the picture as Neural Rendering does)
+    import re
+    m = re.findall(r'tap #\d+: model ([0-9.]+) ms', text)
+    d = np.abs(frame - ctx['pat']).mean() if frame is not None else -1
+    res.check('DLAA runs on the whole frame', 'model input 1920x1080' in text, (m[-1] + ' ms') if m else 'no model time in the log')
+    res.check('...and changes the picture, less than Neural Rendering does', 0.0 < d < np.abs(ctx['base'] - ctx['pat']).mean(), 'mean abs change %.3f' % d)
+
+
 def scenario_selftest(ctx, res, text, frame):
     # the addon's own 'Test compatibility' path (started at start-up by the selfTestOnStart switch): nr_selftest.exe runs the model in its own process
     res.check('the addon ran the compatibility test and it passed with this model', 'compatibility test: passed (PASS)' in text)
@@ -214,14 +224,16 @@ SCENARIOS = [
     ('ghost_on', ['flowsplit=1', 'ghostGuard=1'], scenario_ghost_on),
     ('flow_previous', ['freshFlow=0'], scenario_flow_previous),
     ('selftest', ['selfTestOnStart=1'], scenario_selftest),
+    ('dlaa', ['model=1'], scenario_dlaa),
+    ('dlaa_m', ['model=1', 'dlaaPreset=13'], scenario_dlaa),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'snapshotOnStart=1', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),
 ]
 
 
-# The everyday set (--quick): the frame reaching the model with its own motion, the older timing, and an exit with no AddonShutdown. The rest
-# (looks, HUD, grain, smoothing, the self-test, the panel shot) run with no option, before a release.
-QUICK = {'base', 'flow_previous', 'exit_abrupt'}
+# The everyday set (--quick): the frame reaching the model with its own motion, the older timing, an exit with no AddonShutdown, and DLAA. The
+# rest (looks, HUD, grain, smoothing, the self-test, DLAA's preset M, the panel shot) run with no option, before a release.
+QUICK = {'base', 'flow_previous', 'exit_abrupt', 'dlaa'}
 
 
 def selftest_exe_checks(nr_dir, snippet):

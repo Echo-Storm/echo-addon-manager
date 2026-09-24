@@ -223,7 +223,7 @@ int main(int argc, char** argv) {
     };
     auto present = [&](bool real) {
         ID3D11Texture2D* bb = nullptr; sc->GetBuffer(0, IID_PPV_ARGS(&bb));
-        if (presents >= 2 && presents % 7 == 0) checkBackbuffer(presents == 63 ? (real ? "present_real.bmp" : "present_gen.bmp") : nullptr);
+        if (presents >= 2 && presents % 7 == 0) checkBackbuffer(presents == 210 ? (real ? "present_real.bmp" : "present_gen.bmp") : nullptr);
         if (real) dc->CopyResource(bb, cur);
         else {
             ID3D11ShaderResourceView* s3[3] = { sPrev, sCur, sFlow16 }; dc->CSSetShaderResources(0, 3, s3); dc->CSSetUnorderedAccessViews(0, 1, &uOut, nullptr); dc->CSSetShader(csGen, nullptr, 0); host.Dispatch(dc, W / 8, H / 8, 1);

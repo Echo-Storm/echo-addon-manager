@@ -77,8 +77,13 @@ class NrEngine {
 public:
     using LogFn = std::function<void(const char*)>;
 
-    // The card is the one with this LUID. forwarderPath: nvngx.dll_dlss5nr01.dll; snippetPath: the model file; dataPath: where NGX may
-    // write; lsDir: searched for the model file as well.
+    // Which model runs: set before Init (a change needs the engine started again). DLAA needs no model file and always works on the whole frame.
+    enum class Model { NeuralRendering = 0, Dlaa = 1 };
+    void SetModel(Model model, unsigned dlaaPreset) { m_model = model; m_dlaaPreset = dlaaPreset; }
+    Model GetModel() const { return m_model; }
+
+    // The card is the one with this LUID. forwarderPath: nvngx.dll_dlss5nr01.dll; snippetPath: the model file (Neural Rendering only);
+    // dataPath: where NGX may write, and where it finds nvngx_dlss.dll for DLAA; lsDir: searched for the model files as well.
     bool Init(const LUID& adapterLuid, const std::wstring& forwarderPath, const std::wstring& snippetPath, const std::wstring& dataPath,
               const std::wstring& lsDir, LogFn log);
     void Shutdown();
@@ -115,6 +120,7 @@ private:
 
     bool CreateQueue(const LUID& luid);
     bool StartNgx();
+    bool StartModel();
     bool StartForwarder();
     bool FindFloatSlot();
     bool CreatePipelines();
@@ -145,6 +151,7 @@ private:
     D3D12_GPU_DESCRIPTOR_HANDLE GpuDescriptor(int slot, int pass, int i) const;
 
     LogFn m_log;
+    Model m_model = Model::NeuralRendering; unsigned m_dlaaPreset = 0;
     bool m_ready = false, m_failed = false;
     NrStats m_stats{};
     std::wstring m_forwarderPath, m_snippetPath, m_dataPath, m_lsDir;

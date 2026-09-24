@@ -30,7 +30,7 @@ Copy-Item "$root\manager\manager-icon.ico", "$root\manager\manager-icon.png" $st
 $addons = @(
     @{ Id = 'DLSS5NR01'; Dir = "$root\addons\DLSS5NR01"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS5NR01.dll', 'nvngx.dll_dlss5nr01.dll', 'nr_selftest.exe');
        # NVIDIA's files, under NVIDIA's licence (NOTICE.md): the licence must travel with the binaries that contain NVIDIA's code
-       Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt" } }
+       Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; 'dlss\nvngx_dlss.dll' = "$root\addons\DLSS5NR01\external\ngx\bin\nvngx_dlss.dll" } }
 )
 $included = @(); $skipped = @()
 foreach ($a in $addons) {
@@ -42,7 +42,7 @@ foreach ($a in $addons) {
     Copy-Item "$($a.Dir)\addon.json" $dst
     if (Test-Path "$($a.Dir)\icon.png") { Copy-Item "$($a.Dir)\icon.png" $dst }
     if (Test-Path "$($a.Dir)\LICENSE") { Copy-Item "$($a.Dir)\LICENSE" "$dst\LICENSE.txt" }
-    if ($a.Extra) { foreach ($name in $a.Extra.Keys) { Need $a.Extra[$name] "$name for $($a.Id) (run tools\fetch_ngx_sdk.ps1)"; Copy-Item $a.Extra[$name] "$dst\$name" } }
+    if ($a.Extra) { foreach ($name in $a.Extra.Keys) { Need $a.Extra[$name] "$name for $($a.Id) (run tools\fetch_ngx_sdk.ps1)"; New-Item -ItemType Directory -Force (Split-Path "$dst\$name") | Out-Null; Copy-Item $a.Extra[$name] "$dst\$name" } }
     $included += $a.Id
 }
 if (-not ($included -contains 'DLSS5NR01')) { Write-Host 'Neural Rendering did not build: it is not in this package.' }

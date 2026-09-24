@@ -17,6 +17,8 @@ namespace nr {
 
 struct Config {
     bool enabled = true;
+    int model = 0;                       // 0 DLSS 5 Neural Rendering (the person's model file), 1 DLAA (NVIDIA's DLSS runtime, shipped)
+    unsigned dlaaPreset = 0;             // DLAA's DLSS preset: 0 NVIDIA's default (K), 13 = M (DLSS 4.5)
     NrParams p;                          // the look, and the few model settings that are not part of a look
     bool freshFlow = true;               // run the model once LSFG has this frame's own motion (off: at capture, with the frame before's)
     bool lsFirst = true;                 // give Lossless Scaling's GPU work priority over the model's

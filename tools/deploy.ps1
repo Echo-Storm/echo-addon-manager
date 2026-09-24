@@ -13,7 +13,8 @@ param(
 $root = Split-Path $PSScriptRoot -Parent   # the repository folder
 $items = @{
     host     = @{ Src = "$root\manager\build\Release\Lossless.dll"; Dst = "$LsDir\Lossless.dll"; Extra = @("$root\manager\manager-icon.ico", "$root\manager\manager-icon.png") }
-    nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_dlss5nr01.dll", "$root\addons\DLSS5NR01\build\Release\nr_selftest.exe", "$root\addons\DLSS5NR01\addon.json") }
+    nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_dlss5nr01.dll", "$root\addons\DLSS5NR01\build\Release\nr_selftest.exe", "$root\addons\DLSS5NR01\addon.json",
+                  @{ Src = "$root\addons\DLSS5NR01\build\Release\dlss\nvngx_dlss.dll"; Rel = 'dlss\nvngx_dlss.dll' }, @{ Src = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; Rel = 'NVIDIA-LICENSE.txt' }) }
 }
 if (-not (Test-Path "$LsDir\Lossless.dll")) { Write-Host "No Lossless Scaling folder at $LsDir (pass -LsDir or set LS_DIR)."; exit 4 }
 if (Get-Process $Game -ErrorAction SilentlyContinue) { Write-Host "$Game is running: not touching the Lossless Scaling folder. Close the game first."; exit 2 }
@@ -28,7 +29,11 @@ foreach ($n in $names) {
     $it = $items[$n]
     if (-not (Test-Path $it.Src)) { Write-Host "[$n] not built: $($it.Src)"; continue }
     $files = @(@{ Src = $it.Src; Dst = $it.Dst })
-    foreach ($e in @($it.Extra)) { if ($e) { $files += @{ Src = $e; Dst = Join-Path (Split-Path $it.Dst) (Split-Path $e -Leaf) } } }
+    # an extra file goes next to the main one, or (given as @{ Src; Rel }) into a subfolder of it
+    foreach ($e in @($it.Extra)) {
+        if ($e -is [hashtable]) { if (Test-Path $e.Src) { $files += @{ Src = $e.Src; Dst = Join-Path (Split-Path $it.Dst) $e.Rel } } }
+        elseif ($e) { $files += @{ Src = $e; Dst = Join-Path (Split-Path $it.Dst) (Split-Path $e -Leaf) } }
+    }
     foreach ($f in $files) {
         New-Item -ItemType Directory -Force (Split-Path $f.Dst) | Out-Null
         if (Test-Path $f.Dst) {

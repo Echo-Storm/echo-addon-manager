@@ -1,5 +1,6 @@
 #include "engine/nr_engine.h"
 #include "engine/nr_shaders.h"
+#include "engine/dlaa_model.h"
 #include <d3dcompiler.h>
 #include <algorithm>
 #include <cmath>
@@ -75,7 +76,7 @@ bool NrEngine::Init(const LUID& luid, const std::wstring& forwarderPath, const s
     m_failed = m_ready = false;
     m_stats = NrStats{};
     g_logTarget = this;
-    if (!CreateQueue(luid) || !StartNgx() || !StartForwarder() || !CreatePipelines()) return false;
+    if (!CreateQueue(luid) || !StartNgx() || !StartModel() || !CreatePipelines()) return false;
     m_ready = true;
     Log("NrEngine ready (float slot %d)", m_stats.floatSlot);
     return true;
@@ -90,6 +91,7 @@ void NrEngine::Shutdown() {
     m_buildFenceValue = 0;
     if (m_queue) WaitIdle();
     ReleaseScratch();
+    dlaa::Shutdown();
     if (m_caps) { NVSDK_NGX_D3D12_Shutdown1(m_dev); m_caps = nullptr; }
     if (m_forwarder) { FreeLibrary(m_forwarder); m_forwarder = nullptr; }
     for (ID3D12PipelineState** p : { &m_psoShrink, &m_psoMotion, &m_psoDelta, &m_psoDeltaSmooth }) SafeRelease(*p);
@@ -141,9 +143,11 @@ bool NrEngine::CreateQueue(const LUID& luid) {
 }
 
 bool NrEngine::StartNgx() {
-    const wchar_t* searchPaths[] = { m_lsDir.c_str(), m_dataPath.c_str() };
+    // DLAA: NVIDIA's runtime ships in the addon's dlss folder, searched only then (NGX loads every runtime it finds on the way)
+    const std::wstring dlssDir = m_dataPath + L"\\dlss";
+    const wchar_t* searchPaths[] = { m_lsDir.c_str(), m_dataPath.c_str(), dlssDir.c_str() };
     NVSDK_NGX_FeatureCommonInfo info{};
-    info.PathListInfo.Path = searchPaths; info.PathListInfo.Length = 2;
+    info.PathListInfo.Path = searchPaths; info.PathListInfo.Length = m_model == Model::Dlaa ? 3 : 2;
     info.LoggingInfo.LoggingCallback = OnNgxLog; info.LoggingInfo.MinimumLoggingLevel = NVSDK_NGX_LOGGING_LEVEL_ON;
     info.LoggingInfo.DisableOtherLoggingSinks = false;
     NVSDK_NGX_Result r = NVSDK_NGX_D3D12_Init(kAppId, m_dataPath.c_str(), m_dev, &info, NVSDK_NGX_Version_API);
@@ -152,6 +156,14 @@ bool NrEngine::StartNgx() {
     r = NVSDK_NGX_D3D12_GetCapabilityParameters(&caps);
     if (NVSDK_NGX_FAILED(r) || !caps) { Fail("GetCapabilityParameters: %s", NgxResultName(r)); return false; }
     m_caps = caps;
+    return true;
+}
+
+// The model's functions: Neural Rendering through the forwarder and the person's own model file, or DLAA through NGX and NVIDIA's runtime.
+bool NrEngine::StartModel() {
+    if (m_model == Model::NeuralRendering) return StartForwarder();
+    dlaa::SetPreset(m_dlaaPreset);
+    m_create = dlaa::Create; m_evaluate = dlaa::Evaluate; m_release = dlaa::Release; m_lastResult = dlaa::LastResult;
     return true;
 }
 
@@ -362,7 +374,7 @@ void NrEngine::ReleaseScratch() {
 bool NrEngine::Prepare(uint32_t w, uint32_t h, DXGI_FORMAT fmt, const NrParams& p) {
     if (!m_ready) return false;
     // the working size: the frame scaled by 0.25..1, rounded up to a multiple of 8, at least 64 (or the frame) and at most the frame
-    const float scale = std::clamp(p.workingScale, 0.25f, 1.0f);
+    const float scale = m_model == Model::Dlaa ? 1.0f : std::clamp(p.workingScale, 0.25f, 1.0f);   // DLAA works on the whole frame
     auto workSize = [&](uint32_t full) {
         uint32_t s = (static_cast<uint32_t>(full * scale) + 7) & ~7u;
         s = std::min(s, full);
@@ -509,7 +521,7 @@ bool NrEngine::Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12
     if (slot < 0) { Log("NrEngine: the GPU is still busy with a run from %d frames ago: this frame is skipped", kSlots); return false; }
     ReadTimes(slot);
 
-    const int passes = std::clamp(static_cast<int>(m_params.passes), 1, 4);
+    const int passes = m_model == Model::Dlaa ? 1 : std::clamp(static_cast<int>(m_params.passes), 1, 4);
     const bool smooth = m_params.deltaSmooth > 0.001f;
     const bool historyUsable = m_historyValid && !reset && !m_resetHistory;
     ID3D12Resource* const lastOut = m_out[(passes - 1) % 2];
