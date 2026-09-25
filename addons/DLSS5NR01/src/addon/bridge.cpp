@@ -97,9 +97,25 @@ bool Bridge::Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, NrEngine* engine,
     return true;
 }
 
+void Bridge::Unblock() {
+    if (m_copied.d3d12 && m_copied.d3d12->GetCompletedValue() < m_inFlight) {
+        Log("Bridge: the frame-copied signal had reached %llu of %llu; signalled from the CPU", (unsigned long long)m_copied.d3d12->GetCompletedValue(),
+            (unsigned long long)m_inFlight);
+        m_copied.d3d12->Signal(m_inFlight);
+    }
+    if (m_released.d3d12 && m_released.d3d12->GetCompletedValue() < m_releaseCount) m_released.d3d12->Signal(m_releaseCount);
+}
+
 void Bridge::Shutdown() {
-    // Runs still queued on the model's side may use the shared textures and fences: let them finish first.
+    // Runs still queued on the model's side may use the shared textures and fences: release their waits, then let them finish.
+    Unblock();
     if (m_engine && (m_input.d3d12 || m_copied.d3d12)) m_engine->Drain();
+    // a compose on Lossless Scaling's side may wait on the GPU for a result the model did not finish: release it
+    if (m_finished.d3d12 && m_finished.d3d12->GetCompletedValue() < m_inFlight) {
+        Log("Bridge: the model had finished %llu of %llu; released Lossless Scaling's wait for it", (unsigned long long)m_finished.d3d12->GetCompletedValue(),
+            (unsigned long long)m_inFlight);
+        m_finished.d3d12->Signal(m_inFlight);
+    }
     DropInput(); DropFlow(); DropSlots();
     m_copied.Release(); m_finished.Release(); m_released.Release();
     if (m_lsPriorityApplied && m_lsPriority != 0) SetLsGpuPriority(0);   // leave Lossless Scaling's device as it was

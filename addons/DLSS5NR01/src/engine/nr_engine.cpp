@@ -82,14 +82,18 @@ bool NrEngine::Init(const LUID& luid, const std::wstring& forwarderPath, const s
     return true;
 }
 
-void NrEngine::Shutdown() {
+bool NrEngine::Shutdown() {
     EndBuild();
     if (m_buildState.load() == kBuilt) Discard(m_built);
     m_buildState = kIdle;
     SafeRelease(m_buildList); SafeRelease(m_buildAlloc); SafeRelease(m_buildFence); SafeRelease(m_buildQueue);
     if (m_buildEvent) { CloseHandle(m_buildEvent); m_buildEvent = nullptr; }
     m_buildFenceValue = 0;
-    if (m_queue) WaitIdle();
+    if (m_queue && !WaitIdle()) {
+        m_ready = false; m_failed = true;
+        Log("NrEngine: the GPU did not finish the model's work; the engine is left as it is until Lossless Scaling closes");
+        return false;
+    }
     ReleaseScratch();
     dlaa::Shutdown();
     if (m_caps) { NVSDK_NGX_D3D12_Shutdown1(m_dev); m_caps = nullptr; }
@@ -104,6 +108,7 @@ void NrEngine::Shutdown() {
     m_fenceValue = 0; m_nextSlot = 0; m_flow = nullptr; m_flowW = m_flowH = 0;
     m_ready = false;
     if (g_logTarget == this) g_logTarget = nullptr;
+    return true;
 }
 
 bool NrEngine::CreateQueue(const LUID& luid) {

@@ -86,7 +86,9 @@ public:
     // dataPath: where NGX may write, and where it finds nvngx_dlss.dll for DLAA; lsDir: searched for the model files as well.
     bool Init(const LUID& adapterLuid, const std::wstring& forwarderPath, const std::wstring& snippetPath, const std::wstring& dataPath,
               const std::wstring& lsDir, LogFn log);
-    void Shutdown();
+    // Stops everything; when the GPU has not finished within the wait, NVIDIA's teardown (which can wait on a stuck queue for ever) is left for
+    // the process's exit and the engine stays failed (the addon's DLL is pinned by its Present hook). False then.
+    bool Shutdown();
     bool IsReady() const { return m_ready; }
     bool IsFailed() const { return m_failed; }
     const NrStats& Stats() const { return m_stats; }

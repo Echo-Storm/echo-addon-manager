@@ -21,7 +21,11 @@ class Bridge {
 public:
     using LogFn = std::function<void(const char*)>;
     bool Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, NrEngine* engine, LogFn log);
-    void Shutdown();
+    void Shutdown();   // releases every cross-wait first (see Unblock), then drains and lets go
+    // The two sides wait for each other on the GPU: the model's queue for "copied" and "released", Lossless Scaling's (at a compose) for
+    // "finished". Should one side have stopped (a device replaced mid-frame, a model that failed), the other would wait for ever: signal the
+    // first two from the CPU up to their newest values. Shutdown also does it for "finished" once the model has been given its chance.
+    void Unblock();
     bool IsReady() const { return m_copied.d3d11 != nullptr; }
     // Makes the shared input fit a frame of this size and format (recreating it when either changed). False for a format the model cannot take.
     bool Ensure(uint32_t w, uint32_t h, DXGI_FORMAT fmt);
