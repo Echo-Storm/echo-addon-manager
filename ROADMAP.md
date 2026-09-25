@@ -3,7 +3,7 @@
 What 1.0 should mean: someone who has never seen this project can **install it, keep it up to date, understand what it does and does not do, and get help**, without
 editing files by hand, and the promises it makes (the addon API, the settings file, safety) are stable. This page is honest about where each part stands.
 
-Status on 2026-09-23, at version 0.8.0 (the current work is on `main`).
+Status on 2026-09-24, at version 0.9.1 (the current work is on `main`).
 
 | # | For 1.0 | State | Notes |
 |---|---------|-------|-------|
@@ -42,6 +42,21 @@ What it has to do (and what it must never do):
 - Addon API 1.2 (images for addon panels), and two `addon.json` keys: `conflicts` and `wip`.
 - The version shown moved to 0.8.
 
+## Done in 0.9: the upscalers (work in progress)
+
+- **DLSS 4 Upscaler** and **FSR 3 Upscaler**: NVIDIA DLSS Super Resolution or AMD FSR 3.1 in place of Lossless Scaling's NIS pass, on a
+  Direct3D 12 device of their own, with DLAA / native anti-aliasing when the game already fills the screen.
+- **Motion measured from the frames** (this project's own estimator), with a distrust mask where it cannot be trusted, so the upscalers work
+  in any game, with frame generation on or off.
+- The black screen with frame generation off found and fixed (the capture is a keyed-mutex texture that a plain copy read as black).
+- Tried in World of Warcraft: Forever (1440p -> 4K, and 4K DLAA). What is left before they leave "work in progress":
+  - **More games.** New Vegas first (where the "moving vs still" softness was first seen), then a game with foliage and busy motion, which
+    will tell DLSS and FSR apart better than World of Warcraft does.
+  - **Text and HUD.** A game's HUD is drawn into the captured frame, so the upscaler sees it; DLSS softens thin text a little (FSR 3 less).
+    A game with DLSS built in draws its HUD after upscaling. Options: areas that keep NIS's picture (drawn like Neural Rendering's HUD areas),
+    or finding the HUD automatically, which would be an addon of its own.
+  - Then: drop the WIP label, put them in the release zip, and a user-guide chapter.
+
 ## Ideas for after 1.0
 
 Agreed as worth doing, in no particular order; none of them is started. They come after the hardening and optimization work toward 1.0.
@@ -57,11 +72,11 @@ Agreed as worth doing, in no particular order; none of them is started. They com
 - **A session summary.** When a game closes: average and worst frame time, peak temperature and power, how long the limiter or the auto mode was active. Real numbers for the "tested with" list.
 - **A stuck-state watchdog.** If Lossless Scaling's frames stop arriving while a game runs, say so and offer to restart Neural Rendering's engine, instead of leaving the person to guess.
 - **HUD areas found automatically.** The areas are drawn on a snapshot now (0.8.0). Next: suggest likely HUD areas (parts of the picture that stay put while the scene moves,
-  which LSFG's own flow already shows).
+  which the upscalers' motion estimate and LSFG's flow already show). Better as an addon of its own, which Neural Rendering and the upscalers could both use.
 - **A DLSS 4.5 addon** next to Neural Rendering, for games where DLSS 5's look is not wanted. To look into first: which DLSS 4.5 features can work from what Lossless Scaling has (the captured frames and
   LSFG's optical flow, but no depth and no game motion vectors), and what NVIDIA's public SDK licence allows. Researched in
-  [docs/dlss-4.5-research.md](docs/dlss-4.5-research.md). Built as **DLSS 4 DLAA** (in the source, work in progress and switched off): it runs, but in World of Warcraft at 4K it
-  changed nothing visible for 3 to 4 ms of GPU a frame, since a captured frame gives DLSS no camera jitter and no depth. The next idea is DLSS as Lossless Scaling's upscaler.
+  [docs/dlss-4.5-research.md](docs/dlss-4.5-research.md). Built first as DLSS 4 DLAA on the captured frame, which changed nothing visible, then as the
+  **DLSS 4 Upscaler** in 0.9 (above), with DLSS 4.5's model M as a choice.
 - **Watching: openNR** (github.com/clshortfuse/openNR). It rebuilds a DLSS NR compatibility DLL from a person's own `nvngx_dlssnr.dll`, so it runs the same model, not a better one.
   It is early, with no quality or performance claims yet. Nothing to build here: if it ever produces a working DLL, the person points Neural Rendering at it and runs **Test compatibility**.
   We never ship, host or link the DLSS NR model, or files made from it.

@@ -108,9 +108,9 @@ not lost; none of them is promised.
 
 - **Auto model resolution: done in 0.8.0** (*Auto: keep the model within a time budget*). Room to grow: a budget per game,
   and "keep a share of the GPU free" as well as a model time.
-- **DLSS 4 DLAA**, built from these sources as a second addon, is work in progress and switched off: on a captured frame DLSS gets
-  no camera jitter and no depth, and in testing it changed nothing visible. Next idea: DLSS as Lossless Scaling's upscaler
-  ([research](../../docs/dlss-4.5-research.md)).
+- **The DLSS 4 and FSR 3 Upscalers** (0.9.1, work in progress) are built from these sources as two more addons: NVIDIA DLSS or AMD
+  FSR 3.1 in place of Lossless Scaling's NIS scaler, with motion measured from the frames. See [docs/upscalers.md](docs/upscalers.md).
+  (They began as DLSS 4 DLAA on the captured frame, which changed nothing visible; [research](../../docs/dlss-4.5-research.md).)
 - One distribution with one look for the three addons (Neural Rendering, ReShade input passthrough, Windowed mode): done inside
   Echo Addon Manager.
 
@@ -118,14 +118,15 @@ not lost; none of them is promised.
 
 Visual Studio 2022 Build Tools, CMake 3.20+, and the NVIDIA DLSS SDK dropped into `external/ngx`
 (see `external/ngx/README.md`). Dear ImGui is fetched by CMake. From the repository root,
-`powershell -File tools\build_all.ps1 -Only nr` builds it and `tools\package.ps1` zips a release. Details, the offline test host
+`powershell -File tools\build_all.ps1 -Only nr` builds it (and the two upscaler addons; the FSR one also wants AMD's runtime from
+`tools\fetch_ffx_sdk.ps1`) and `tools\package.ps1` zips a release. Details, the offline test host
 and the measurement harness are in [docs/building.md](docs/building.md).
 
 ## License and credits
 
 MIT (see `LICENSE`). Third parties: the addon SDK headers of Echo Addon Manager (MIT, `../../manager/sdk`),
-Dear ImGui (MIT). The NVIDIA DLSS SDK and the DLSSNR snippet are NVIDIA's and
-are not part of this repository.
+Dear ImGui (MIT), and AMD's FidelityFX API headers (MIT, `third_party/ffx`, used by the FSR 3 Upscaler). The NVIDIA DLSS SDK and the
+DLSSNR snippet are NVIDIA's and are not part of this repository.
 
 DLSSNR is an NVIDIA technology. This addon runs NVIDIA's model on hardware and in a way NVIDIA did
 not release it for. Use it at your own risk with respect to NVIDIA's terms.

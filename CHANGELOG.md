@@ -1,68 +1,64 @@
 # Changelog
 
-## Unreleased
+## 0.9.1 (2026-09-24): the upscalers
 
-- **DLSS 4 Upscaler (prototype, not in the release package).** The DLSS 4 DLAA addon becomes an upscaler: with NIS chosen as Lossless Scaling's
-  Scaling Type, it recognises Lossless Scaling's NIS pass (the frame at the game's size, NIS's two 2x64 coefficient tables, the picture at the
-  screen's size, one thread group per 32x24 pixels) and runs NVIDIA DLSS Super Resolution into the same output instead, on Lossless Scaling's
-  own D3D11 device, on every presented frame, real and generated. Frame generation's optical flow is its motion (half a real frame apart at 2x);
-  depth is flat and there is no camera jitter. Found in a New Vegas session log (2560x1440 -> 3840x2160, twice per real frame at 2x).
-  - **DLSS now runs on a D3D12 device of our own, never on Lossless Scaling's.** Running NVIDIA's D3D11 DLSS on Lossless Scaling's device crashed
-    it three times on 2026-09-24, within seconds of the first upscaled frame and each time somewhere else (NVIDIA's driver, NVIDIA's API,
-    Lossless Scaling's own checks); setting it up on the render thread did not help. Now, at the NIS pass, Lossless Scaling's context only
-    copies the frame (and frame generation's flow) into shared textures, signals a shared fence, waits on the GPU for the upscaled picture and
-    copies it into the pass's output: the same kind of calls Neural Rendering's bridge makes. DLSS itself, and a small motion-vector pass, run
-    on the engine's own D3D12 queue (`engine/sr_engine.cpp`), which starts on a thread of its own. The test host checks that it does.
-  - **Sharpening** (the upscaler's panel, Upscaling): contrast-adaptive sharpening (the FidelityFX CAS formula) of DLSS's picture on the
-    engine's side, since DLSS 4 has none and Lossless Scaling's NIS does. The test host checks that it raises fine detail (+40% at 0.5).
-  - The model choice reads "DLSS model" (NVIDIA's default, or M from DLSS 4.5), and the log gives the game's frame time every 600 real frames
-    (average, fps, p50/p95/p99, worst) with DLSS's cost beside it; the Performance tab gets it as `frame_ms`.
-  - First live run (New Vegas, 2560x1440 -> 3840x2160, frame generation 2x): no crash; DLSS took 1.6 to 2.1 ms of GPU a presented frame.
-  - The Before / after hotkey lets NIS run again, to compare in the game. If DLSS cannot run, NIS runs as usual.
-  - It works beside DLSS 5 Neural Rendering (no longer "one addon at a time"); the addon list can switch it on again.
-  - The test host has a fake NIS pass that paints its output magenta: DLSS replaces it with a real upscaled picture, on real and generated
-    frames. The scaler and pair scenarios are in the everyday quick set.
-  - **Frame generation off works** (World of Warcraft: Forever, 1920x1080 window -> 3840x2160). It showed a black screen with Lossless Scaling
-    restarting its devices every few seconds. With frame generation off the NIS pass reads Lossless Scaling's capture directly: a keyed-mutex
-    texture shared from its capture device, and CopyResource from it gave all black, so DLSS upscaled black. The frame is now read by a small
-    compute pass through the NIS pass's own view of it (as NIS reads it), and the restarts stopped with the black frames.
-  - **Nothing waits on DLSS any more.** The picture shown is the newest DLSS has finished (the frame before's), so Lossless Scaling's queue
-    no longer waits on the engine's; if the engine is still busy, the last picture repeats. `scalerHandoff` in the addon's config keeps the
-    test variants: 1 the GPU wait, 2 DLSS runs but NIS stays, 3 NIS runs and DLSS's picture is pasted at Present (this one also covers
-    Lossless Scaling's cursor and FPS counter, drawn after NIS).
-  - **Motion measured from the frames** (`engine/flow_estimator.cpp`, our own code): DLSS needs to know where every pixel was in the frame
-    before, and a game with DLSS built in tells it; here only frame generation's coarse flow did, and with frame generation off DLSS got
-    none, so anything moving smeared. Now the engine compares each frame with the one before on its own device: a brightness pyramid down to
-    about 64 pixels wide, a coarse-to-fine search for every 4x4 block (seeded from the size below, with a small cost for straying from it),
-    a fraction of a pixel at half size, a 3x3 vector median, and a last step where every pixel picks the best of its own block's vector, the
-    three nearest blocks' and "not moving", so motion follows edges and a HUD that stays put stays put. The upscaler's panel has a Motion
-    choice (measured, the default; frame generation's; none), and the status line and log give its GPU time. The test host slides an aliased
-    picture 5.37 x 2.21 px a frame: the estimate finds (-5.27, -2.20), in about 1 ms at 1920x1080, and DLSS's picture comes out 3x closer
-    to the ideal picture than with no motion (19 against 59 levels a channel).
-  - A still picture measures exactly still: the sub-pixel step no longer nudges an exact match sideways (that slid DLSS's history by about
-    half a pixel every frame and blurred WoW's text), uses two equal-slope lines instead of a parabola, and "not moving" wins a pixel's tie.
-    The test host checks a still picture gives zero.
-  - **A distrust mask:** where even the best vector leaves a pixel's surroundings unlike the frame before (background just uncovered, effects,
-    a wrong estimate), DLSS is told to lean on the current frame (its bias-toward-current-colour mask) instead of smearing its history. In
-    WoW at 4K it marked 0.1-0.5% of the picture while moving and none while still; smear and close-up artifacts dropped.
-  - **DLAA at the screen's own size:** a NIS pass at 1:1 (the game at 3840x2160 on a 3840x2160 screen) is taken too, with DLSS in its DLAA
-    mode. World of Warcraft: Forever at 4K: about 3.2 ms a frame (DLSS 1.7, the motion estimate 1.5) with model K.
-  - **The motion estimate got cheaper:** the search compares half of each 8x8 (a checkerboard) and skips the search around a guess that
-    already matches exactly; every pixel tries a vector only once (neighbours moving alike are the common case). The log times each stage.
-    A 4K picture moving everywhere (the worst case): search 1.55 -> 0.81 ms, every pixel 1.34 -> 0.86 ms, and DLSS lands closer to the
-    ideal picture than before (6.8 against 8.7 levels). The test host can now feed the NIS pass any size and scale (nisW/nisH/nisScale).
-  - The log says once per device what the NIS pass reads and writes (with frame generation off, its output is the swap chain's back buffer)
-    and how bright the frame DLSS gets and the picture it makes are, so a black picture shows in the log.
+The manager and the addons now show 0.9.1. Two new addons take the place of Lossless Scaling's NIS scaler with a temporal upscaler, fed with
+motion measured from the frames themselves, so they work in any game Lossless Scaling can scale, with frame generation on or off. Both are
+**work in progress**: they can be switched on, and the release package leaves them out for now (`tools\package.ps1 -IncludeWip` puts them in).
 
-- **FSR 3 Upscaler (prototype, not in the release package), a third addon from the same sources (`FSR3UPSC`).** AMD FidelityFX Super
-  Resolution 3.1 in place of Lossless Scaling's NIS pass, on any DirectX 12 graphics card (AMD, NVIDIA or Intel), with the same engine,
-  handoff and measured motion as the DLSS 4 Upscaler. It loads AMD's prebuilt runtime (`amd_fidelityfx_dx12.dll`, FidelityFX SDK v1.1.4,
-  MIT, signed by AMD) from its `fsr` folder; `tools/fetch_ffx_sdk.ps1` fetches it (pinned SHA-256, AMD's signature checked), and the
-  FidelityFX API headers are in `addons/DLSS5NR01/third_party/ffx`. FSR gets the frame, the measured motion, a flat depth and the distrust
-  mask as its reactive mask, and sharpens with its own RCAS (the Sharpening slider). It conflicts with the DLSS 4 Upscaler (both take the
-  NIS pass): turning one on turns the other off. Offline, on the sliding aliased picture at 1.5x: FSR 3 lands 14 levels off the ideal
-  picture with the measured motion (30 without), at about 1 ms; DLSS 4 (K) 18 (59 without), at about 2 ms.
-  - The upscaler products' log lines name their upscaler (DLSS or FSR 3).
+- **DLSS 4 Upscaler** (`DLSS4DLAA`, NVIDIA RTX cards): NVIDIA DLSS Super Resolution in place of the NIS pass. It grew out of 0.8.0's DLSS 4
+  DLAA addon, which ran on the captured frame and changed nothing visible; doing the upscaling itself is what DLSS is made for.
+  - Choose **NIS** as Lossless Scaling's Scaling Type and run the game in a window smaller than the screen (2560x1440 on a 4K screen is DLSS's
+    quality mode, 1.5x). At the screen's own size it runs as **DLAA** (anti-aliasing only).
+  - Two DLSS models: NVIDIA's default (K, DLSS 4) and M (DLSS 4.5, about twice K's cost). NVIDIA's DLSS runtime 310.9.1 comes with it.
+  - Sharpening (contrast-adaptive, the FidelityFX CAS formula), since DLSS 4 has none and NIS does.
+  - Measured in World of Warcraft: Forever on an RTX 4070 Ti SUPER, model K: 2560x1440 -> 3840x2160 about 2.4 ms a frame; DLAA at 3840x2160
+    about 3.2 ms (both before the motion estimate got cheaper, below).
+- **FSR 3 Upscaler** (`FSR3UPSC`, any DirectX 12 card: AMD, NVIDIA or Intel): AMD FidelityFX Super Resolution 3.1 in the same place, with the
+  same engine and motion, and AMD's own sharpening (RCAS). AMD's prebuilt runtime (`amd_fidelityfx_dx12.dll`, FidelityFX SDK v1.1.4, MIT,
+  signed by AMD) comes with it. In World of Warcraft, 2560x1440 -> 3840x2160: about 1.85 ms a frame, and text stays crisper than with DLSS.
+- The two take the same pass, so only one runs at a time: turning one on in the addon list turns the other off (the FSR addon names the DLSS
+  one under `conflicts`). Either works beside DLSS 5 Neural Rendering.
+- The **Before / after** hotkey (Ctrl+Shift+F6) switches between the upscaler and Lossless Scaling's own NIS while you play; the hotkeys work
+  only while the upscaler is actually upscaling. If the upscaler cannot run, NIS runs as usual.
+
+**Motion measured from the frames** (`engine/flow_estimator.cpp`, this project's own code). A temporal upscaler combines several frames and
+must know where every pixel was in the frame before; a game with DLSS or FSR built in tells it, Lossless Scaling does not, and anything moving
+smeared. The engine now compares each frame with the one before: a brightness pyramid down to about 64 pixels wide, a coarse-to-fine search for
+every 4x4 block (seeded from the size below, with a small cost for straying from it), a fraction of a pixel at half size, a 3x3 vector median,
+and a last step where every pixel picks the best of its own block's vector, the three nearest blocks' and "not moving", so motion follows edges
+and a HUD that stays put stays put. Where even the best vector leaves a pixel unlike the frame before (background just uncovered, effects, a
+wrong estimate), a distrust mask tells the upscaler to lean on the current frame there (DLSS's bias-toward-current-colour mask, FSR's reactive
+mask) instead of smearing its history. A still picture measures exactly still.
+- The upscalers' panel has a **Motion** choice: measured from the frames (the default), frame generation's flow (coarser, only with frame
+  generation on), or none (to compare).
+- Cost, measured in World of Warcraft on an RTX 4070 Ti SUPER: about 0.35 ms a frame at 2560x1440 and 0.7 ms at 3840x2160. The log times each
+  stage (pyramid, search, median, every pixel) and says what share of the picture the mask marked (0.1-0.5% while moving, none while still).
+- In the test host, on an aliased picture sliding 5.37 x 2.21 pixels a frame, the estimate finds the slide to within about a tenth of a pixel,
+  and the upscaled picture lands 3x (DLSS) and 2x (FSR 3) closer to the ideal picture than with no motion.
+
+**How it runs, and what was learned getting there**
+- The upscaler runs on a Direct3D 12 device of its own (`engine/sr_engine.cpp`), never on Lossless Scaling's. NVIDIA's D3D11 DLSS run on
+  Lossless Scaling's own device crashed it three times, each time somewhere else.
+- On Lossless Scaling's render thread the addon only reads the frame into a shared texture, signals a shared fence and copies the newest
+  finished picture into the NIS pass's output. Nothing waits: the picture shown is the one the engine finished for the frame before (one frame
+  of latency), and if the engine is still busy the last picture repeats. `scalerHandoff` in the addon's config keeps test variants.
+- The frame is read through the NIS pass's own view of it by a small compute pass. With frame generation off, NIS reads Lossless Scaling's
+  capture directly, a keyed-mutex texture shared from its capture device, and a plain copy of it came out black: the upscaler got black
+  frames, and Lossless Scaling restarted its devices every few seconds (a black screen, 2026-09-24). Reading it as NIS does fixed both.
+- The log names, once per device, what the NIS pass reads and writes (with frame generation off its output is the swap chain's back buffer),
+  and how bright the frame the upscaler gets and the picture it makes are, so a black picture shows in the log at once.
+- A NIS pass at 1:1 is taken too (DLAA, or FSR's native anti-aliasing).
+- The motion estimate was made about 40% cheaper at 4K: the search compares a checkerboard half of each 8x8 and skips the search around a
+  guess that already matches exactly, and every pixel tries a vector only once.
+
+**Tools and tests**
+- `tools/fetch_ffx_sdk.ps1` fetches AMD's runtime from AMD's repository, pinned to FidelityFX SDK v1.1.4 and checked against a SHA-256 and
+  AMD's Authenticode signature; the FidelityFX API headers (MIT) are in `addons/DLSS5NR01/third_party/ffx`. NOTICE.md lists AMD's code.
+- `tools/deploy.ps1 -What fsr` deploys the FSR 3 Upscaler; `package.ps1` knows it (as work in progress); the addon test run builds it.
+- The test host has a fake NIS pass (it paints its output magenta, which the upscaler must replace), frame generation off (a BGRA8 frame, no
+  flow), any frame size and scale (`nisW`, `nisH`, `nisScale`, for 4K and 1:1), and a sliding aliased picture (`nismove=1`) measured against
+  the ideal picture. The matrix runs both upscalers on still and moving pictures, with and without motion, and DLAA at 4K.
 
 ## 0.8.0 (2026-09-24): the interface pass
 

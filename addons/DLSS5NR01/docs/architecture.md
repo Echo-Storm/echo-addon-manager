@@ -192,6 +192,24 @@ GPU scheduling time-slices between the queues at dispatch boundaries, so a long 
 delay an LSFG pass by up to its own length. Raising LS's GPU priority makes LS's work win those
 slices; lowering the working scale shortens them.
 
+## The upscalers (DLSS4DLAA, FSR3UPSC)
+
+The same sources build two more addons (`src/addon/product.h`: `kScalerAddon`, `kFsrScaler`) with a different frame path. The user side is in
+[upscalers.md](upscalers.md); in short:
+
+- **ScalerLink** (`src/addon/scaler11.cpp`), on Lossless Scaling's render thread at the NIS pass (recognised by its bindings: the frame,
+  NIS's two 2x64 RGBA32F coefficient tables, the output at the screen's size, one thread group per 32x24 pixels, 1:1 included): reads the
+  frame through the pass's own t0 view into a shared RGBA8 texture (a compute pass), signals the shared fence "copied", hands the frame to
+  the engine, copies the newest finished picture into the pass's output and skips NIS. Two shared output textures alternate, so the one
+  being shown is never the one being written; the engine gets a new frame only once it has finished the one before (checked on the CPU,
+  never waited for), else the last picture repeats. `ReportDeviceChange` logs why Lossless Scaling replaced its device; `DescribeTargets`
+  and `Probe` log what the pass reads and writes and how bright the frame and the picture are.
+- **SrEngine** (`src/engine/sr_engine.cpp`), on a D3D12 device of its own: waits on "copied" on the GPU, runs the motion estimate (or turns
+  LSFG's flow into motion vectors), runs the upscaler (Backend::Dlss through NGX, Backend::Fsr through AMD's FidelityFX API, loaded from
+  the addon's `fsr` folder), sharpens (DLSS only; FSR has RCAS), signals "done". Timestamps give the total and the motion part.
+- **FlowEstimator** (`src/engine/flow_estimator.cpp`): the motion estimate and the distrust mask; statistics and per-stage timestamps are
+  read back per engine slot and logged every 1200 frames.
+
 ## Decisions that did not survive
 
 Kept in git history, removed because they either put model time on LS's queue or looked wrong
@@ -205,6 +223,15 @@ through LSFG's interpolation:
   smoothing, edge-guided upsample: each cost quality or budget for no measurable gain.
 - Model-side upsampling: the 310.8 snippet answers scaling ratio 1.0 for every performance mode
   and rejects an output larger than its input.
+- (Upscalers) DLAA on the captured frame, added onto presented frames like Neural Rendering's delta: no camera jitter and no depth, and
+  in World of Warcraft at 4K it changed nothing visible. Upscaling in place of NIS replaced it.
+- (Upscalers) NVIDIA's D3D11 DLSS on Lossless Scaling's own device: it crashed Lossless Scaling three times, each time somewhere else,
+  also when set up on the render thread. The engine has its own D3D12 device.
+- (Upscalers) Lossless Scaling's queue waiting on the GPU for the upscaled picture: with frame generation off Lossless Scaling restarted
+  its devices every few seconds. That turned out to be the black frames (below), but nothing waits now anyway.
+- (Upscalers) CopyResource of the NIS pass's input: with frame generation off it is a keyed-mutex texture shared from Lossless Scaling's
+  capture device, and the copy came out black. It is read through the pass's own view instead.
+- (Upscalers) Pasting the picture at Present: it also covered Lossless Scaling's cursor and FPS counter, which it draws after NIS.
 
 ## Testing
 

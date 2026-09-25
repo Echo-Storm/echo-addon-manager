@@ -226,8 +226,10 @@ void DrawPanel() {
         }
         if (ImGui::Checkbox(label.c_str(), &c.enabled)) { changed = true; if (c.enabled) { ClaimFrames(); SwitchOn(); } else ReleaseFrames(); }
         if (kWip) ImGui::EndDisabled();
-        Tip("Master switch. Off = Lossless Scaling runs untouched and the model stops.\nTo compare before and after while playing, use the Before / after hotkey instead: it keeps the model running.\n"
-            "Only one of DLSS 5 Neural Rendering and DLSS 4 DLAA works at a time: turning this on switches the other off.");
+        Tip(kScalerAddon
+                ? "Master switch. Off = Lossless Scaling's NIS runs as usual and the upscaler stops.\nTo compare while playing, use the Before / after hotkey instead: it keeps the upscaler running.\n"
+                  "Only one of the DLSS 4 and FSR 3 Upscalers works at a time (switching one on in the addon list switches the other off); either works beside DLSS 5 Neural Rendering."
+                : "Master switch. Off = Lossless Scaling runs untouched and the model stops.\nTo compare before and after while playing, use the Before / after hotkey instead: it keeps the model running.");
     }
     ImGui::SameLine(); if (ImGui::SmallButton("Reset history")) g_resetRequested = true;
     Tip("The model blends each frame with the ones before it. Press this after a scene cut, or if a ghost or smear seems stuck on screen.");

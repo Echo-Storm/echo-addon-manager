@@ -6,7 +6,7 @@
 param(
     [string]$Version = '',
     [switch]$SkipBuild,
-    [switch]$IncludeWip   # also package addons marked work in progress (DLSS 4 DLAA)
+    [switch]$IncludeWip   # also package addons marked work in progress (the DLSS 4 and FSR 3 Upscalers)
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -33,7 +33,7 @@ $addons = @(
     @{ Id = 'DLSS5NR01'; Dir = "$root\addons\DLSS5NR01"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS5NR01.dll', 'nvngx.dll_dlss5nr01.dll', 'nr_selftest.exe');
        # NVIDIA's files, under NVIDIA's licence (NOTICE.md): the licence must travel with the binaries that contain NVIDIA's code
        Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt" } },
-    # DLSS 4 DLAA: built from the same sources; its addon.json lives in products\DLSS4DLAA, and NVIDIA's DLSS runtime ships in its dlss folder
+    # DLSS 4 Upscaler: built from the same sources; its addon.json lives in products\DLSS4DLAA, and NVIDIA's DLSS runtime ships in its dlss folder
     @{ Id = 'DLSS4DLAA'; Wip = $true; Dir = "$root\addons\DLSS5NR01\products\DLSS4DLAA"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS4DLAA.dll');
        Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; 'LICENSE.txt' = "$root\addons\DLSS5NR01\LICENSE";
                   'dlss\nvngx_dlss.dll' = "$root\addons\DLSS5NR01\external\ngx\bin\nvngx_dlss.dll" } },

@@ -12,6 +12,10 @@
   you say you accept NVIDIA's licence.
 - Internet access at configure time: CMake fetches Dear ImGui (the docking branch commit that
   matches the layout compiled into the manager).
+- For the FSR 3 Upscaler: AMD's FidelityFX runtime in `external/ffx/bin`.
+  `powershell -File tools\fetch_ffx_sdk.ps1` fetches `amd_fidelityfx_dx12.dll` from AMD's repository (FidelityFX SDK v1.1.4, pinned,
+  checked by SHA-256 and AMD's signature); the build copies it into `build\Release\fsr`. Without it the FSR addon builds but cannot run.
+  The FidelityFX API headers (MIT) are in `third_party/ffx`.
 
 ## Build
 
@@ -54,6 +58,12 @@ swap chain on the display GPU in LSFG's X3 order. It prints the addon's log and 
 `key=value` pairs override addon settings (for example `workingScale=0.5`). The second argument
 is ignored and only kept for old scripts. It writes `present_gen.bmp` beside the exe.
 
+For the upscalers (`build\Release\DLSS4DLAA.dll` or `FSR3UPSC.dll`), `nis=1` adds a fake NIS pass that paints its output magenta, which
+the upscaler must replace (`[check-nis] ... DLSS REPLACED NIS`); `nisbgra=1` and `nisnoflow=1` give frame generation off (a BGRA8 frame,
+no flow passes); `nisW=`, `nisH=`, `nisScale=` set the frame's size and the scale (1 for DLAA); `nismove=1` slides an aliased picture
+5.37 x 2.21 px a frame and measures the output against the ideal picture (`[check-move]`). `tools\run_hosttest_matrix.py` runs the
+scenarios (`scaler*`, `dlaa_4k_move`, `fsr_*`).
+
 ## Harness (retired)
 
 `nr_harness`, the research tool that ran the model on a still image, was retired in 0.7.9: the self-test (`nr_selftest.exe`) and the test host cover what it checked.
@@ -74,10 +84,13 @@ included.
 ```
 src/addon/       the addon: host glue and panel (addon.cpp), dispatch hook,
                  frame tap, bridge, present hook, compose
-src/engine/      the D3D12 sidecar: NGX core, feature 18, model-side passes and shaders
+src/engine/      the D3D12 sidecar: NGX core, feature 18, model-side passes and shaders;
+                 the upscalers' engine (sr_engine) and motion estimate (flow_estimator)
+products/        addon.json of the addons built from these sources besides Neural Rendering (DLSS4DLAA, FSR3UPSC)
+third_party/ffx/ AMD's FidelityFX API headers (MIT)
 src/forwarder/   nvngx.dll_dlss5nr01.dll and its C API
 src/harness/     standalone measurement harness
 tools/           offline test host, release packaging
-external/        NVIDIA SDK drop point (ignored by git); the addon SDK headers are ../../manager/sdk
+external/        NVIDIA SDK and AMD runtime drop point (ignored by git); the addon SDK headers are ../../manager/sdk
 docs/            this folder
 ```

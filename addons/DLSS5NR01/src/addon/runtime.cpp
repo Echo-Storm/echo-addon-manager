@@ -447,9 +447,10 @@ void OnPresent(IDXGISwapChain* sc) {
 
 // ---- one addon of the pair at a time
 //
-// DLSS 5 Neural Rendering and DLSS 4 DLAA are built from these same sources as two addons. Both would tap the same passes of Lossless Scaling
-// and add their results on top of each other, so only one works on the frames: the one named in a variable of the process, which both DLLs
-// read. Turning one on takes the frames over (ClaimFrames); the other notices within a quarter of a second, switches itself off (its Enable box
+// A guard from when DLSS 5 Neural Rendering and DLSS 4 DLAA (then a second Neural-Rendering-style addon) both tapped the same passes of Lossless
+// Scaling and would have added their results on top of each other: only one works on the frames, the one named in a variable of the process,
+// which the DLLs read. The upscaler addons take the NIS pass instead and stay out of it (ClaimFrames returns at once for them, and their frame
+// path never asks OwnsFrames). Turning one on takes the frames over (ClaimFrames); the other notices within a quarter of a second, switches itself off (its Enable box
 // clears, and is saved that way) and lets its model go, so it holds no video memory.
 
 namespace {

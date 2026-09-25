@@ -13,13 +13,13 @@
 > tried in World of Warcraft: Forever.
 
 **Echo Addon Manager** loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it an addon system: one window to install, switch on and tune
-addons, a live view of frame time and GPU load while a game runs, and one-click backup of every setting. It comes with the **DLSS 5 Neural Rendering** addon and two built-in features,
+addons, a live view of frame time and GPU load while a game runs, and one-click backup of every setting. It comes with the **DLSS 5 Neural Rendering** addon, two upscaler addons in the works (**DLSS 4** and **FSR 3**) and two built-in features,
 **ReShade input passthrough** and **Windowed mode**. It is free and MIT-licensed. It is an unofficial project, not affiliated with the Lossless Scaling developers: read the
 [disclaimer](DISCLAIMER.md) before you install it.
 
 [![build](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml/badge.svg)](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml)
 
-Status: **0.8.0**, on the way to 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
+Status: **0.9.1**, on the way to 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
 
 ## Get started
 
@@ -96,6 +96,16 @@ And one **addon**, which is separate because it needs an NVIDIA GPU and a file y
 | Addon | What it does | Default |
 |-------|--------------|---------|
 | **DLSS 5 Neural Rendering** | Runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures and applies the result to every frame it presents, real and generated, without ever making Lossless Scaling wait. Saved looks, per-game looks, HUD protection drawn on a snapshot of the game, screenshots of what you see, an auto mode that keeps the model within a time budget, shadows and highlights, colour, film grain and temporal smoothing. Changing the model resolution never stalls the game. Needs an NVIDIA RTX GPU and a copy of `nvngx_dlssnr.dll` that you supply. [More](addons/DLSS5NR01/README.md) | on |
+
+Two more addons are **work in progress**: they work and can be switched on in a build from source, and the release zip leaves them out until
+they have been tried in more games. Each takes the place of Lossless Scaling's NIS scaler (choose **NIS** as the Scaling Type and run the game in
+a window smaller than the screen) with a temporal upscaler, fed with motion that the addon measures from the frames themselves, so no game support
+and no frame generation are needed. Only one of the two runs at a time.
+
+| Addon | What it does | Needs |
+|-------|--------------|-------|
+| **DLSS 4 Upscaler** | NVIDIA DLSS Super Resolution (models K and M) in place of NIS; at the screen's own size it runs as DLAA. NVIDIA's DLSS runtime comes with it. | an NVIDIA RTX GPU |
+| **FSR 3 Upscaler** | AMD FidelityFX Super Resolution 3.1 in place of NIS, with AMD's own sharpening; at the screen's own size it anti-aliases. AMD's runtime comes with it. | any DirectX 12 GPU |
 
 **HUD protection, drawn on the game.** In Neural Rendering's panel, *Take a snapshot* shows the game as you see it, and you draw the areas the enhancement must leave
 exactly as they are (action bars, chat, the minimap, quest text): drag to add an area, drag it to move it, drag an edge or corner to resize it, right-click to remove it.
@@ -182,7 +192,7 @@ Setup never loads either `Lossless.dll` to tell them apart: it reads their versi
 Visual Studio 2022 (Desktop C++ workload) and CMake 3.20+ on Windows. Dear ImGui and MinHook are fetched at pinned versions when CMake first configures.
 
 ```powershell
-powershell -File tools\build_all.ps1                     # manager and Neural Rendering
+powershell -File tools\build_all.ps1                     # the manager and the addons (Neural Rendering and the two upscalers)
 powershell -File tools\build_all.ps1 -Only host          # the manager only
 powershell -File tools\run_addon_tests.ps1               # the offline tests for what changed since the last commit (-All: every one, -List: the suites)
 powershell -File tools\ci.ps1                            # what the GitHub build runs: a clean build of the manager, installer and sample addon, and the tests that need no GPU
@@ -191,6 +201,8 @@ powershell -File tools\package.ps1                       # the release zip, with
 
 Building Neural Rendering from source (not needed to use the release zip) also needs NVIDIA's DLSS SDK headers and static library in
 `addons/DLSS5NR01/external/ngx`: `tools\fetch_ngx_sdk.ps1` fetches them from NVIDIA's public repository after you accept NVIDIA's licence. They are NVIDIA's, under NVIDIA's licence, so they are not in this repository; the release carries the parts it needs under NVIDIA's terms (see NOTICE.md).
+The FSR 3 Upscaler loads AMD's FidelityFX runtime: `tools\fetch_ffx_sdk.ps1` fetches it from AMD's repository and checks it (a pinned SHA-256 and AMD's signature). It is MIT-licensed,
+like the FidelityFX API headers in `addons/DLSS5NR01/third_party/ffx`.
 `tools\deploy.ps1 -What all -LsDir <Lossless Scaling folder>` copies a build into a Lossless Scaling folder with backups and refuses to run while Lossless Scaling or your game is open.
 The installer is its own small CMake project in [`installer/`](installer/).
 
@@ -211,7 +223,8 @@ Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/Los
 `Lossless.dll` with addons, its addon interface (which is why its addons still load here) and the ReShade and Windowed features, which started there as addons.
 The manager's code has since been rewritten; about a tenth of its lines still match the original's, mostly declarations and common idioms (`tools/measure_original_share.py`
 measures it). Neural Rendering began as **andreiday**'s DLSS 5 plugin for LosslessProxy and has been rewritten and extended here; about a tenth of its lines still
-match theirs, mostly declarations and common idioms. The full list, with licences, is in [NOTICE.md](NOTICE.md). Lossless Scaling belongs to its author; this project is unofficial.
+match theirs, mostly declarations and common idioms. The upscalers run NVIDIA DLSS and AMD FidelityFX Super Resolution 3 (AMD's FidelityFX SDK, MIT); their motion
+estimate is this project's own. The full list, with licences, is in [NOTICE.md](NOTICE.md). Lossless Scaling belongs to its author; this project is unofficial.
 
 If it is useful to you, you can [support it on Ko-fi](https://ko-fi.com/xechostormx).
 

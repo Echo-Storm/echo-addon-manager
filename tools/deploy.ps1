@@ -87,7 +87,7 @@ if ($names -contains 'nr') {
         $aside = "$LsDir\backups\retired-addons-$stamp"
         New-Item -ItemType Directory -Force $aside | Out-Null
         Move-Item $staleDlss "$aside\DLSS5NR01-dlss"
-        Write-Host "[nr] moved the DLSS runtime folder out of Neural Rendering's folder (DLSS 4 DLAA has its own) to $aside"
+        Write-Host "[nr] moved the DLSS runtime folder out of Neural Rendering's folder (the DLSS 4 Upscaler has its own) to $aside"
     }
 }
 if ($ls) { Write-Host 'Lossless Scaling was stopped; start it again yourself.' }
