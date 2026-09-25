@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -319,7 +319,20 @@ int main(int argc, char** argv) {
         ID3D11ComputeShader* csNis = MakeCS(dev, "Texture2D<float4> f:register(t0); Texture2D<float4> c1:register(t1); Texture2D<float4> c2:register(t2); RWTexture2D<float4> o:register(u0);"
                                                  " [numthreads(32,24,1)] void main(uint3 id:SV_DispatchThreadID){ o[id.xy]=float4(1,0,1,1)+(f[uint2(0,0)]+c1[uint2(0,0)]+c2[uint2(0,0)])*0; }");
         Fill(dc, nisIn, NW, NH);
+        // gpuload=<n>: before each NIS pass, n thousand iterations of busy work on this (Lossless Scaling's) queue, as a game at its GPU
+        // limit keeps the card busy; the upscaler's frame read and signal then queue behind it (Fallout: New Vegas, 2026-09-25)
+        int gpuLoad = 0; for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "gpuload=", 8)) gpuLoad = std::clamp(atoi(argv[i] + 8), 0, 1000);
+        ID3D11ComputeShader* csLoad = nullptr; ID3D11Texture2D* loadTex = nullptr; ID3D11UnorderedAccessView* uLoad = nullptr;
+        if (gpuLoad) {
+            const std::string src = "RWTexture2D<float4> o:register(u0); [numthreads(8,8,1)] void main(uint3 id:SV_DispatchThreadID){ float4 v=float4(id.xyxy)*0.001;"
+                                    " [loop] for(uint i=0;i<" + std::to_string(gpuLoad * 1000) + "u;++i) v=sin(v*1.0001+0.1); o[id.xy]=v; }";
+            csLoad = MakeCS(dev, src.c_str()); loadTex = MakeTex(dev, 256, 256, DXGI_FORMAT_R16G16B16A16_FLOAT, true); uLoad = uav(loadTex);
+        }
         auto nisPass = [&] {
+            if (csLoad) {   // the game's frame, on the same GPU
+                dc->CSSetUnorderedAccessViews(0, 1, &uLoad, nullptr); dc->CSSetShader(csLoad, nullptr, 0); dc->Dispatch(32, 32, 1);
+                dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr);
+            }
             dc->CSSetShaderResources(0, 3, nisSrvs); dc->CSSetUnorderedAccessViews(0, 1, &uNisOut, nullptr); dc->CSSetShader(csNis, nullptr, 0);
             host.Dispatch(dc, (OW + 31) / 32, (OH + 23) / 24, 1);
             dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls);

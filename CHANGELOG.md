@@ -9,11 +9,12 @@
   never waits for ever in NVIDIA's or AMD's teardown (a stuck GPU leaves it for Lossless Scaling's exit and says so), and stays loaded until
   Lossless Scaling closes once its engine has run, as Neural Rendering does. The log times the stop. The test host switches each upscaler off
   while it runs and makes a new device after it (`unload=1`, scenarios `scaler_unload`, `fsr_unload`).
-- **A short wait instead of a repeated picture, and the numbers in the panel.** When Lossless Scaling needs a picture the upscaler has
-  almost finished (two frames close together, as adaptive frame generation makes them, or a busy GPU), the pass may now wait for it, at
-  most *Wait for a picture* (default 1.5 ms, 0 = never; a spin on the fence, since Windows can round a short timed wait up to 15.6 ms),
-  rather than show the picture before again. The Upscaling section shows the last second: pictures a second, the share shown twice, the
-  share of frames not handed over, and how often and how long it waited; the log gives the same per link. The test host can set the gap
+- **The upscaler's numbers in the panel.** The Upscaling section shows the last second: pictures a second, the share shown twice (the
+  upscaler had not finished the next picture in time: a small judder), the share of frames not handed over, and any waits; the log gives
+  each link's totals. A setting, *Wait rather than repeat* (off by default, up to 5 ms), lets a pass wait for a picture instead of showing
+  the one before again. Tried as a default and measured: on a GPU at its limit the next picture is usually a whole frame away, and waiting
+  made repeats more frequent (the test host with `gpuload=`, which busies the GPU like a game at its limit); on a light load it made no
+  measurable difference. What reduces repeats is headroom: a frame cap, or a lower game resolution. The test host can also set the gap
   between the two frames of a pair (`nisgap=`).
 - **Sharpening reaches further** (the upscalers' Sharpening slider). The slider now spans 1.6 times the strength it did: what was 0.8 is
   0.5, and the top part goes past the standard CAS / RCAS maximum (the sharpening's effect is amplified, still within 0..1). In Fallout:

@@ -315,9 +315,10 @@ void DrawPanel() {
             if (v.second.valid) {
                 ImGui::TextDisabled("Last second: %.0f pictures a second; %.1f%% shown twice, %.1f%% of frames not handed over; waited for %.1f%% (%.2f ms on average).",
                                     v.second.fps, v.second.repeatPct, v.second.skipPct, v.second.waitPct, v.second.waitMs);
-                Tip("Shown twice: the upscaler had not finished the next picture when Lossless Scaling needed it, so the one before was shown again (a small judder). "
-                    "Not handed over: the upscaler still had two frames to do, so this one was left out. Waited: the pass waited (at most the time set below) for a picture "
-                    "that was about to be finished, rather than show the one before again. A few percent is normal with adaptive frame generation.");
+                Tip("Shown twice: the upscaler had not finished the next picture when Lossless Scaling needed it, even after waiting, so the one before was shown again "
+                    "(a small judder). Not handed over: the upscaler still had two frames to do, so this one was left out. Waited: the pass waited (at most the time set "
+                    "below) because it would otherwise have shown the same picture again. A GPU running at its limit makes all three rise: a frame cap with some "
+                    "headroom helps most.");
             }
             if (g_compare.load() == 2) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "Showing Lossless Scaling's NIS for comparison (Before / after hotkey).");
         }
@@ -328,11 +329,13 @@ void DrawPanel() {
                  "past CAS's own maximum. DLSS 4 has no sharpening of its own, while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer "
                  "next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
         {
-            const float dflt = 1.5f;
-            if (eam::ui::SliderFloat("Wait for a picture (ms)", &c.scalerWaitMs, 0.0f, 4.0f, c.scalerWaitMs <= 0.001f ? "never" : "%.1f ms", 0, &dflt)) changed = true;
-            Tip("When Lossless Scaling needs a picture that the upscaler has almost finished (two frames close together, as adaptive frame generation makes them, or a "
-                "busy GPU), how long it may wait for it rather than show the picture before again. The wait holds Lossless Scaling's frame for at most this long, "
-                "so keep it short. 1.5 ms is the default; 0 never waits. The line above shows how often it waits and how often it still repeats.");
+            const float dflt = 0.0f;
+            if (eam::ui::SliderFloat("Wait rather than repeat (ms)", &c.scalerWaitMs, 0.0f, 5.0f, c.scalerWaitMs <= 0.001f ? "never" : "%.1f ms", 0, &dflt)) changed = true;
+            Tip("When the upscaler has not finished a new picture by the time Lossless Scaling needs one (two frames close together, as adaptive frame generation makes "
+                "them, or a busy GPU), the picture before would be shown again: a small judder. This is how long it may wait for the new one instead. It waits only "
+                "then, and holds Lossless Scaling's frame for at most this long. Off by default: when the GPU is at its limit the new picture is usually a whole frame "
+                "away, and waiting makes repeats more frequent, not less. Worth trying (1 to 3 ms) only while the line above shows pictures shown twice with the GPU not "
+                "at its limit; if that share does not drop, set it back to 0.");
         }
         Note("Compare with the Before / after hotkey (Compare and hotkeys): it switches between %s and Lossless Scaling's own NIS while you play.", U);
     }

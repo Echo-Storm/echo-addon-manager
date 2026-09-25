@@ -267,11 +267,12 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     } else {
         ++m_count.skipped;
     }
-    // The picture this pass should show is the frame before the newest handed over. When the engine has not quite finished it (two passes
-    // close together, as adaptive frame generation makes them, or a busy GPU), wait for it a little rather than show the one before again.
+    // When the engine has finished nothing newer than the picture shown last (two passes close together, as adaptive frame generation makes
+    // them, or a busy GPU), this pass would show it again: wait a little for the next one instead. Only then: a newer picture that is already
+    // finished is shown at once (waiting for every picture's successor cost Lossless Scaling's thread time on most passes, 2026-09-25).
     // A spin on the fence, not a timed wait: Windows can round a short timeout up to its 15.6 ms timer tick.
-    const uint64_t want = m_frame ? m_frame - 1 : 0;
-    if (m_handoff == Handoff::Late && waitMs > 0.0f && want > m_lastShown && m_done.d3d11->GetCompletedValue() < want) {
+    const uint64_t want = m_lastShown + 1;
+    if (m_handoff == Handoff::Late && waitMs > 0.0f && m_lastShown && want <= m_frame && m_done.d3d11->GetCompletedValue() < want) {
         LARGE_INTEGER f, t0, t; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
         const LONGLONG limit = static_cast<LONGLONG>(f.QuadPart * (waitMs / 1000.0));
         bool got = false;

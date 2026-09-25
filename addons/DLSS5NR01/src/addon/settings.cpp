@@ -163,7 +163,7 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.dlaaPreset = static_cast<unsigned>(std::clamp(integer("dlaaPreset", 0), 0, 15));
     c.scalerHandoff = std::clamp(integer("scalerHandoff", 0), 0, 3);
     c.motionSource = std::clamp(integer("motionSource", 0), 0, 2);
-    c.scalerWaitMs = std::clamp(static_cast<float>(number("scalerWaitMs", 1.5)), 0.0f, 4.0f);
+    c.scalerWaitMs = std::clamp(static_cast<float>(number("scalerWaitMs", 0.0)), 0.0f, 5.0f);
     c.lsFirst = flag("lsFirst", true);
     c.freshFlow = flag("freshFlow", true);
     c.hotkeys = flag("hotkeys", true);
