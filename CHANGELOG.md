@@ -39,6 +39,14 @@
     choice (measured, the default; frame generation's; none), and the status line and log give its GPU time. The test host slides an aliased
     picture 5.37 x 2.21 px a frame: the estimate finds (-5.27, -2.20), in about 1 ms at 1920x1080, and DLSS's picture comes out 3x closer
     to the ideal picture than with no motion (19 against 59 levels a channel).
+  - A still picture measures exactly still: the sub-pixel step no longer nudges an exact match sideways (that slid DLSS's history by about
+    half a pixel every frame and blurred WoW's text), uses two equal-slope lines instead of a parabola, and "not moving" wins a pixel's tie.
+    The test host checks a still picture gives zero.
+  - **A distrust mask:** where even the best vector leaves a pixel's surroundings unlike the frame before (background just uncovered, effects,
+    a wrong estimate), DLSS is told to lean on the current frame (its bias-toward-current-colour mask) instead of smearing its history. In
+    WoW at 4K it marked 0.1-0.5% of the picture while moving and none while still; smear and close-up artifacts dropped.
+  - **DLAA at the screen's own size:** a NIS pass at 1:1 (the game at 3840x2160 on a 3840x2160 screen) is taken too, with DLSS in its DLAA
+    mode. World of Warcraft: Forever at 4K: about 3.2 ms a frame (DLSS 1.7, the motion estimate 1.5) with model K.
   - The log says once per device what the NIS pass reads and writes (with frame generation off, its output is the swap chain's back buffer)
     and how bright the frame DLSS gets and the picture it makes are, so a black picture shows in the log.
 
