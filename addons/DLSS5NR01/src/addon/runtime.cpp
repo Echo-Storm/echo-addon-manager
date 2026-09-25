@@ -130,13 +130,16 @@ void PublishLive(const NrStats& st) {
 }
 
 void LogProgress(const NrStats& st) {
-    const uint64_t taps = g_tap.Taps();
+    // counted in the frames the model was given: Lossless Scaling's captures, or the presented frames with frame generation off (where the
+    // capture count stays put, and would log every frame)
+    const uint64_t taps = g_presentMode ? g_presentIndex : g_tap.Taps();
+    if (!taps) return;
     if (taps == 1 || taps == 60 || taps % 300 == 0)
-        Log("tap #%llu: model %.1f ms (avg %.1f), run %.1f ms, GPU start +%.1f done +%.1f ms after submit, tap CPU %.2f ms, interval %.1f ms, runs %llu skipped %llu, fails %llu | presents %llu (%s), composed %llu, compose CPU %.2f ms, last delta frame %llu offset %.2f",
-            (unsigned long long)taps, st.nrMs, g_avgModelMs, st.totalMs, st.startMs, st.doneMs, g_bridge.CpuMs(), g_bridge.IntervalMs(), (unsigned long long)g_bridge.Runs(),
+        Log("%s #%llu: model %.1f ms (avg %.1f), run %.1f ms, GPU start +%.1f done +%.1f ms after submit, tap CPU %.2f ms, interval %.1f ms, runs %llu skipped %llu, fails %llu | presents %llu (%s), composed %llu, compose CPU %.2f ms, last delta frame %llu offset %.2f",
+            g_presentMode ? "presented frame" : "tap", (unsigned long long)taps, st.nrMs, g_avgModelMs, st.totalMs, st.startMs, st.doneMs, g_bridge.CpuMs(), g_bridge.IntervalMs(), (unsigned long long)g_bridge.Runs(),
             (unsigned long long)g_bridge.Skipped(), (unsigned long long)st.fails, (unsigned long long)g_lsPresents, g_tap.PresentPattern(), (unsigned long long)g_composed,
             g_compose.CpuMs(), (unsigned long long)g_lastDelta, g_lastOffset);
-    if (taps == 60 || taps % 300 == 0)
+    if (!g_presentMode && (taps == 60 || taps % 300 == 0))
         Log("motion vectors so far: this frame's flow %llu, the previous frame's %llu, frames dropped waiting for a flow pass %llu",
             (unsigned long long)g_tap.FreshRuns(), (unsigned long long)g_tap.StaleRuns(), (unsigned long long)g_tap.DroppedWaiting());
     if (taps % 300 == 0) {   // the spread of the game's frame times over the last 300 frames (the line above is smoothed)
