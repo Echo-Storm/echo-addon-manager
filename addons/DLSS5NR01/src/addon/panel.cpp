@@ -313,12 +313,12 @@ void DrawPanel() {
                                v.outW, v.outH, v.inW ? (float)v.outW / v.inW : 0.0f, v.gpuMs, v.motionMs, (unsigned long long)v.runs,
                                v.perFrame > 1 ? " (real and generated frames alike)" : "");
             if (v.second.valid) {
-                ImGui::TextDisabled("Last second: %.0f pictures a second; %.1f%% shown twice, %.1f%% of frames not handed over; waited for %.1f%% (%.2f ms on average).",
-                                    v.second.fps, v.second.repeatPct, v.second.skipPct, v.second.waitPct, v.second.waitMs);
-                Tip("Shown twice: the upscaler had not finished the next picture when Lossless Scaling needed it, even after waiting, so the one before was shown again "
-                    "(a small judder). Not handed over: the upscaler still had two frames to do, so this one was left out. Waited: the pass waited (at most the time set "
-                    "below) because it would otherwise have shown the same picture again. A GPU running at its limit makes all three rise: a frame cap with some "
-                    "headroom helps most.");
+                ImGui::TextDisabled("Last second: %.0f pictures a second (%.0f%% in close pairs); %.1f%% shown twice, %.1f%% of frames not handed over, %.1f%% waited for on the GPU.",
+                                    v.second.fps, v.second.closePct, v.second.repeatPct, v.second.skipPct, v.second.waitPct);
+                Tip("Close pairs: two frames within 6 ms of each other, as adaptive frame generation makes them. Shown twice: the upscaler had not finished a newer picture "
+                    "when Lossless Scaling needed one, so the one before was shown again (a small judder). Waited for on the GPU: rather than that, Lossless Scaling's "
+                    "frame waited on the GPU for the next picture (the setting below). Not handed over: the upscaler still had two frames to do, so this one was "
+                    "left out. A GPU running at its limit makes these rise: a frame cap with some headroom helps most.");
             }
             if (g_compare.load() == 2) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "Showing Lossless Scaling's NIS for comparison (Before / after hotkey).");
         }
@@ -328,15 +328,10 @@ void DrawPanel() {
         else Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond; above about 0.6 its effect is amplified "
                  "past CAS's own maximum. DLSS 4 has no sharpening of its own, while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer "
                  "next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
-        {
-            const float dflt = 0.0f;
-            if (eam::ui::SliderFloat("Wait rather than repeat (ms)", &c.scalerWaitMs, 0.0f, 5.0f, c.scalerWaitMs <= 0.001f ? "never" : "%.1f ms", 0, &dflt)) changed = true;
-            Tip("When the upscaler has not finished a new picture by the time Lossless Scaling needs one (two frames close together, as adaptive frame generation makes "
-                "them, or a busy GPU), the picture before would be shown again: a small judder. This is how long it may wait for the new one instead. It waits only "
-                "then, and holds Lossless Scaling's frame for at most this long. Off by default: when the GPU is at its limit the new picture is usually a whole frame "
-                "away, and waiting makes repeats more frequent, not less. Worth trying (1 to 3 ms) only while the line above shows pictures shown twice with the GPU not "
-                "at its limit; if that share does not drop, set it back to 0.");
-        }
+        if (ImGui::Checkbox("Wait on the GPU rather than repeat a picture", &c.scalerGpuWait)) changed = true;
+        Tip("When the upscaler has not finished a new picture by the time Lossless Scaling needs one (two frames close together, as adaptive frame generation makes "
+            "them), the picture before would be shown again: a small judder. On (the default), Lossless Scaling's frame waits on the GPU for the new picture instead, "
+            "as a game with DLSS built in waits for DLSS; the CPU never waits. Off: the picture before is shown again. Compare the line above with it on and off.");
         Note("Compare with the Before / after hotkey (Compare and hotkeys): it switches between %s and Lossless Scaling's own NIS while you play.", U);
     }
     if (!kScalerAddon && eam::ui::SectionHeader("Quality and performance")) {

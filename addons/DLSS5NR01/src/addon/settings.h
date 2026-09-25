@@ -20,10 +20,9 @@ struct Config {
     int model = 0;                       // 0 DLSS 5 Neural Rendering (the person's model file), 1 DLAA (NVIDIA's DLSS runtime, shipped)
     unsigned dlaaPreset = 0;             // DLAA's DLSS preset: 0 NVIDIA's default (K), 13 = M (DLSS 4.5)
     int motionSource = 0;                // the DLSS 4 Upscaler's motion: 0 measured from the frames, 1 frame generation's flow, 2 none
-    // The upscalers: how long a pass may wait rather than show the same picture again (0 = never, up to 5). Off by default: on a GPU at its
-    // limit the next picture is a frame away, not a millisecond, and waiting only shifted Lossless Scaling's timing and made repeats more
-    // frequent (the test host under load, 2026-09-25); on a lighter load it made no measurable difference.
-    float scalerWaitMs = 0.0f;
+    // The upscalers: when no newer picture is finished, Lossless Scaling's queue waits on the GPU for the next one rather than show the same
+    // picture again (ScalerLink::Upscale). A CPU wait tried before made repeats more frequent on a busy GPU and is gone (2026-09-25).
+    bool scalerGpuWait = true;
     int scalerHandoff = 0;               // the DLSS 4 Upscaler's handoff (ScalerLink::Handoff): 0 one frame late, 1 GPU wait, 2 DLSS runs but NIS stays,
                                          // 3 NIS runs and DLSS's picture is copied over it at Present
     NrParams p;                          // the look, and the few model settings that are not part of a look

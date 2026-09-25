@@ -155,6 +155,12 @@ void ScalerLink::Unblock() {
 void ScalerLink::Shutdown() {
     Unblock();
     if (m_engine && (m_in[0].d3d12 || m_copied.d3d12)) m_engine->Drain();
+    // Lossless Scaling's queue may be waiting on the GPU for a picture (gpuWait): should the engine not have finished it, release the wait
+    if (m_done.d3d12 && m_done.d3d12->GetCompletedValue() < m_frame) {
+        Log("%s upscaler: the engine had finished %llu of %llu frames; released Lossless Scaling's wait for them", kUpscalerName,
+            (unsigned long long)m_done.d3d12->GetCompletedValue(), (unsigned long long)m_frame);
+        m_done.d3d12->Signal(m_frame);
+    }
     for (auto*& v : m_inUav) SafeRelease(v);
     SafeRelease(m_grab);
     for (auto& t : m_in) t.Release();
@@ -196,7 +202,7 @@ void ScalerLink::DescribeTargets(const NisPass& pass) {
 }
 
 bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset,
-                         float sharpen, bool reset, Handoff handoff, float waitMs) {
+                         float sharpen, bool reset, Handoff handoff, bool gpuWait) {
     if (!IsReady() || !m_engine || !m_engine->IsReady()) return false;
     DescribeTargets(pass);
     if (handoff != m_handoff) {
@@ -230,6 +236,10 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     }
     if (!refit) return false;
     ++m_count.passes;
+    LARGE_INTEGER qpcFreq, qpcNow; QueryPerformanceFrequency(&qpcFreq); QueryPerformanceCounter(&qpcNow);
+    const bool close = m_lastPassQpc && (qpcNow.QuadPart - m_lastPassQpc) * 1000.0 / qpcFreq.QuadPart < Counters::kClosePassMs;
+    m_lastPassQpc = qpcNow.QuadPart;
+    if (close) ++m_count.closePasses;
 
     // A new frame goes to the engine while fewer than kIn are with it (its queue finishes them in order, so "done" says how many are left).
     // With Wait, Lossless Scaling's own queue waited for the one before, so there is room.
@@ -267,34 +277,31 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     } else {
         ++m_count.skipped;
     }
-    // When the engine has finished nothing newer than the picture shown last (two passes close together, as adaptive frame generation makes
-    // them, or a busy GPU), this pass would show it again: wait a little for the next one instead. Only then: a newer picture that is already
-    // finished is shown at once (waiting for every picture's successor cost Lossless Scaling's thread time on most passes, 2026-09-25).
-    // A spin on the fence, not a timed wait: Windows can round a short timeout up to its 15.6 ms timer tick.
-    const uint64_t want = m_lastShown + 1;
-    if (m_handoff == Handoff::Late && waitMs > 0.0f && m_lastShown && want <= m_frame && m_done.d3d11->GetCompletedValue() < want) {
-        LARGE_INTEGER f, t0, t; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
-        const LONGLONG limit = static_cast<LONGLONG>(f.QuadPart * (waitMs / 1000.0));
-        bool got = false;
-        do { YieldProcessor(); QueryPerformanceCounter(&t); got = m_done.d3d11->GetCompletedValue() >= want; } while (!got && t.QuadPart - t0.QuadPart < limit);
-        ++m_count.waits; if (got) ++m_count.waitHits;
-        m_count.waitedMs += (t.QuadPart - t0.QuadPart) * 1000.0 / f.QuadPart;
-    }
     // The newest picture the engine has finished (never one it is writing: those are the kIn at most after it, in other textures).
     const uint64_t newest = m_done.d3d11->GetCompletedValue();
     Probe(newest, room);
     if ((m_count.passes % 3000) == 0)
-        Log("%s upscaler: %llu passes, %llu frames not handed over (the engine had %d already), %llu pictures shown twice; waited for a picture "
-            "%llu times (got it %llu times, %.2f ms on average)", kUpscalerName, (unsigned long long)m_count.passes, (unsigned long long)m_count.skipped, kIn,
-            (unsigned long long)m_count.repeats, (unsigned long long)m_count.waits, (unsigned long long)m_count.waitHits,
-            m_count.waits ? m_count.waitedMs / m_count.waits : 0.0);
+        Log("%s upscaler: %llu passes (%llu within %.0f ms of the one before), %llu frames not handed over (the engine had %d already), %llu pictures "
+            "shown twice (%llu of them close), waited on the GPU for the next picture %llu times (%llu close)", kUpscalerName, (unsigned long long)m_count.passes,
+            (unsigned long long)m_count.closePasses, Counters::kClosePassMs, (unsigned long long)m_count.skipped, kIn, (unsigned long long)m_count.repeats,
+            (unsigned long long)m_count.closeRepeats, (unsigned long long)m_count.waits, (unsigned long long)m_count.closeWaits);
     if (m_handoff == Handoff::Observe) return false;
-    const bool ready = newest && m_holds[newest % kOut] == newest;
-    if (m_handoff == Handoff::AtPresent) { m_atPresent = ready ? newest : 0; return false; }   // NIS runs; the picture goes over it at Present
-    if (!ready) return false;   // nothing finished yet: NIS this once
-    if (newest == m_lastShown) ++m_count.repeats;
-    m_lastShown = newest;
-    m_ctx->CopyResource(pass.out, m_out[newest % kOut].d3d11);
+    if (m_handoff == Handoff::AtPresent) { m_atPresent = newest && m_holds[newest % kOut] == newest ? newest : 0; return false; }   // NIS runs; the picture goes over it at Present
+    // When the engine has finished nothing newer than the picture shown last (two passes close together, as adaptive frame generation makes
+    // them), this pass would show it again: a visible hitch. With gpuWait, Lossless Scaling's queue waits on the GPU for the next picture and
+    // shows that (the engine always signals "done" for every frame, and Shutdown releases the wait should it ever not). The CPU never waits:
+    // a CPU wait shifted Lossless Scaling's timing and made repeats more frequent on a busy GPU (2026-09-25).
+    uint64_t show = newest;
+    const uint64_t next = m_lastShown + 1;
+    if (m_handoff == Handoff::Late && gpuWait && m_lastShown && newest <= m_lastShown && next <= m_frame && m_holds[next % kOut] == next) {
+        m_ctx4->Wait(m_done.d3d11, next);
+        show = next;
+        ++m_count.waits; if (close) ++m_count.closeWaits;
+    }
+    if (!show || m_holds[show % kOut] != show) return false;   // nothing finished yet: NIS this once
+    if (show == m_lastShown) { ++m_count.repeats; if (close) ++m_count.closeRepeats; }
+    m_lastShown = show;
+    m_ctx->CopyResource(pass.out, m_out[show % kOut].d3d11);
     return true;
 }
 

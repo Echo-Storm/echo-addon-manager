@@ -9,13 +9,16 @@
   never waits for ever in NVIDIA's or AMD's teardown (a stuck GPU leaves it for Lossless Scaling's exit and says so), and stays loaded until
   Lossless Scaling closes once its engine has run, as Neural Rendering does. The log times the stop. The test host switches each upscaler off
   while it runs and makes a new device after it (`unload=1`, scenarios `scaler_unload`, `fsr_unload`).
-- **The upscaler's numbers in the panel.** The Upscaling section shows the last second: pictures a second, the share shown twice (the
-  upscaler had not finished the next picture in time: a small judder), the share of frames not handed over, and any waits; the log gives
-  each link's totals. A setting, *Wait rather than repeat* (off by default, up to 5 ms), lets a pass wait for a picture instead of showing
-  the one before again. Tried as a default and measured: on a GPU at its limit the next picture is usually a whole frame away, and waiting
-  made repeats more frequent (the test host with `gpuload=`, which busies the GPU like a game at its limit); on a light load it made no
-  measurable difference. What reduces repeats is headroom: a frame cap, or a lower game resolution. The test host can also set the gap
-  between the two frames of a pair (`nisgap=`).
+- **No more repeated pictures: a GPU wait instead.** When the upscaler has not finished a newer picture by the time Lossless Scaling needs
+  one, the picture before used to be shown again: a visible hitch, 11-16% of pictures in Fallout: New Vegas with adaptive frame generation,
+  even at 1080p with the GPU far from its limit (two frames close together). Now Lossless Scaling's frame waits on the GPU for the next
+  picture and shows that, as a game with DLSS built in waits for DLSS; the CPU never waits. On the test host with the GPU busied like a game
+  at its limit (`gpuload=`): shown twice 38% and 49% before, 0% with the wait, and fewer frames left out. It can be turned off (*Wait on
+  the GPU rather than repeat a picture*); should the engine ever not finish a frame, stopping the upscaler releases the wait. A CPU wait
+  was tried first and measured worse on a busy GPU (it shifted Lossless Scaling's timing); it is gone.
+- **The upscaler's numbers in the panel.** The Upscaling section shows the last second: pictures a second, the share in close pairs (within
+  6 ms), the share shown twice, frames not handed over, and GPU waits; the log gives each link's totals. The test host can set the gap
+  between the two frames of a pair (`nisgap=`) and busy the GPU (`gpuload=`).
 - **Sharpening reaches further** (the upscalers' Sharpening slider). The slider now spans 1.6 times the strength it did: what was 0.8 is
   0.5, and the top part goes past the standard CAS / RCAS maximum (the sharpening's effect is amplified, still within 0..1). In Fallout:
   New Vegas at 1440p -> 4K it took 0.8 of the old scale to look right, so 0.5 is the new default. A value saved on the old scale is

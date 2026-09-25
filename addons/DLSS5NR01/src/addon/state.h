@@ -83,7 +83,7 @@ bool OwnsFrames();
 void SettleFramesAtStart();
 void ForgetFramePath();
 // DLSS as Lossless Scaling's scaler (the DLSS 4 addon): what the panel shows, and letting go at shutdown.
-struct ScalerSecond { bool valid = false; double fps = 0, repeatPct = 0, skipPct = 0, waitPct = 0, waitMs = 0; };   // the upscaler's last second
+struct ScalerSecond { bool valid = false; double fps = 0, repeatPct = 0, skipPct = 0, waitPct = 0, closePct = 0; };   // the upscaler's last second
 struct ScalerView { bool starting = false, ready = false, failed = false; std::string error; uint32_t inW = 0, inH = 0, outW = 0, outH = 0;
                     double gpuMs = 0, motionMs = 0; uint64_t runs = 0, nisSeen = 0; uint32_t perFrame = 0; ScalerSecond second; };
 ScalerView GetScalerView();

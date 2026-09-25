@@ -163,7 +163,7 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.dlaaPreset = static_cast<unsigned>(std::clamp(integer("dlaaPreset", 0), 0, 15));
     c.scalerHandoff = std::clamp(integer("scalerHandoff", 0), 0, 3);
     c.motionSource = std::clamp(integer("motionSource", 0), 0, 2);
-    c.scalerWaitMs = std::clamp(static_cast<float>(number("scalerWaitMs", 0.0)), 0.0f, 5.0f);
+    c.scalerGpuWait = flag("scalerGpuWait", true);
     c.lsFirst = flag("lsFirst", true);
     c.freshFlow = flag("freshFlow", true);
     c.hotkeys = flag("hotkeys", true);
@@ -202,7 +202,7 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
     if (kScalerAddon) put("sharpenScale", "1.6");   // the slider's scale this value is on (see LoadSettings)
     put("hud", HudToText(c.p));
 
-    put("model", std::to_string(c.model)); put("dlaaPreset", std::to_string(c.dlaaPreset)); put("scalerHandoff", std::to_string(c.scalerHandoff)); put("motionSource", std::to_string(c.motionSource)); put("scalerWaitMs", Number(c.scalerWaitMs));
+    put("model", std::to_string(c.model)); put("dlaaPreset", std::to_string(c.dlaaPreset)); put("scalerHandoff", std::to_string(c.scalerHandoff)); put("motionSource", std::to_string(c.motionSource)); putFlag("scalerGpuWait", c.scalerGpuWait);
     putFlag("enabled", c.enabled); putFlag("lsFirst", c.lsFirst); putFlag("freshFlow", c.freshFlow); putFlag("hotkeys", c.hotkeys);
     put("keyAB", std::to_string(c.keyAB)); put("keySplit", std::to_string(c.keySplit)); put("keySharpDn", std::to_string(c.keySharpDn));
     put("keySharpUp", std::to_string(c.keySharpUp)); put("keyPreset", std::to_string(c.keyPreset)); put("keyShot", std::to_string(c.keyShot));

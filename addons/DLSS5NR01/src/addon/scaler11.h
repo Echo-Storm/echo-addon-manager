@@ -50,14 +50,18 @@ public:
     // At the NIS pass, on its context: the frame goes to the engine, DLSS's picture comes back into the pass's output. False when DLSS did not
     // run for this frame (the NIS pass should then run as usual). flow: frame generation's newest flow (RGBA16F) or null.
     // estimate: the engine measures the motion from the frames (flow unused).
-    // waitMs: how long this pass may wait (spinning on the CPU) for the picture it should show when the engine is about to finish it,
-    // rather than show the one before again (0: never waits).
+    // gpuWait: when the engine has not finished a newer picture than the one shown last, Lossless Scaling's queue waits on the GPU for the
+    // next one rather than show the same picture again (the CPU never waits).
     bool Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset,
-                 float sharpen, bool reset, Handoff handoff = Handoff::Late, float waitMs = 0.0f);
+                 float sharpen, bool reset, Handoff handoff = Handoff::Late, bool gpuWait = true);
 
-    // Counted since the link was made: passes that showed a picture, frames not handed over (the engine had kIn already), pictures shown
-    // a second time, and the waits for a picture (how many, how many got it, how long in all).
-    struct Counters { uint64_t passes = 0, skipped = 0, repeats = 0, waits = 0, waitHits = 0; double waitedMs = 0; };
+    // Counted since the link was made: passes that showed a picture, frames not handed over (the engine had kIn already), pictures shown a
+    // second time, GPU waits for the next picture; and of passes, repeats and waits, those that came within kClosePassMs of the pass before
+    // (two frames close together, as adaptive frame generation makes them).
+    struct Counters {
+        static constexpr double kClosePassMs = 6.0;
+        uint64_t passes = 0, skipped = 0, repeats = 0, waits = 0, closePasses = 0, closeRepeats = 0, closeWaits = 0;
+    };
     Counters Count() const { return m_count; }
 
 private:
@@ -86,6 +90,7 @@ private:
     uint64_t m_holds[kOut] = {};      // the frame whose finished picture each m_out holds (0: none)
     Counters m_count;
     uint64_t m_lastShown = 0;         // the frame whose picture the last pass showed
+    int64_t m_lastPassQpc = 0;
     Handoff m_handoff = Handoff::Late;
     bool m_pendingReset = false;      // a history reset asked for while the engine was busy: it goes with the next frame handed over
     uint64_t m_atPresent = 0;         // AtPresent: the frame whose picture PresentCopy puts in the back buffer (0: none)

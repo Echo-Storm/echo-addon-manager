@@ -664,15 +664,15 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
                 !PresentHook::Install(dev, OnPresent, [](const char* m) { Log("%s", m); }))
                 Log("%s upscaler: could not hook Present; the picture cannot go over NIS's there", kUpscalerName);
             if (g_linkDevice == dev && g_compare.load() != 2) {   // "original only" lets NIS run, for comparing
-                NrParams p; unsigned preset; int handoff, motion; float waitMs;
+                NrParams p; unsigned preset; int handoff, motion; bool gpuWait;
                 { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; handoff = g_config.scalerHandoff; motion = g_config.motionSource;
-                  waitMs = g_config.scalerWaitMs; }
+                  gpuWait = g_config.scalerGpuWait; }
                 uint32_t fw = 0, fh = 0;
                 ID3D11Resource* flow = motion == 1 ? g_tap.NewestFlow(fw, fh) : nullptr;
                 const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;
                 t_ownWork = true;
                 replaced = g_link.Upscale(pass, flow, fw, fh, p.flowUnit, fraction, motion == 0, preset, p.sharpen * kScalerSharpenScale, g_resetRequested.exchange(false),
-                                          static_cast<ScalerLink::Handoff>(handoff), waitMs);
+                                          static_cast<ScalerLink::Handoff>(handoff), gpuWait);
                 t_ownWork = false;
                 if (flow) flow->Release();
                 if (replaced) ++g_upscaled;
@@ -696,7 +696,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
             g_scalerSecond.repeatPct = passes ? 100.0 * (n.repeats - before.repeats) / passes : 0.0;
             g_scalerSecond.skipPct = passes ? 100.0 * (n.skipped - before.skipped) / passes : 0.0;
             g_scalerSecond.waitPct = passes ? 100.0 * (n.waits - before.waits) / passes : 0.0;
-            g_scalerSecond.waitMs = n.waits > before.waits ? (n.waitedMs - before.waitedMs) / (n.waits - before.waits) : 0.0;
+            g_scalerSecond.closePct = passes ? 100.0 * (n.closePasses - before.closePasses) / passes : 0.0;
             g_scalerSecond.valid = true;
         }
         before = n; beforeAt = now;
@@ -748,9 +748,11 @@ void StopScaler() {
     std::lock_guard<std::mutex> lock(g_frameMutex);   // nothing else takes it now: the callbacks are gone (AddonShutdown)
     const ScalerLink::Counters n = g_link.Count();
     if (n.passes)
-        Log("%s upscaler: this link: %llu passes, %llu pictures shown twice (%.1f%%), %llu frames not handed over (%.1f%%); waited %llu times (got the picture %llu times, "
-            "%.2f ms on average)", kUpscalerName, (unsigned long long)n.passes, (unsigned long long)n.repeats, 100.0 * n.repeats / n.passes,
-            (unsigned long long)n.skipped, 100.0 * n.skipped / n.passes, (unsigned long long)n.waits, (unsigned long long)n.waitHits, n.waits ? n.waitedMs / n.waits : 0.0);
+        Log("%s upscaler: this link: %llu passes (%.1f%% within %.0f ms of the one before), %llu pictures shown twice (%.1f%%, %llu of them close), %llu frames not "
+            "handed over (%.1f%%); waited on the GPU for the next picture %llu times (%.1f%%, %llu close)", kUpscalerName, (unsigned long long)n.passes,
+            100.0 * n.closePasses / n.passes, ScalerLink::Counters::kClosePassMs, (unsigned long long)n.repeats, 100.0 * n.repeats / n.passes,
+            (unsigned long long)n.closeRepeats, (unsigned long long)n.skipped, 100.0 * n.skipped / n.passes, (unsigned long long)n.waits,
+            100.0 * n.waits / n.passes, (unsigned long long)n.closeWaits);
     g_link.Shutdown();   // unblocks the engine's queue (see ScalerLink::Unblock), drains it, releases the shared textures and fences
     g_linkDevice = nullptr;
     QueryPerformanceCounter(&b);
