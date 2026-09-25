@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -327,6 +327,7 @@ int main(int argc, char** argv) {
         bool nisNoFlow = false, nisMove = false;   // nisnoflow=1: frame generation off, so no capture or flow passes, only NIS; nismove=1: the picture slides
         for (int i = 4; i < argc; ++i) { if (!strcmp(argv[i], "nisnoflow=1")) nisNoFlow = true; if (!strcmp(argv[i], "nismove=1")) nisMove = true; }
         const int kFrames = 150;
+        int nisGap = 12; for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "nisgap=", 7)) nisGap = std::clamp(atoi(argv[i] + 7), 0, 24);
         for (int fr = 0; fr < kFrames; ++fr) {
             if (nisMove) FillMoving(dc, nisIn, NW, NH, fr);
             if (nisNoFlow) { nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(16)); if (fr % 30 == 0) frame("nis"); else emptyFrame(); continue; }
@@ -335,8 +336,8 @@ int main(int argc, char** argv) {
             ID3D11UnorderedAccessView* null4[4] = {}; dc->CSSetUnorderedAccessViews(0, 4, null4, nullptr); dc->CSSetShaderResources(0, 3, nulls);
             dc->CSSetShaderResources(4, 1, &sPyr3); dc->CSSetUnorderedAccessViews(0, 1, &uFlow16, nullptr); dc->CSSetShader(csFlow16, nullptr, 0); host.Dispatch(dc, FLW / 8, FLH / 8, 1);
             { ID3D11ShaderResourceView* n8[8] = {}; dc->CSSetShaderResources(0, 8, n8); } dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr);
-            nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(12));   // the generated frame
-            nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(12));   // the real one
+            nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(nisGap));        // the generated frame (nisgap=: how soon the real one follows)
+            nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(24 - nisGap));   // the real one
             if (fr % 30 == 0) frame("nis"); else emptyFrame();
         }
         dc->Flush(); std::this_thread::sleep_for(std::chrono::milliseconds(300));

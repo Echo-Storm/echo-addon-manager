@@ -124,7 +124,7 @@ bool ScalerLink::Fit(Shared& t, uint32_t w, uint32_t h, DXGI_FORMAT fmt, bool en
 
 bool ScalerLink::Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, SrEngine* engine, LogFn log) {
     m_log = std::move(log); m_engine = engine; m_ctx = ctx; m_frame = 0; for (auto& h : m_holds) h = 0; m_described = false;
-    m_passes = m_skipped = m_repeats = m_lastShown = 0;
+    m_count = Counters(); m_lastShown = 0;
     m_atPresent = m_copiedAtPresent = 0; m_probeState = 0; m_pendingReset = false;
     if (FAILED(dev->QueryInterface(IID_PPV_ARGS(&m_dev))) || FAILED(ctx->QueryInterface(IID_PPV_ARGS(&m_ctx4)))) {
         Log("%s upscaler: Lossless Scaling's device has no shared fences (D3D11.4 is needed)", kUpscalerName); Shutdown(); return false;
@@ -196,7 +196,7 @@ void ScalerLink::DescribeTargets(const NisPass& pass) {
 }
 
 bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset,
-                         float sharpen, bool reset, Handoff handoff) {
+                         float sharpen, bool reset, Handoff handoff, float waitMs) {
     if (!IsReady() || !m_engine || !m_engine->IsReady()) return false;
     DescribeTargets(pass);
     if (handoff != m_handoff) {
@@ -229,7 +229,7 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
         if (refit && m_out[i].d3d11 != before) m_holds[i] = 0;   // a new texture holds nothing yet
     }
     if (!refit) return false;
-    ++m_passes;
+    ++m_count.passes;
 
     // A new frame goes to the engine while fewer than kIn are with it (its queue finishes them in order, so "done" says how many are left).
     // With Wait, Lossless Scaling's own queue waited for the one before, so there is room.
@@ -265,19 +265,33 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
             return true;
         }
     } else {
-        ++m_skipped;
+        ++m_count.skipped;
+    }
+    // The picture this pass should show is the frame before the newest handed over. When the engine has not quite finished it (two passes
+    // close together, as adaptive frame generation makes them, or a busy GPU), wait for it a little rather than show the one before again.
+    // A spin on the fence, not a timed wait: Windows can round a short timeout up to its 15.6 ms timer tick.
+    const uint64_t want = m_frame ? m_frame - 1 : 0;
+    if (m_handoff == Handoff::Late && waitMs > 0.0f && want > m_lastShown && m_done.d3d11->GetCompletedValue() < want) {
+        LARGE_INTEGER f, t0, t; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
+        const LONGLONG limit = static_cast<LONGLONG>(f.QuadPart * (waitMs / 1000.0));
+        bool got = false;
+        do { YieldProcessor(); QueryPerformanceCounter(&t); got = m_done.d3d11->GetCompletedValue() >= want; } while (!got && t.QuadPart - t0.QuadPart < limit);
+        ++m_count.waits; if (got) ++m_count.waitHits;
+        m_count.waitedMs += (t.QuadPart - t0.QuadPart) * 1000.0 / f.QuadPart;
     }
     // The newest picture the engine has finished (never one it is writing: those are the kIn at most after it, in other textures).
     const uint64_t newest = m_done.d3d11->GetCompletedValue();
     Probe(newest, room);
-    if ((m_passes % 3000) == 0)
-        Log("%s upscaler: %llu passes, %llu frames not handed over (the engine had %d already), %llu pictures shown twice", kUpscalerName,
-            (unsigned long long)m_passes, (unsigned long long)m_skipped, kIn, (unsigned long long)m_repeats);
+    if ((m_count.passes % 3000) == 0)
+        Log("%s upscaler: %llu passes, %llu frames not handed over (the engine had %d already), %llu pictures shown twice; waited for a picture "
+            "%llu times (got it %llu times, %.2f ms on average)", kUpscalerName, (unsigned long long)m_count.passes, (unsigned long long)m_count.skipped, kIn,
+            (unsigned long long)m_count.repeats, (unsigned long long)m_count.waits, (unsigned long long)m_count.waitHits,
+            m_count.waits ? m_count.waitedMs / m_count.waits : 0.0);
     if (m_handoff == Handoff::Observe) return false;
     const bool ready = newest && m_holds[newest % kOut] == newest;
     if (m_handoff == Handoff::AtPresent) { m_atPresent = ready ? newest : 0; return false; }   // NIS runs; the picture goes over it at Present
     if (!ready) return false;   // nothing finished yet: NIS this once
-    if (newest == m_lastShown) ++m_repeats;
+    if (newest == m_lastShown) ++m_count.repeats;
     m_lastShown = newest;
     m_ctx->CopyResource(pass.out, m_out[newest % kOut].d3d11);
     return true;
