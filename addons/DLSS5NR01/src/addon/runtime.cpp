@@ -90,12 +90,13 @@ void ReleaseDecision(TapDecision& d) {
 }
 
 bool g_presentMode = false;   // frame generation off: the model takes the presented frame (see PresentTap)
-uint64_t g_tapsSeen = 0, g_presentIndex = 0, g_presentOwn = 0, g_presentEarlier = 0;
+uint64_t g_tapsSeen = 0, g_presentIndex = 0, g_presentOwn = 0, g_presentEarlier = 0, g_tapSeenAtMs = 0;
 int g_presentsWithoutTap = 0;
+ID3D11Device* g_presentHookTriedOn = nullptr;   // the device the Present hook was last tried from (once per device, not every pass)
 void ForgetDevice() {   // under g_frameMutex
     screenshot::Forget();
     g_bridge.Shutdown(); g_compose.Shutdown(); g_tap.Reset();
-    g_presentMode = false; g_tapsSeen = 0; g_presentsWithoutTap = 0;
+    g_presentMode = false; g_tapsSeen = 0; g_presentsWithoutTap = 0; g_presentHookTriedOn = nullptr;
     g_seen.clear(); g_tapDevice = nullptr; g_lsChain = nullptr; g_otherChain = nullptr;
 }
 
@@ -415,7 +416,8 @@ void Present(IDXGISwapChain* sc) {
 // frame is the scaled picture (the screen's size), so the working size is taken as for a frame kPresentWidth wide: the model costs what it
 // does for the game's frame. When captures come again, the capture path takes over. Each switch starts the bridge afresh (its frame numbers
 // differ: capture counts there, presents here).
-constexpr int kQuietPresents = 20;
+constexpr int kQuietPresents = 20;          // presents without a capture, and at least kQuietMs: frame generation can present up to 20
+constexpr uint64_t kQuietMs = 500;           // frames per real one, so a count alone could mistake a high multiplier for frame generation off
 constexpr float kPresentWidth = 1920.0f;
 void PresentTap(IDXGISwapChain* sc) {   // under g_frameMutex, on the presenting thread
     LUID card{};
@@ -428,7 +430,9 @@ void PresentTap(IDXGISwapChain* sc) {   // under g_frameMutex, on the presenting
     ID3D11Texture2D* buffer = nullptr;
     if (FAILED(sc->GetBuffer(0, IID_PPV_ARGS(&buffer)))) { ctx->Release(); return; }
     D3D11_TEXTURE2D_DESC frame; buffer->GetDesc(&frame);
-    if (frame.Width >= 64 && frame.Height >= 64 && g_bridge.Ensure(frame.Width, frame.Height, frame.Format)) {
+    const bool fits = frame.Width >= 64 && frame.Height >= 64 && g_bridge.Ensure(frame.Width, frame.Height, frame.Format);
+    if (!fits && frame.Width >= 64 && frame.Height >= 64) SetStatus("frame generation off: the presented frame's format cannot be given to the model");
+    if (fits) {
         { char text[96]; snprintf(text, sizeof text, "%ux%u %s at Present (frame generation off)", frame.Width, frame.Height, FormatName(frame.Format));
           std::lock_guard<std::mutex> lock(g_textMutex); g_frameText = text; }
         NrParams p; float watchdogMs; bool lsFirst; AutoQuality::Settings autoSettings;
@@ -452,15 +456,15 @@ void PresentTap(IDXGISwapChain* sc) {   // under g_frameMutex, on the presenting
 
 // Which path hands frames to the model: the capture pass while it runs, the present when it has stopped (under g_frameMutex).
 void FollowFrameGeneration(bool allowed) {
-    const uint64_t taps = g_tap.Taps();
+    const uint64_t taps = g_tap.Taps(), now = GetTickCount64();
     if (taps != g_tapsSeen) {
-        g_tapsSeen = taps; g_presentsWithoutTap = 0;
+        g_tapsSeen = taps; g_presentsWithoutTap = 0; g_tapSeenAtMs = now;
         if (g_presentMode) {
             g_presentMode = false; g_bridge.Shutdown();
             Log("frame generation is on: the model takes Lossless Scaling's captured frames again (it took %llu presented frames; %llu composes had their "
                 "own frame's result, %llu the frame before's)", (unsigned long long)g_presentIndex, (unsigned long long)g_presentOwn, (unsigned long long)g_presentEarlier);
         }
-    } else if (!g_presentMode && allowed && ++g_presentsWithoutTap >= kQuietPresents) {
+    } else if (!g_presentMode && allowed && ++g_presentsWithoutTap >= kQuietPresents && now - g_tapSeenAtMs >= kQuietMs) {
         g_presentMode = true; g_bridge.Shutdown(); g_presentIndex = g_presentOwn = g_presentEarlier = 0;
         Log("frame generation is off: the model takes the presented frames (%d presents without a capture)", kQuietPresents);
     }
@@ -858,8 +862,10 @@ bool OnPass(uint32_t x, uint32_t y, uint32_t z, void*) {
     if (!OwnsFrames()) return false;
     std::lock_guard<std::mutex> lock(g_frameMutex);
     if (!Tappable(ctx)) { ++g_otherPasses; return false; }
-    if (!PresentHook::Installed() && g_tapDevice && !PresentHook::Install(g_tapDevice, OnPresent, [](const char* m) { Log("%s", m); }))
-        Log("could not hook dxgi Present yet");
+    if (!PresentHook::Installed() && g_tapDevice && g_presentHookTriedOn != g_tapDevice) {   // once per device (a failure is not retried every pass)
+        g_presentHookTriedOn = g_tapDevice;
+        if (!PresentHook::Install(g_tapDevice, OnPresent, [](const char* m) { Log("%s", m); })) Log("could not hook dxgi Present from Lossless Scaling's passes");
+    }
     TapGuarded(ctx, x, y, z);
     LogPassTable();
     return false;   // Lossless Scaling's pass always runs

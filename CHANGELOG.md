@@ -17,6 +17,10 @@
   captures come again the usual path takes over (the bridge starts afresh at each switch). Panel: *Also with frame generation off*
   (`presentMode`, on). The Present hook now also goes in from Lossless Scaling's other passes. Test host: `offframes=`, scenario
   `present_mode`; `base` runs with it off to keep checking that an old result does not stay on the screen.
+  - Found in the sweep and fixed before it shipped: present mode needs half a second without a capture as well as 20 presents (frame
+    generation can present up to 20 frames per real one, which a count alone would take for frame generation off); the Present hook is
+    tried once per device from the other passes, not on every pass (a failure would have filled the log); a presented frame whose format
+    the model cannot take (HDR) says so on the status line instead of doing nothing.
 - **Neural Rendering's model gets the motion measured from the frames** (the upscalers' estimator, run on the model's own input at its working
   size), per pixel and for the frame itself, instead of frame generation's quarter-size flow; the compose still slides the result onto
   generated frames with that flow. *The model's motion* chooses (measured, the default, or frame generation's). A working-size change
