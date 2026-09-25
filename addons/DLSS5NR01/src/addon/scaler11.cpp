@@ -176,6 +176,8 @@ void ScalerLink::DescribeTargets(const NisPass& pass) {
     };
     describe("input", pass.in);
     describe("output", pass.out);
+    ID3D11ShaderResourceView* view = nullptr; m_ctx->CSGetShaderResources(0, 1, &view);   // how NIS reads the frame (an sRGB view would linearise it)
+    if (view) { D3D11_SHADER_RESOURCE_VIEW_DESC vd{}; view->GetDesc(&vd); Log("DLSS upscaler: the NIS pass reads the frame as format %d", (int)vd.Format); view->Release(); }
 }
 
 bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset,
