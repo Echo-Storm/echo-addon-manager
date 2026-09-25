@@ -178,8 +178,8 @@ void ScalerLink::DescribeTargets(const NisPass& pass) {
     describe("output", pass.out);
 }
 
-bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, float sharpen, bool reset,
-                         Handoff handoff) {
+bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset,
+                         float sharpen, bool reset, Handoff handoff) {
     if (!IsReady() || !m_engine || !m_engine->IsReady()) return false;
     DescribeTargets(pass);
     if (handoff != m_handoff) {
@@ -212,7 +212,7 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     const SavedBindings saved(m_ctx);
     if (idle) {
         ID3D11Texture2D* flowTex = nullptr;
-        if (flow && flowW && flowH && Fit(m_flow, flowW, flowH, DXGI_FORMAT_R16G16B16A16_FLOAT, false, "flow")) flowTex = m_flow.d3d11;
+        if (!estimate && flow && flowW && flowH && Fit(m_flow, flowW, flowH, DXGI_FORMAT_R16G16B16A16_FLOAT, false, "flow")) flowTex = m_flow.d3d11;
         ID3D11ShaderResourceView* frame = saved.srvs[0];   // the NIS pass's own view of the frame
         m_ctx->CSSetShader(m_grab, nullptr, 0);
         m_ctx->CSSetShaderResources(0, 1, &frame);
@@ -226,7 +226,7 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
         m_ctx->Flush();   // the engine's queue waits for this signal: hand it to the GPU now
         Shared& target = m_out[n % 2];
         if (m_engine->Run(m_in.d3d12, pass.inW, pass.inH, inFmt, target.d3d12, pass.outW, pass.outH, outFmt, flowTex ? m_flow.d3d12 : nullptr, m_flow.w, m_flow.h,
-                          flowUnit, motionFraction, preset, sharpen, reset, m_copied.d3d12, n, m_done.d3d12, n)) {
+                          flowUnit, motionFraction, estimate, preset, sharpen, reset, m_copied.d3d12, n, m_done.d3d12, n)) {
             m_holds[n % 2] = n;
         } else {
             m_holds[n % 2] = 0;

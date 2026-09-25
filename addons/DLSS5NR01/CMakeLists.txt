@@ -43,7 +43,7 @@ set(NR_ADDON_SOURCES
     src/addon/bridge.cpp src/addon/frame_tap.cpp
     src/addon/present_hook.cpp src/addon/compose11.cpp src/addon/requirements.cpp src/addon/scaler11.cpp
     src/engine/nr_engine.cpp
-    src/engine/dlaa_model.cpp src/engine/sr_engine.cpp
+    src/engine/dlaa_model.cpp src/engine/sr_engine.cpp src/engine/flow_estimator.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 function(nr_addon target)

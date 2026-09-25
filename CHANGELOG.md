@@ -30,6 +30,15 @@
     no longer waits on the engine's; if the engine is still busy, the last picture repeats. `scalerHandoff` in the addon's config keeps the
     test variants: 1 the GPU wait, 2 DLSS runs but NIS stays, 3 NIS runs and DLSS's picture is pasted at Present (this one also covers
     Lossless Scaling's cursor and FPS counter, drawn after NIS).
+  - **Motion measured from the frames** (`engine/flow_estimator.cpp`, our own code): DLSS needs to know where every pixel was in the frame
+    before, and a game with DLSS built in tells it; here only frame generation's coarse flow did, and with frame generation off DLSS got
+    none, so anything moving smeared. Now the engine compares each frame with the one before on its own device: a brightness pyramid down to
+    about 64 pixels wide, a coarse-to-fine search for every 4x4 block (seeded from the size below, with a small cost for straying from it),
+    a fraction of a pixel at half size, a 3x3 vector median, and a last step where every pixel picks the best of its own block's vector, the
+    three nearest blocks' and "not moving", so motion follows edges and a HUD that stays put stays put. The upscaler's panel has a Motion
+    choice (measured, the default; frame generation's; none), and the status line and log give its GPU time. The test host slides an aliased
+    picture 5.37 x 2.21 px a frame: the estimate finds (-5.27, -2.20), in about 1 ms at 1920x1080, and DLSS's picture comes out 3x closer
+    to the ideal picture than with no motion (19 against 59 levels a channel).
   - The log says once per device what the NIS pass reads and writes (with frame generation off, its output is the swap chain's back buffer)
     and how bright the frame DLSS gets and the picture it makes are, so a black picture shows in the log.
 

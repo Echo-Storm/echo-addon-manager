@@ -1,0 +1,66 @@
+// FlowEstimator: motion vectors measured from the frames themselves, for the DLSS 4 Upscaler (and any later upscaler) when the game gives
+// none. It runs on the engine's own D3D12 device, inside the engine's command list, before DLSS.
+//
+// Each frame: its brightness at the game's size and at halved sizes down to about 64 pixels wide (a pyramid, kept for the next frame). Then,
+// from the smallest size up to half size, every 4x4 block finds where its 8x8 neighbourhood was in the frame before: the guess from the size
+// below (and its neighbours) is tried first, then the positions around the best of them, with a small cost for straying from the guess so
+// flat areas follow their surroundings instead of noise. At half size the answer is refined to a fraction of a pixel. A 3x3 vector median
+// removes the odd wrong block. Last, at the game's size, every pixel picks, from its own block's vector, the three nearest blocks' vectors
+// and "not moving", the one under which its 3x3 surroundings match best, so motion follows object edges and a HUD that stays put stays put.
+//
+// The vectors point from a pixel in this frame to where it was in the frame before, in pixels of the game's frame (DLSS's convention with
+// its low-resolution motion flag). Without a frame before (the first, or after a size change) they are zero.
+#pragma once
+#include <windows.h>
+#include <d3d12.h>
+#include <cstdint>
+#include <functional>
+
+class FlowEstimator {
+public:
+    using LogFn = std::function<void(const char*)>;
+    static const int kSlots = 4;           // the engine's command allocator slots (statistics are read back per slot)
+    bool Init(ID3D12Device* dev, LogFn log);
+    void Shutdown();
+    bool IsReady() const { return m_pso[0] != nullptr; }
+
+    bool NeedsResize(uint32_t w, uint32_t h) const { return w != m_w || h != m_h; }
+    // Makes the pyramids and grids for frames of this size (the GPU must not be using the old ones: the engine waits first).
+    bool Ensure(uint32_t w, uint32_t h);
+    void Forget() { m_havePrevious = false; }   // the next frame has no frame before (a cut)
+
+    // Records the passes. frame: the game's frame (readable, NON_PIXEL_SHADER_RESOURCE; RGBA8); motion: RG16F at the frame's size, in
+    // UNORDERED_ACCESS, receives the vectors. Leaves the command list's descriptor heap and root signature changed.
+    void Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion);
+    // After the engine has reused the slot (its earlier work is finished): that frame's statistics join the running totals.
+    void ReadStats(int slot);
+    // The average vector (game pixels) and match cost (0..1 per pixel) since the last call; false when no frame was measured.
+    bool TakeAverages(double& x, double& y, double& length, double& cost, uint64_t& frames);
+    int Levels() const { return m_levels; }
+
+private:
+    static const int kMaxLevels = 7, kDescriptorsPerPass = 5, kPassesMax = 2 + 2 * kMaxLevels, kDescriptorsPerSlot = kDescriptorsPerPass * kPassesMax;
+    enum Pso { Luma, Down, Search, Median, Pixel, PsoCount };
+    struct Pass { D3D12_GPU_DESCRIPTOR_HANDLE srvs, uav; };
+    Pass MakePass(int slot, int& index, ID3D12Resource* const srv[4], const DXGI_FORMAT srvFormat[4], ID3D12Resource* uav, DXGI_FORMAT uavFormat);
+    void Barrier(ID3D12GraphicsCommandList* list, ID3D12Resource* r, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to);
+    void Release();
+    void Log(const char* fmt, ...);
+
+    LogFn m_log;
+    ID3D12Device* m_dev = nullptr;
+    ID3D12RootSignature* m_root = nullptr;
+    ID3D12PipelineState* m_pso[PsoCount] = {};
+    ID3D12DescriptorHeap* m_heap = nullptr; uint32_t m_descriptorSize = 0;
+    uint32_t m_w = 0, m_h = 0; int m_levels = 0;
+    uint32_t m_lw[kMaxLevels] = {}, m_lh[kMaxLevels] = {}, m_gw[kMaxLevels] = {}, m_gh[kMaxLevels] = {};
+    ID3D12Resource* m_luma[2][kMaxLevels] = {};   // two pyramids: this frame's and the one before's (R16F, rest readable)
+    ID3D12Resource* m_grid[kMaxLevels] = {};      // one vector per 4x4 block of each size from 1 up (RG16F, in that size's pixels, rest readable)
+    ID3D12Resource* m_filtered = nullptr;         // the half-size grid after the median
+    ID3D12Resource* m_stats = nullptr;            // 4 uints: summed match cost, summed x and y (1/16 pixel), blocks
+    ID3D12Resource* m_statsReadback = nullptr;    // kSlots x 16 bytes
+    bool m_statsPending[kSlots] = {};
+    int m_current = 0; bool m_havePrevious = false;
+    // running totals for TakeAverages
+    double m_sumCost = 0, m_sumX = 0, m_sumY = 0, m_sumLength = 0, m_blocks = 0; uint64_t m_frames = 0;
+};

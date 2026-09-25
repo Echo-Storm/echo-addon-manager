@@ -45,8 +45,9 @@ public:
 
     // At the NIS pass, on its context: the frame goes to the engine, DLSS's picture comes back into the pass's output. False when DLSS did not
     // run for this frame (the NIS pass should then run as usual). flow: frame generation's newest flow (RGBA16F) or null.
-    bool Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, float sharpen, bool reset,
-                 Handoff handoff = Handoff::Late);
+    // estimate: the engine measures the motion from the frames (flow unused).
+    bool Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset,
+                 float sharpen, bool reset, Handoff handoff = Handoff::Late);
 
 private:
     struct Shared { ID3D11Texture2D* d3d11 = nullptr; ID3D12Resource* d3d12 = nullptr; uint32_t w = 0, h = 0; DXGI_FORMAT fmt = DXGI_FORMAT_UNKNOWN; void Release(); };

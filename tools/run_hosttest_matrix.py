@@ -220,6 +220,33 @@ def scenario_scaler_noflow(ctx, res, text, frame):
     res.check('with frame generation off (no flow, a BGRA8 frame) DLSS still replaces NIS', 'DLSS REPLACED NIS' in text, nis.group(0)[12:] if nis else 'no check line')
 
 
+def move_error(text):
+    m = re.search(r'\[check-move\] the picture is off the moving picture by ([0-9.]+) levels', text)
+    return float(m.group(1)) if m else None
+
+
+def scenario_move_none(ctx, res, text, frame):
+    scenario_scaler_noflow(ctx, res, text, frame)
+    err = move_error(text)
+    res.check('a sliding picture is measured against the moving picture', err is not None, '%s levels' % err)
+    if err is not None:
+        ctx['move_error_none'] = err
+
+
+def scenario_move(ctx, res, text, frame):
+    # the picture slides 5.37 px right and 2.21 px down a frame: each pixel was that far left and up in the frame before
+    scenario_scaler_noflow(ctx, res, text, frame)
+    est = re.search(r'motion estimator: over \d+ frames, average vector \((-?[0-9.]+), (-?[0-9.]+)\) px, average length ([0-9.]+) px, match cost ([0-9.]+); motion ([0-9.]+) ms', text)
+    res.check('the motion estimator runs', est is not None, est.group(0)[18:] if est else 'no estimator line')
+    if est:
+        x, y = float(est.group(1)), float(est.group(2))
+        res.check('...and finds the slide: (-5.37, -2.21) px a frame', abs(x + 5.37) < 0.35 and abs(y + 2.21) < 0.35, '(%.2f, %.2f)' % (x, y))
+    err = move_error(text)
+    none = ctx.get('move_error_none')
+    res.check('with the measured motion, DLSS follows the sliding picture better than with none', err is not None and none is not None and err < none * 0.85,
+              '%s against %s levels without' % (err, none))
+
+
 def scenario_pair(ctx, res, text, frame):
     # both addons loaded and switched on: the upscaler works beside Neural Rendering, which keeps its frames
     res.check('neither steps aside', 'BOTH ON' in text)
@@ -250,6 +277,8 @@ SCENARIOS = [
     ('scaler_m', ['addon=DLSS4DLAA.dll', 'nis=1', 'dlaaPreset=13'], scenario_scaler),
     ('scaler_sharp', ['addon=DLSS4DLAA.dll', 'nis=1', 'sharpen=0.5'], scenario_scaler),
     ('scaler_bgra', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_scaler_noflow),   # frame generation off: only NIS, on the BGRA8 capture
+    ('scaler_move_none', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_move_none),   # a sliding picture, DLSS told nothing moves
+    ('scaler_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_move),   # ... and with the motion measured from the frames
     ('pair', ['second=DLSS4DLAA.dll'], scenario_pair),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'snapshotOnStart=1', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),

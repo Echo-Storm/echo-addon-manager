@@ -5,8 +5,9 @@
 // each in a different place (NVIDIA's driver, NVIDIA's API, Lossless Scaling's own checks); DLSS on a device of our own, as Neural Rendering and
 // the DLAA test ran, never did. Lossless Scaling's side only copies textures and signals and waits on fences; everything else happens here.
 //
-// A run: the queue waits (on the GPU) for "copied", turns frame generation's flow into motion vectors, runs DLSS from the shared input (the
-// frame at the game's size) into the shared output (the picture at the screen's size), and signals "done". The CPU never waits for the GPU,
+// A run: the queue waits (on the GPU) for "copied", measures the motion from the frames themselves (FlowEstimator) or turns frame
+// generation's flow into motion vectors, runs DLSS from the shared input (the frame at the game's size) into the shared output (the picture
+// at the screen's size), and signals "done". The CPU never waits for the GPU,
 // except to reuse a command allocator that is still busy.
 #pragma once
 #include <windows.h>
@@ -15,6 +16,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include "engine/flow_estimator.h"
 
 class SrEngine {
 public:
@@ -34,12 +36,14 @@ public:
     // One upscaled frame. in: the frame (COMMON, the game's size); out: the picture (COMMON, the screen's size, writable); flow: frame
     // generation's flow (COMMON, RGBA16F) or null. The queue waits for copied >= copiedValue first and signals done = doneValue after.
     // motionFraction: the part of a real frame between two presented frames. sharpen: contrast-adaptive sharpening of DLSS's picture (0 = off;
-    // DLSS 4 has none of its own, and Lossless Scaling's NIS does sharpen). False when nothing was queued (done is then never signalled).
+    // DLSS 4 has none of its own, and Lossless Scaling's NIS does sharpen). estimate: measure the motion from the frames (flow is then
+    // ignored). False when nothing was queued (done is then never signalled).
     bool Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT inFormat, ID3D12Resource* out, uint32_t outW, uint32_t outH, DXGI_FORMAT outFormat,
-             ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, float sharpen, bool reset,
+             ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset, float sharpen, bool reset,
              ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue);
 
-    double GpuMs() const { return m_gpuMs; }   // DLSS and the motion pass, on the GPU, smoothed
+    double GpuMs() const { return m_gpuMs; }   // everything a run does, on the GPU, smoothed
+    double MotionMs() const { return m_motionMs; }   // of that, the motion (the estimate, or the flow pass)
     uint64_t Runs() const { return m_runs; }
     double LastBuildMs() const { return m_buildMs; }
 
@@ -65,7 +69,8 @@ private:
     ID3D12Fence* m_fence = nullptr; HANDLE m_event = nullptr; uint64_t m_fenceValue = 0;
     uint64_t m_slotDone[kSlots] = {}; int m_nextSlot = 0;
     ID3D12QueryHeap* m_timestamps = nullptr; ID3D12Resource* m_timestampReadback = nullptr; uint64_t m_timestampFreq = 1;
-    double m_gpuMs = 0;
+    double m_gpuMs = 0, m_motionMs = 0;
+    FlowEstimator m_estimator; bool m_estimatedLast = false; uint64_t m_estimates = 0;
     // the motion pass
     ID3D12RootSignature* m_rootSig = nullptr; ID3D12PipelineState* m_motionPso = nullptr; ID3D12PipelineState* m_sharpenPso = nullptr;
     ID3D12Resource* m_unsharpened = nullptr; uint32_t m_unsharpenedW = 0, m_unsharpenedH = 0; DXGI_FORMAT m_unsharpenedFmt = DXGI_FORMAT_UNKNOWN;   // DLSS's picture before sharpening

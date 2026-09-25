@@ -13,6 +13,7 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <thread>
 #include "imgui.h"
@@ -98,6 +99,23 @@ static ID3D11Texture2D* MakeTex(ID3D11Device* dev, UINT w, UINT h, DXGI_FORMAT f
     ID3D11Texture2D* t = nullptr; dev->CreateTexture2D(&d, nullptr, &t); return t;
 }
 static uint32_t Pattern(UINT x, UINT y, UINT w, UINT h) { uint8_t r = (uint8_t)(x * 255 / w), g = (uint8_t)(y * 255 / h), b = ((x / 32 + y / 32) & 1) ? 200 : 60; return 0xFF000000u | (r << 16) | (g << 8) | b; }
+// nismove=1: a picture that slides kMoveX, kMoveY pixels a frame (right and down), by fractions of a pixel as a camera does: blocks of 3 pixels in
+// hashed colours, point-sampled at every pixel's centre with no smoothing (aliased, as an old game draws), so each frame catches the edges at a
+// different phase. What DLSS should rebuild is the same picture sampled at the output's pixel centres (Ideal). Frame t's picture at (x, y) is
+// what frame t-1 had at (x - kMoveX, y - kMoveY).
+static const double kMoveX = 5.37, kMoveY = 2.21, kCell = 3.0;
+static uint32_t Hash(uint32_t x, uint32_t y) { uint32_t h = x * 374761393u + y * 668265263u; h = (h ^ (h >> 13)) * 1274126177u; return h ^ (h >> 16); }
+static uint32_t PictureAt(double u, double v) {   // the continuous picture at (u, v) in input pixels
+    const uint32_t big = Hash((uint32_t)(int64_t)std::floor(u / kCell + 100000), (uint32_t)(int64_t)std::floor(v / kCell + 100000));
+    const uint32_t r = 30 + (big & 0xBF), g = 30 + ((big >> 8) & 0xBF), b = 30 + ((big >> 16) & 0xBF);
+    return 0xFF000000u | (r << 16) | (g << 8) | b;   // in memory B, G, R, A
+}
+static uint32_t MovingPixel(int x, int y, int t) { return PictureAt(x + 0.5 - t * kMoveX, y + 0.5 - t * kMoveY); }
+static uint32_t Ideal(int ox, int oy, double scale, int t) { return PictureAt((ox + 0.5) / scale - t * kMoveX, (oy + 0.5) / scale - t * kMoveY); }
+static void FillMoving(ID3D11DeviceContext* ctx, ID3D11Texture2D* t, UINT w, UINT h, int frame) {
+    std::vector<uint32_t> px(w * h); for (UINT y = 0; y < h; ++y) for (UINT x = 0; x < w; ++x) px[y * w + x] = MovingPixel((int)x, (int)y, frame);
+    ctx->UpdateSubresource(t, 0, nullptr, px.data(), w * 4, 0);
+}
 static void Fill(ID3D11DeviceContext* ctx, ID3D11Texture2D* t, UINT w, UINT h) {   // gradient + stripes so NR has something to look at
     std::vector<uint32_t> px(w * h); for (UINT y = 0; y < h; ++y) for (UINT x = 0; x < w; ++x) px[y * w + x] = Pattern(x, y, w, h);
     ctx->UpdateSubresource(t, 0, nullptr, px.data(), w * 4, 0);
@@ -155,7 +173,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -302,9 +320,11 @@ int main(int argc, char** argv) {
             host.Dispatch(dc, (OW + 31) / 32, (OH + 23) / 24, 1);
             dc->CSSetUnorderedAccessViews(0, 1, nullu, nullptr); dc->CSSetShaderResources(0, 3, nulls);
         };
-        bool nisNoFlow = false;   // nisnoflow=1: frame generation off, so no capture or flow passes, only NIS
-        for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "nisnoflow=1")) nisNoFlow = true;
-        for (int fr = 0; fr < 150; ++fr) {
+        bool nisNoFlow = false, nisMove = false;   // nisnoflow=1: frame generation off, so no capture or flow passes, only NIS; nismove=1: the picture slides
+        for (int i = 4; i < argc; ++i) { if (!strcmp(argv[i], "nisnoflow=1")) nisNoFlow = true; if (!strcmp(argv[i], "nismove=1")) nisMove = true; }
+        const int kFrames = 150;
+        for (int fr = 0; fr < kFrames; ++fr) {
+            if (nisMove) FillMoving(dc, nisIn, W, H, fr);
             if (nisNoFlow) { nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(16)); if (fr % 30 == 0) frame("nis"); else emptyFrame(); continue; }
             Fill(dc, cur, W, H);
             dc->CSSetShaderResources(0, 1, &sCur); dc->CSSetUnorderedAccessViews(0, 4, uPyr, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W * 7 / 10 / 8, H * 7 / 10 / 8, 1);
@@ -320,6 +340,7 @@ int main(int argc, char** argv) {
         D3D11_TEXTURE2D_DESC sd{}; nisOut->GetDesc(&sd); sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
         ID3D11Texture2D* st = nullptr; dev->CreateTexture2D(&sd, nullptr, &st);
         uint64_t magenta = 0; double sum[3] = {}, want[3] = {}, detail = 0;   // detail: the average step between neighbouring pixels (sharpening raises it)
+        double moveError[3] = {};   // nismove: how far the picture is from the moving picture of the last three frames (the one shown is a frame late)
         if (st) {
             dc->CopyResource(st, nisOut);
             D3D11_MAPPED_SUBRESOURCE m{};
@@ -329,13 +350,24 @@ int main(int argc, char** argv) {
                     if (px[0] == 255 && px[1] == 0 && px[2] == 255) ++magenta;
                     for (int c = 0; c < 3; ++c) sum[c] += px[c];
                     if (x + 1 < OW) detail += std::abs(int(px[4]) - int(px[0])) + std::abs(int(px[5]) - int(px[1])) + std::abs(int(px[6]) - int(px[2]));
+                    if (nisMove && x >= OW / 8 && x < OW * 7 / 8 && y >= OH / 8 && y < OH * 7 / 8)   // the middle (edges have no frame before to come from)
+                        for (int k = 0; k < 3; ++k) {
+                            const uint32_t v = Ideal((int)x, (int)y, 1.5, kFrames - 1 - k);   // the output is RGBA8: R, G, B
+                            moveError[k] += std::abs(int(px[0]) - int((v >> 16) & 255)) + std::abs(int(px[1]) - int((v >> 8) & 255)) + std::abs(int(px[2]) - int(v & 255));
+                        }
                 }
                 dc->Unmap(st, 0);
             }
             st->Release();
         }
+        if (nisMove) {
+            const double n = 3.0 * (OW * 3 / 4) * (OH * 3 / 4);
+            int shown = 0; for (int k = 1; k < 3; ++k) if (moveError[k] < moveError[shown]) shown = k;
+            printf("[check-move] the picture is off the moving picture by %.2f levels a channel (frame shown: %d before the last; the others %.2f, %.2f, %.2f)\n",
+                   moveError[shown] / n, shown, moveError[0] / n, moveError[1] / n, moveError[2] / n);
+        }
         for (UINT y = 0; y < H; ++y) for (UINT x = 0; x < W; ++x) {
-            const uint32_t v = Pattern(x, y, W, H);   // in memory: B, G, R
+            const uint32_t v = nisMove ? MovingPixel((int)x, (int)y, kFrames - 1) : Pattern(x, y, W, H);   // in memory: B, G, R
             if (nisBgra) { want[0] += (v >> 16) & 255; want[1] += (v >> 8) & 255; want[2] += v & 255; }   // the RGBA8 output holds R, G, B
             else { want[0] += v & 255; want[1] += (v >> 8) & 255; want[2] += (v >> 16) & 255; }
         }

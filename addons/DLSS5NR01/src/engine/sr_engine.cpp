@@ -110,10 +110,10 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
     if (FAILED(m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_alloc[0], nullptr, IID_PPV_ARGS(&m_list)))) { Fail("CreateCommandList"); return false; }
     m_list->Close();
     if (FAILED(m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence))) || !(m_event = CreateEventW(nullptr, FALSE, FALSE, nullptr))) { Fail("CreateFence"); return false; }
-    D3D12_QUERY_HEAP_DESC queries{}; queries.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP; queries.Count = 2 * kSlots;
+    D3D12_QUERY_HEAP_DESC queries{}; queries.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP; queries.Count = 3 * kSlots;   // start, motion done, end
     m_dev->CreateQueryHeap(&queries, IID_PPV_ARGS(&m_timestamps));
     D3D12_HEAP_PROPERTIES readback{}; readback.Type = D3D12_HEAP_TYPE_READBACK;
-    D3D12_RESOURCE_DESC buffer{}; buffer.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; buffer.Width = 16 * kSlots; buffer.Height = 1; buffer.DepthOrArraySize = 1;
+    D3D12_RESOURCE_DESC buffer{}; buffer.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; buffer.Width = 24 * kSlots; buffer.Height = 1; buffer.DepthOrArraySize = 1;
     buffer.MipLevels = 1; buffer.SampleDesc.Count = 1; buffer.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     m_dev->CreateCommittedResource(&readback, D3D12_HEAP_FLAG_NONE, &buffer, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_timestampReadback));
     m_queue->GetTimestampFrequency(&m_timestampFreq);
@@ -147,6 +147,8 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
         return true;
     };
     if (!build(kMotionHlsl, "sr_motion", &m_motionPso) || !build(kSharpenHlsl, "sr_sharpen", &m_sharpenPso)) return false;
+    static_assert(FlowEstimator::kSlots == kSlots, "the estimator reads its statistics back per engine slot");
+    if (!m_estimator.Init(m_dev, [this](const char* m) { Log("%s", m); })) Log("DLSS upscaler: the motion estimator could not start; motion comes from frame generation only");
     // per allocator slot: the flow's view, the motion vectors', and the sharpening pass's input and output
     D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors = 4 * kSlots; heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     if (FAILED(m_dev->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&m_heap)))) { Fail("CreateDescriptorHeap"); return false; }
@@ -174,6 +176,7 @@ void SrEngine::Shutdown() {
     if (m_feature) { NVSDK_NGX_D3D12_ReleaseFeature(static_cast<NVSDK_NGX_Handle*>(m_feature)); m_feature = nullptr; }
     if (m_params) { NVSDK_NGX_D3D12_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(m_params)); m_params = nullptr; }
     if (m_dev) NVSDK_NGX_D3D12_Shutdown1(m_dev);
+    m_estimator.Shutdown(); m_estimatedLast = false; m_estimates = 0;
     SafeRelease(m_motion); SafeRelease(m_depth); SafeRelease(m_depthUpload);
     SafeRelease(m_motionPso); SafeRelease(m_sharpenPso); SafeRelease(m_unsharpened); m_unsharpenedW = m_unsharpenedH = 0; SafeRelease(m_rootSig); SafeRelease(m_heap);
     SafeRelease(m_timestamps); SafeRelease(m_timestampReadback);
@@ -223,13 +226,15 @@ int SrEngine::TakeSlot() {
 
 void SrEngine::ReadTime(int slot) {
     if (!m_slotDone[slot] || !m_timestampReadback) return;
-    const D3D12_RANGE range{ static_cast<SIZE_T>(slot) * 16, static_cast<SIZE_T>(slot) * 16 + 16 };
+    const D3D12_RANGE range{ static_cast<SIZE_T>(slot) * 24, static_cast<SIZE_T>(slot) * 24 + 24 };
     uint64_t* t = nullptr;
     if (FAILED(m_timestampReadback->Map(0, &range, reinterpret_cast<void**>(&t)))) return;
-    const uint64_t t0 = t[slot * 2], t1 = t[slot * 2 + 1];
+    const uint64_t t0 = t[slot * 3], t1 = t[slot * 3 + 1], t2 = t[slot * 3 + 2];
     const D3D12_RANGE none{ 0, 0 };
     m_timestampReadback->Unmap(0, &none);
-    if (t1 > t0 && m_timestampFreq) { const double ms = (t1 - t0) * 1000.0 / m_timestampFreq; m_gpuMs = m_gpuMs == 0 ? ms : m_gpuMs * 0.9 + ms * 0.1; }
+    auto smooth = [](double& avg, double ms) { avg = avg == 0 ? ms : avg * 0.9 + ms * 0.1; };
+    if (t2 > t0 && m_timestampFreq) smooth(m_gpuMs, (t2 - t0) * 1000.0 / m_timestampFreq);
+    if (t1 >= t0 && t2 >= t1 && m_timestampFreq) smooth(m_motionMs, (t1 - t0) * 1000.0 / m_timestampFreq);
 }
 
 // ---- the feature and its inputs (on the caller's thread; our own device only)
@@ -313,16 +318,21 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
 
 // ---- one frame
 
-bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT, ID3D12Resource* out, uint32_t outW, uint32_t outH, DXGI_FORMAT outFormat,
-                   ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, unsigned preset, float sharpen, bool reset,
+bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT inFormat, ID3D12Resource* out, uint32_t outW, uint32_t outH, DXGI_FORMAT outFormat,
+                   ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset, float sharpen, bool reset,
                    ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue) {
     if (!m_ready) return false;
     const bool fresh = !m_feature || inW != m_inW || inH != m_inH || outW != m_outW || outH != m_outH || preset != m_preset;
     if (!EnsureFeature(inW, inH, outW, outH, preset)) return false;
     const bool sharpening = sharpen > 0.001f && EnsureSharpenTarget(outW, outH, outFormat);   // DLSS writes there, the sharpening pass writes out
+    bool estimating = estimate && m_estimator.IsReady();
+    if (estimating && m_estimator.NeedsResize(inW, inH)) { WaitIdle(); estimating = m_estimator.Ensure(inW, inH); }
+    if (estimating && !m_estimatedLast) m_estimator.Forget();   // its frame before is not the one before this
+    m_estimatedLast = estimating;
     const int slot = TakeSlot();
     if (slot < 0) return false;
     ReadTime(slot);
+    m_estimator.ReadStats(slot);
 
     // descriptors: the flow (or a null view) and the motion vectors
     D3D12_CPU_DESCRIPTOR_HANDLE cpu = m_heap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr += static_cast<SIZE_T>(slot) * 4 * m_descriptorSize;
@@ -344,26 +354,31 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT, 
     }
 
     m_list->Reset(m_alloc[slot], nullptr);
-    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 3);
     // the shared textures come in COMMON
     Transition(in, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     if (flow) Transition(flow, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     Transition(out, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    // 1. motion vectors
+    // 1. motion vectors: measured from the frames, or frame generation's flow (or none)
     Transition(m_motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     ID3D12DescriptorHeap* heaps[] = { m_heap };
-    m_list->SetDescriptorHeaps(1, heaps);
-    m_list->SetComputeRootSignature(m_rootSig);
-    m_list->SetPipelineState(m_motionPso);
-    m_list->SetComputeRootDescriptorTable(0, gpu);
-    D3D12_GPU_DESCRIPTOR_HANDLE gpuUav = gpu; gpuUav.ptr += m_descriptorSize;
-    m_list->SetComputeRootDescriptorTable(1, gpuUav);
-    const float unit = flowUnit > 0.1f ? flowUnit : 2.0f;
-    const MotionConstants c{ inW, inH, flow && flowW ? static_cast<float>(inW) / (unit * flowW) * motionFraction : 0.0f, flow && flowW && flowH ? 1u : 0u };
-    m_list->SetComputeRoot32BitConstants(2, 4, &c, 0);
-    m_list->Dispatch((inW + 7) / 8, (inH + 7) / 8, 1);
+    if (estimating) {
+        m_estimator.Record(m_list, slot, in, inFormat == DXGI_FORMAT_UNKNOWN ? DXGI_FORMAT_R8G8B8A8_UNORM : inFormat, m_motion);
+    } else {
+        m_list->SetDescriptorHeaps(1, heaps);
+        m_list->SetComputeRootSignature(m_rootSig);
+        m_list->SetPipelineState(m_motionPso);
+        m_list->SetComputeRootDescriptorTable(0, gpu);
+        D3D12_GPU_DESCRIPTOR_HANDLE gpuUav = gpu; gpuUav.ptr += m_descriptorSize;
+        m_list->SetComputeRootDescriptorTable(1, gpuUav);
+        const float unit = flowUnit > 0.1f ? flowUnit : 2.0f;
+        const MotionConstants c{ inW, inH, flow && flowW ? static_cast<float>(inW) / (unit * flowW) * motionFraction : 0.0f, flow && flowW && flowH ? 1u : 0u };
+        m_list->SetComputeRoot32BitConstants(2, 4, &c, 0);
+        m_list->Dispatch((inW + 7) / 8, (inH + 7) / 8, 1);
+    }
     Transition(m_motion, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 3 + 1);
 
     // 2. DLSS
     auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
@@ -399,8 +414,8 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT, 
     Transition(in, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
     if (flow) Transition(flow, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
     Transition(out, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
-    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
-    m_list->ResolveQueryData(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, m_timestampReadback, static_cast<UINT64>(slot) * 16);
+    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 3 + 2);
+    m_list->ResolveQueryData(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 3, 3, m_timestampReadback, static_cast<UINT64>(slot) * 24);
     m_list->Close();
 
     // submitted even when DLSS failed, so "done" is always signalled for a queued run
@@ -412,5 +427,11 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT, 
     m_slotDone[slot] = m_fenceValue;
     if (NVSDK_NGX_FAILED(r)) { Fail("EvaluateFeature(DLSS): %s", ResultName(r)); return false; }
     ++m_runs;
+    if (estimating && (++m_estimates == 60 || m_estimates % 1200 == 0)) {   // what the estimate found (a check that it follows the picture)
+        double x = 0, y = 0, length = 0, cost = 0; uint64_t frames = 0;
+        if (m_estimator.TakeAverages(x, y, length, cost, frames))
+            Log("motion estimator: over %llu frames, average vector (%.2f, %.2f) px, average length %.2f px, match cost %.4f; motion %.2f ms of %.2f ms",
+                (unsigned long long)frames, x, y, length, cost, m_motionMs, m_gpuMs);
+    }
     return true;
 }

@@ -599,8 +599,8 @@ void NoteRealFrame() {
         std::vector<float> t = g_frameTimes; std::sort(t.begin(), t.end());
         auto at = [&](double q) { return t[std::min(t.size() - 1, static_cast<size_t>(q * t.size()))]; };
         double sum = 0; for (float v : t) sum += v;
-        Log("game frame time over %zu real frames: average %.1f ms (%.0f fps), p50 %.1f, p95 %.1f, p99 %.1f, worst %.1f | DLSS %.2f ms a presented frame, %u presented per real frame",
-            t.size(), sum / t.size(), 1000.0 * t.size() / sum, at(0.5), at(0.95), at(0.99), t.back(), g_sr.GpuMs(), g_nisPerFrame);
+        Log("game frame time over %zu real frames: average %.1f ms (%.0f fps), p50 %.1f, p95 %.1f, p99 %.1f, worst %.1f | DLSS %.2f ms a presented frame (motion %.2f), %u presented per real frame",
+            t.size(), sum / t.size(), 1000.0 * t.size() / sum, at(0.5), at(0.95), at(0.99), t.back(), g_sr.GpuMs(), g_sr.MotionMs(), g_nisPerFrame);
         g_frameTimes.clear();
     }
 }
@@ -650,13 +650,13 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
                 !PresentHook::Install(dev, OnPresent, [](const char* m) { Log("%s", m); }))
                 Log("DLSS upscaler: could not hook Present; the picture cannot go over NIS's there");
             if (g_linkDevice == dev && g_compare.load() != 2) {   // "original only" lets NIS run, for comparing
-                NrParams p; unsigned preset; int handoff;
-                { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; handoff = g_config.scalerHandoff; }
+                NrParams p; unsigned preset; int handoff, motion;
+                { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; handoff = g_config.scalerHandoff; motion = g_config.motionSource; }
                 uint32_t fw = 0, fh = 0;
-                ID3D11Resource* flow = p.useFlow ? g_tap.NewestFlow(fw, fh) : nullptr;
+                ID3D11Resource* flow = motion == 1 ? g_tap.NewestFlow(fw, fh) : nullptr;
                 const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;
                 t_ownWork = true;
-                replaced = g_link.Upscale(pass, flow, fw, fh, p.flowUnit, fraction, preset, p.sharpen, g_resetRequested.exchange(false),
+                replaced = g_link.Upscale(pass, flow, fw, fh, p.flowUnit, fraction, motion == 0, preset, p.sharpen, g_resetRequested.exchange(false),
                                           static_cast<ScalerLink::Handoff>(handoff));
                 t_ownWork = false;
                 if (flow) flow->Release();
@@ -706,7 +706,7 @@ ScalerView GetScalerView() {
     v.starting = g_srStarting; v.ready = !v.starting && g_sr.IsReady(); v.failed = !v.starting && g_sr.IsFailed();
     if (v.failed) v.error = g_sr.LastError();
     v.inW = g_scaleInW; v.inH = g_scaleInH; v.outW = g_scaleOutW; v.outH = g_scaleOutH;
-    v.gpuMs = v.ready ? g_sr.GpuMs() : 0; v.runs = g_upscaled; v.nisSeen = g_nisSeen; v.perFrame = g_nisPerFrame;
+    v.gpuMs = v.ready ? g_sr.GpuMs() : 0; v.motionMs = v.ready ? g_sr.MotionMs() : 0; v.runs = g_upscaled; v.nisSeen = g_nisSeen; v.perFrame = g_nisPerFrame;
     return v;
 }
 

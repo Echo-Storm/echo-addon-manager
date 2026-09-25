@@ -263,6 +263,16 @@ void DrawPanel() {
         if (ImGui::Checkbox("Detect skin automatically", &am)) { c.p.useAutoMask = am; changed = true; }
         Tip("Let the model find skin and faces on its own (the 'auto mask'). The effect is small; it is on by default.");
         }
+        if (dlaa) {   // the upscaler: where DLSS's motion vectors come from
+            const char* sources[] = { "Measured from the frames (any game)", "Lossless Scaling's frame generation", "None" };
+            if (ImGui::Combo("Motion", &c.motionSource, sources, 3)) changed = true;
+            Tip("DLSS combines several frames, and needs to know where each pixel was in the frame before; a game with DLSS built in tells it. Here:\n"
+                "Measured from the frames: the upscaler compares each frame with the one before and finds how every part of the picture moved. "
+                "Works with frame generation on or off, in any game. Costs a little GPU time (shown under Upscaling).\n"
+                "Lossless Scaling's frame generation: the motion its frame generation measures (only with frame generation on; coarser, a quarter of the game's size).\n"
+                "None: DLSS assumes nothing moves. Sharp when still, smeared when the camera turns: this is here to compare.");
+        }
+        if (!dlaa) {
         changed |= ImGui::Checkbox("Use Lossless Scaling's motion data", &c.p.useFlow);
         Tip("Feeds the motion Lossless Scaling's frame generation measures (its optical flow) to the model as motion vectors, and uses it to slide the enhancement onto the generated in-between frames. Turn it off only to test without motion.");
         { const NrStats& fs = g_engine.Stats(); ImGui::SameLine(); if (fs.hasFlow) ImGui::TextDisabled("(flow %ux%u)", fs.flowW, fs.flowH); else ImGui::TextDisabled("(no flow texture seen yet)"); }
@@ -272,6 +282,7 @@ void DrawPanel() {
             "Off: it runs as soon as the frame is captured and gets the previous frame's motion, one frame late, which smears and ghosts when the camera turns, starts or stops. "
             "On is the default; the switch is here to compare the two.");
         if (!c.p.useFlow) ImGui::EndDisabled();
+        }
     }
     if (kDlaaAddon && eam::ui::SectionHeader("Upscaling")) {
         const ScalerView v = GetScalerView();
@@ -280,8 +291,8 @@ void DrawPanel() {
         else if (!v.nisSeen) ImGui::TextWrapped("Waiting for Lossless Scaling's NIS pass. Choose NIS as the Scaling Type and scale a game that runs in a window smaller than the screen.");
         else if (!v.ready) ImGui::TextDisabled("NIS pass found (%ux%u -> %ux%u); DLSS is not running yet.", v.inW, v.inH, v.outW, v.outH);
         else {
-            ImGui::TextWrapped("DLSS upscales %ux%u -> %ux%u (x%.2f) in place of NIS: %.2f ms a frame on the GPU, %llu frames so far%s.", v.inW, v.inH, v.outW, v.outH,
-                               v.inW ? (float)v.outW / v.inW : 0.0f, v.gpuMs, (unsigned long long)v.runs,
+            ImGui::TextWrapped("DLSS upscales %ux%u -> %ux%u (x%.2f) in place of NIS: %.2f ms a frame on the GPU (motion %.2f ms of it), %llu frames so far%s.", v.inW, v.inH,
+                               v.outW, v.outH, v.inW ? (float)v.outW / v.inW : 0.0f, v.gpuMs, v.motionMs, (unsigned long long)v.runs,
                                v.perFrame > 1 ? " (real and generated frames alike)" : "");
             if (g_compare.load() == 2) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "Showing Lossless Scaling's NIS for comparison (Before / after hotkey).");
         }
