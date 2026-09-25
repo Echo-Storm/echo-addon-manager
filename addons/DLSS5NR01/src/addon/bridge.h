@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <functional>
 #include "engine/nr_engine.h"
+#include "addon/gpu_timer11.h"
 
 class Bridge {
 public:
@@ -55,6 +56,10 @@ public:
     // GPU thread priority of Lossless Scaling's D3D11 device (-7..7). Above 0 its work pre-empts the model's normal-priority queue, so LSFG's
     // pacing is not disturbed by the model sharing the graphics card. Set back to 0 at Shutdown.
     void SetLsGpuPriority(int p);
+    // GPU time on Lossless Scaling's queue. Submit: 1 waiting for the model's run before (frame generation off), 2 the copies. A compose (Begin
+    // to EndDeltaUse): 1 waiting for its result, 2 the compose itself.
+    GpuTimer11& SubmitTimes() { return m_submitTimes; }
+    GpuTimer11& ComposeTimes() { return m_composeTimes; }
     static bool FormatSupported(DXGI_FORMAT f);
     static DXGI_FORMAT ViewFormat(DXGI_FORMAT f);   // the UNORM / FLOAT format to view a frame of format f with (sRGB and typeless map to it)
 
@@ -98,4 +103,5 @@ private:
     double m_intervalMs = 0, m_lastIntervalMs = 0, m_cpuMs = 0;
     float m_frameTimes[kFrameTimeCap] = {}; int m_frameTimeCount = 0;
     int m_lsPriority = 0; bool m_lsPriorityApplied = false;
+    GpuTimer11 m_submitTimes, m_composeTimes;
 };

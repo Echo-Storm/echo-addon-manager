@@ -91,6 +91,7 @@ bool Bridge::Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, NrEngine* engine,
     if (FAILED(dev->QueryInterface(IID_PPV_ARGS(&m_dev)))) { Log("Bridge: Lossless Scaling's device has no ID3D11Device5"); Shutdown(); return false; }
     if (FAILED(ctx->QueryInterface(IID_PPV_ARGS(&m_ctx4)))) { Log("Bridge: Lossless Scaling's context has no ID3D11DeviceContext4"); Shutdown(); return false; }
     if (!MakeFence(m_copied, "copied") || !MakeFence(m_finished, "finished") || !MakeFence(m_released, "released")) { Shutdown(); return false; }
+    if (!m_submitTimes.Init(m_dev) || !m_composeTimes.Init(m_dev)) Log("Bridge: GPU timing is not available (the rest works)");
     m_inFlight = 0; m_newestSlot = -1; m_releaseCount = 0; m_runs = m_skipped = 0;
     m_prevFrameQpc = 0; m_intervalMs = m_lastIntervalMs = m_cpuMs = 0; m_frameTimeCount = 0;
     Log("Bridge: shared fences up");
@@ -118,6 +119,7 @@ void Bridge::Shutdown() {
     }
     DropInput(); DropFlow(); DropSlots();
     m_copied.Release(); m_finished.Release(); m_released.Release();
+    m_submitTimes.Shutdown(); m_composeTimes.Shutdown();
     if (m_lsPriorityApplied && m_lsPriority != 0) SetLsGpuPriority(0);   // leave Lossless Scaling's device as it was
     SafeRelease(m_ctx4); SafeRelease(m_dev); m_ctx = nullptr;
 }
@@ -197,10 +199,11 @@ bool Bridge::Submit(ID3D11Texture2D* frame, ID3D11Texture2D* flow, uint32_t flow
     if (!m_engine->Prepare(m_input.w, m_input.h, m_fmt, params)) return false;
     if (!FitSlots(m_engine->Stats().workW, m_engine->Stats().workH)) return false;
     // The model is still busy with an earlier frame: skip this one.
-    if (m_inFlight && m_finished.d3d12->GetCompletedValue() < m_inFlight) {
-        if (!orderOnGpu) { ++m_skipped; return false; }
-        m_ctx4->Wait(m_finished.d3d11, m_inFlight);   // the copy below waits on the GPU until the model has read the frame before
-    }
+    const bool busy = m_inFlight && m_finished.d3d12->GetCompletedValue() < m_inFlight;
+    if (busy && !orderOnGpu) { ++m_skipped; return false; }
+    m_submitTimes.Begin(m_ctx);
+    if (busy) m_ctx4->Wait(m_finished.d3d11, m_inFlight);   // the copy below waits on the GPU until the model has read the frame before
+    m_submitTimes.Mark(m_ctx, 1);
     const bool withFlow = flow && params.useFlow && flowW && flowH && FitFlow(flowW, flowH);
     m_engine->SetFlowInput(withFlow ? m_flow.d3d12 : nullptr, m_flow.w, m_flow.h);
 
@@ -209,6 +212,8 @@ bool Bridge::Submit(ID3D11Texture2D* frame, ID3D11Texture2D* flow, uint32_t flow
     const int s = (m_newestSlot + 1) % kSlots;
     m_ctx->CopyResource(m_input.d3d11, frame);
     if (withFlow) m_ctx->CopyResource(m_flow.d3d11, flow);
+    m_submitTimes.Mark(m_ctx, 2);
+    m_submitTimes.End(m_ctx);
     m_ctx4->Signal(m_copied.d3d11, frameIndex);
     const uint64_t queuedBefore = m_engine->Stats().frames;
     const bool ok = m_engine->Run(m_input.d3d12, m_slots[s].delta.d3d12, m_copied.d3d12, frameIndex, m_released.d3d12, m_slots[s].releasedAt,
@@ -259,8 +264,15 @@ uint64_t Bridge::NewestDelta(ID3D11ShaderResourceView** srv, uint32_t* ww, uint3
 }
 
 // The result is already finished when a compose reads it, so this wait passes at once; it is there to make the model's writes visible to D3D11.
-void Bridge::BeginDeltaUse(uint64_t d) { if (m_ctx4 && m_finished.d3d11) m_ctx4->Wait(m_finished.d3d11, d); }
+// Frame generation off, the result is this frame's own, queued just before: the wait is real there, and timed.
+void Bridge::BeginDeltaUse(uint64_t d) {
+    if (!m_ctx4 || !m_finished.d3d11) return;
+    m_composeTimes.Begin(m_ctx);
+    m_ctx4->Wait(m_finished.d3d11, d);
+    m_composeTimes.Mark(m_ctx, 1);
+}
 void Bridge::EndDeltaUse(uint64_t d) {
+    if (m_ctx) { m_composeTimes.Mark(m_ctx, 2); m_composeTimes.End(m_ctx); }
     const int s = FindSlot(d);
     if (s < 0 || !m_ctx4 || !m_released.d3d11) return;
     m_ctx4->Signal(m_released.d3d11, ++m_releaseCount);

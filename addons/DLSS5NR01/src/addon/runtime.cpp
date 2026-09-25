@@ -152,6 +152,14 @@ void LogProgress(const NrStats& st) {
                 n, p50, p95, p99, worst, over20, 100.0 * over20 / n, over33, st.nrMs, st.startMs);
         }
     }
+    if (taps == 60 || taps % 1200 == 0) {   // Lossless Scaling's side of the work, on its own queue
+        double sub[GpuTimer11::kMarks], com[GpuTimer11::kMarks]; uint64_t subs = 0, coms = 0;
+        const bool haveSub = g_bridge.SubmitTimes().Take(sub, subs), haveCom = g_bridge.ComposeTimes().Take(com, coms);
+        if (haveSub || haveCom)
+            Log("GPU on Lossless Scaling's queue (ms): handing over %.3f (waiting for the run before %.3f, copies %.3f; %llu frames) | compose %.3f "
+                "(waiting for its result %.3f, the pass %.3f; %llu presents)", sub[0], sub[1], sub[2], (unsigned long long)subs, com[0], com[1], com[2],
+                (unsigned long long)coms);
+    }
     if (taps == 60) {
         PresentHook::DumpState([](const char* m) { Log("%s", m); });
         Log("present stages: hook hits %u, body %llu, ready %llu, noted %llu, targeted %llu, with delta %llu", PresentHook::Hits(), (unsigned long long)g_presentStages[0],
