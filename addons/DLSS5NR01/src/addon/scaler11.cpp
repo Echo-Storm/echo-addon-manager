@@ -290,7 +290,7 @@ void ScalerLink::Probe(uint64_t shown, bool inFresh) {
         m_probeState = 1;
         return;
     }
-    const char* names[2] = { "frame given to DLSS", "picture DLSS made" };
+    const char* names[2] = { "frame given to the upscaler", "picture the upscaler made" };
     D3D11_MAPPED_SUBRESOURCE maps[2] = {};
     for (int i = 0; i < 2; ++i) {
         if (m_ctx->Map(m_probe[i], 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &maps[i]) != S_OK) { if (i) m_ctx->Unmap(m_probe[0], 0); return; }   // not finished yet
