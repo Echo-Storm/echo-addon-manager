@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -305,16 +305,19 @@ int main(int argc, char** argv) {
     bool nisMode = false;
     for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "nis=1")) nisMode = true;
     if (nisMode) {
-        const UINT OW = W * 3 / 2, OH = H * 3 / 2;
+        UINT NW = W, NH = H; double NS = 1.5;   // nisW= nisH= nisScale=: the frame's size and the scale (1 = DLAA), e.g. 3840x2160 at 1
+        for (int i = 4; i < argc; ++i) { if (!strncmp(argv[i], "nisW=", 5)) NW = (UINT)atoi(argv[i] + 5); if (!strncmp(argv[i], "nisH=", 5)) NH = (UINT)atoi(argv[i] + 5);
+                                         if (!strncmp(argv[i], "nisScale=", 9)) NS = atof(argv[i] + 9); }
+        const UINT OW = (UINT)(NW * NS + 0.5), OH = (UINT)(NH * NS + 0.5);
         bool nisBgra = false;   // nisbgra=1: the frame in BGRA8, as Lossless Scaling hands it to NIS with frame generation off
         for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "nisbgra=1")) nisBgra = true;
-        ID3D11Texture2D* nisIn = MakeTex(dev, W, H, nisBgra ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM, false);
+        ID3D11Texture2D* nisIn = MakeTex(dev, NW, NH, nisBgra ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM, false);
         ID3D11Texture2D* coef1 = MakeTex(dev, 2, 64, DXGI_FORMAT_R32G32B32A32_FLOAT, false), * coef2 = MakeTex(dev, 2, 64, DXGI_FORMAT_R32G32B32A32_FLOAT, false);
         ID3D11Texture2D* nisOut = MakeTex(dev, OW, OH, DXGI_FORMAT_R8G8B8A8_UNORM, true);
         ID3D11ShaderResourceView* nisSrvs[3] = { srv(nisIn), srv(coef1), srv(coef2) }; ID3D11UnorderedAccessView* uNisOut = uav(nisOut);
         ID3D11ComputeShader* csNis = MakeCS(dev, "Texture2D<float4> f:register(t0); Texture2D<float4> c1:register(t1); Texture2D<float4> c2:register(t2); RWTexture2D<float4> o:register(u0);"
                                                  " [numthreads(32,24,1)] void main(uint3 id:SV_DispatchThreadID){ o[id.xy]=float4(1,0,1,1)+(f[uint2(0,0)]+c1[uint2(0,0)]+c2[uint2(0,0)])*0; }");
-        Fill(dc, nisIn, W, H);
+        Fill(dc, nisIn, NW, NH);
         auto nisPass = [&] {
             dc->CSSetShaderResources(0, 3, nisSrvs); dc->CSSetUnorderedAccessViews(0, 1, &uNisOut, nullptr); dc->CSSetShader(csNis, nullptr, 0);
             host.Dispatch(dc, (OW + 31) / 32, (OH + 23) / 24, 1);
@@ -324,7 +327,7 @@ int main(int argc, char** argv) {
         for (int i = 4; i < argc; ++i) { if (!strcmp(argv[i], "nisnoflow=1")) nisNoFlow = true; if (!strcmp(argv[i], "nismove=1")) nisMove = true; }
         const int kFrames = 150;
         for (int fr = 0; fr < kFrames; ++fr) {
-            if (nisMove) FillMoving(dc, nisIn, W, H, fr);
+            if (nisMove) FillMoving(dc, nisIn, NW, NH, fr);
             if (nisNoFlow) { nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(16)); if (fr % 30 == 0) frame("nis"); else emptyFrame(); continue; }
             Fill(dc, cur, W, H);
             dc->CSSetShaderResources(0, 1, &sCur); dc->CSSetUnorderedAccessViews(0, 4, uPyr, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W * 7 / 10 / 8, H * 7 / 10 / 8, 1);
@@ -352,7 +355,7 @@ int main(int argc, char** argv) {
                     if (x + 1 < OW) detail += std::abs(int(px[4]) - int(px[0])) + std::abs(int(px[5]) - int(px[1])) + std::abs(int(px[6]) - int(px[2]));
                     if (nisMove && x >= OW / 8 && x < OW * 7 / 8 && y >= OH / 8 && y < OH * 7 / 8)   // the middle (edges have no frame before to come from)
                         for (int k = 0; k < 3; ++k) {
-                            const uint32_t v = Ideal((int)x, (int)y, 1.5, kFrames - 1 - k);   // the output is RGBA8: R, G, B
+                            const uint32_t v = Ideal((int)x, (int)y, NS, kFrames - 1 - k);   // the output is RGBA8: R, G, B
                             moveError[k] += std::abs(int(px[0]) - int((v >> 16) & 255)) + std::abs(int(px[1]) - int((v >> 8) & 255)) + std::abs(int(px[2]) - int(v & 255));
                         }
                 }
@@ -366,15 +369,15 @@ int main(int argc, char** argv) {
             printf("[check-move] the picture is off the moving picture by %.2f levels a channel (frame shown: %d before the last; the others %.2f, %.2f, %.2f)\n",
                    moveError[shown] / n, shown, moveError[0] / n, moveError[1] / n, moveError[2] / n);
         }
-        for (UINT y = 0; y < H; ++y) for (UINT x = 0; x < W; ++x) {
-            const uint32_t v = nisMove ? MovingPixel((int)x, (int)y, kFrames - 1) : Pattern(x, y, W, H);   // in memory: B, G, R
+        for (UINT y = 0; y < NH; ++y) for (UINT x = 0; x < NW; ++x) {
+            const uint32_t v = nisMove ? MovingPixel((int)x, (int)y, kFrames - 1) : Pattern(x, y, NW, NH);   // in memory: B, G, R
             if (nisBgra) { want[0] += (v >> 16) & 255; want[1] += (v >> 8) & 255; want[2] += v & 255; }   // the RGBA8 output holds R, G, B
             else { want[0] += v & 255; want[1] += (v >> 8) & 255; want[2] += (v >> 16) & 255; }
         }
         double worst = 0;
-        for (int c = 0; c < 3; ++c) worst = std::max(worst, std::abs(sum[c] / (double(OW) * OH) - want[c] / (double(W) * H)));
+        for (int c = 0; c < 3; ++c) worst = std::max(worst, std::abs(sum[c] / (double(OW) * OH) - want[c] / (double(NW) * NH)));
         const bool replaced = magenta < (uint64_t)OW * OH / 100 && worst < 6.0;
-        printf("[check-nis] %ux%u -> %ux%u: %.2f%% of the output is the fake NIS pass's magenta, average colour off by %.2f levels, detail %.3f (%s)\n", W, H, OW, OH,
+        printf("[check-nis] %ux%u -> %ux%u: %.2f%% of the output is the fake NIS pass's magenta, average colour off by %.2f levels, detail %.3f (%s)\n", NW, NH, OW, OH,
                100.0 * magenta / (double(OW) * OH), worst, detail / (3.0 * (OW - 1) * OH), replaced ? "DLSS REPLACED NIS" : "NIS KEPT");
         for (auto* v : nisSrvs) v->Release();
         uNisOut->Release(); csNis->Release(); nisIn->Release(); coef1->Release(); coef2->Release(); nisOut->Release();

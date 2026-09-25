@@ -250,6 +250,17 @@ def scenario_move(ctx, res, text, frame):
               '%s against %s levels without' % (err, none))
 
 
+def scenario_move_4k(ctx, res, text, frame):
+    scenario_scaler_noflow(ctx, res, text, frame)
+    est = re.search(r'motion estimator: over \d+ frames, average vector \((-?[0-9.]+), (-?[0-9.]+)\) px.*?; motion ([0-9.]+) ms of ([0-9.]+) ms', text)
+    res.check('at 4K (DLAA) the estimate finds the slide: (-5.37, -2.21) px a frame', est is not None and abs(float(est.group(1)) + 5.37) < 0.35 and abs(float(est.group(2)) + 2.21) < 0.35,
+              '(%s, %s), motion %s ms of %s ms' % est.groups() if est else 'no estimator line')
+    stages = re.search(r'motion estimator: stages .*', text)
+    res.check('...and times its stages', stages is not None, stages.group(0)[26:] if stages else 'no stages line')
+    err = move_error(text)
+    res.check('...and DLSS stays close to the moving picture', err is not None and err < 30, '%s levels' % err)
+
+
 def scenario_pair(ctx, res, text, frame):
     # both addons loaded and switched on: the upscaler works beside Neural Rendering, which keeps its frames
     res.check('neither steps aside', 'BOTH ON' in text)
@@ -281,7 +292,8 @@ SCENARIOS = [
     ('scaler_sharp', ['addon=DLSS4DLAA.dll', 'nis=1', 'sharpen=0.5'], scenario_scaler),
     ('scaler_bgra', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_scaler_noflow),   # frame generation off: only NIS, on the BGRA8 capture
     ('scaler_move_none', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_move_none),   # a sliding picture, DLSS told nothing moves
-    ('scaler_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_move),   # ... and with the motion measured from the frames
+    ('scaler_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_move),
+    ('dlaa_4k_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'nisW=3840', 'nisH=2160', 'nisScale=1'], scenario_move_4k),   # DLAA at 4K on the sliding picture: the estimate's cost   # ... and with the motion measured from the frames
     ('pair', ['second=DLSS4DLAA.dll'], scenario_pair),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'snapshotOnStart=1', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),

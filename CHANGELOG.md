@@ -47,6 +47,10 @@
     WoW at 4K it marked 0.1-0.5% of the picture while moving and none while still; smear and close-up artifacts dropped.
   - **DLAA at the screen's own size:** a NIS pass at 1:1 (the game at 3840x2160 on a 3840x2160 screen) is taken too, with DLSS in its DLAA
     mode. World of Warcraft: Forever at 4K: about 3.2 ms a frame (DLSS 1.7, the motion estimate 1.5) with model K.
+  - **The motion estimate got cheaper:** the search compares half of each 8x8 (a checkerboard) and skips the search around a guess that
+    already matches exactly; every pixel tries a vector only once (neighbours moving alike are the common case). The log times each stage.
+    A 4K picture moving everywhere (the worst case): search 1.55 -> 0.81 ms, every pixel 1.34 -> 0.86 ms, and DLSS lands closer to the
+    ideal picture than before (6.8 against 8.7 levels). The test host can now feed the NIS pass any size and scale (nisW/nisH/nisScale).
   - The log says once per device what the NIS pass reads and writes (with frame generation off, its output is the swap chain's back buffer)
     and how bright the frame DLSS gets and the picture it makes are, so a black picture shows in the log.
 

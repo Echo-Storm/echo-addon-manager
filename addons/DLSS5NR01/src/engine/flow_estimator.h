@@ -42,6 +42,9 @@ public:
     // The average vector (game pixels), match cost (0..1 per pixel) and distrust (0..1) since the last call; false when no frame was measured.
     bool TakeAverages(double& x, double& y, double& length, double& cost, double& distrust, uint64_t& frames);
     int Levels() const { return m_levels; }
+    void SetTimestampFrequency(uint64_t f) { m_timestampFreq = f; }
+    // The GPU time of each stage (the pyramid, the search, the median, every pixel), averaged since the last call; false without any.
+    bool TakeStageTimes(double ms[4]);
 
 private:
     static const int kMaxLevels = 7, kDescriptorsPerPass = 6, kPassesMax = 2 + 2 * kMaxLevels, kDescriptorsPerSlot = kDescriptorsPerPass * kPassesMax;
@@ -66,6 +69,10 @@ private:
     ID3D12Resource* m_stats = nullptr;            // 8 uints: summed match cost, x and y (1/16 pixel), blocks, length; summed distrust (1/100), pixels
     ID3D12Resource* m_statsReadback = nullptr;    // kSlots x 16 bytes
     bool m_statsPending[kSlots] = {};
+    static const int kStamps = 5;                 // start, pyramid done, search done, median done, pixels done
+    ID3D12QueryHeap* m_stamps = nullptr; ID3D12Resource* m_stampReadback = nullptr; uint64_t m_timestampFreq = 0;
+    bool m_stampsPending[kSlots] = {};
+    double m_stageSum[4] = {}; uint64_t m_stageCount = 0;
     int m_current = 0; bool m_havePrevious = false;
     // running totals for TakeAverages
     double m_sumCost = 0, m_sumX = 0, m_sumY = 0, m_sumLength = 0, m_blocks = 0, m_sumDistrust = 0, m_pixels = 0; uint64_t m_frames = 0;

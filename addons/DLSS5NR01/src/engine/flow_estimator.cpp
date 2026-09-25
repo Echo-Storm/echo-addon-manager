@@ -52,13 +52,21 @@ RWTexture2D<float2> uGrid : register(u0);
 static const float kExact = 0.0005, kShallow = 0.002;   // an exact match (brightness 0..1, per pixel); the least rise either side to refine on
 static float cw[64];
 static int2 origin;
-float Sad(int2 v) {
+float Sad(int2 v) {   // all 64 pixels of the 8x8 (the final answer and its fraction of a pixel)
     const int2 last = int2(size) - 1;
     float s = 0;
     [loop] for (int j = 0; j < 8; ++j) {
         [unroll] for (int i = 0; i < 8; ++i) s += abs(cw[j * 8 + i] - tPrev.Load(int3(clamp(origin + int2(i, j) + v, int2(0, 0), last), 0)));
     }
     return s * (1.0 / 64.0);
+}
+float SadHalf(int2 v) {   // half of them, as a checkerboard (the search: half the reads, with no stripe the pattern could hide in)
+    const int2 last = int2(size) - 1;
+    float s = 0;
+    [loop] for (int j = 0; j < 8; ++j) {
+        [unroll] for (int i = (j & 1); i < 8; i += 2) s += abs(cw[j * 8 + i] - tPrev.Load(int3(clamp(origin + int2(i, j) + v, int2(0, 0), last), 0)));
+    }
+    return s * (1.0 / 32.0);
 }
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
@@ -69,7 +77,7 @@ void main(uint3 id : SV_DispatchThreadID) {
 
     float2 predicted = float2(0, 0);
     int2 best = int2(0, 0);
-    float bestCost = Sad(best);
+    float bestCost = SadHalf(best);
     if (flags & 1) {   // the coarser size's answers for this block and its neighbours, doubled
         const int2 c = min(int2((id.xy * 2 + 1) >> 2), int2(coarse) - 1);
         predicted = tCoarse.Load(int3(c, 0)) * 2.0;
@@ -77,18 +85,21 @@ void main(uint3 id : SV_DispatchThreadID) {
         const int2 seeds[5] = { int2(0, 0), int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
         [unroll] for (int s = 0; s < 5; ++s) {
             const int2 v = int2(round(tCoarse.Load(int3(clamp(c + seeds[s], int2(0, 0), int2(coarse) - 1), 0)) * 2.0));
-            const float cost = Sad(v) + lambda * length(float2(v) - predicted);
+            const float cost = SadHalf(v) + lambda * length(float2(v) - predicted);
             if (cost < bestCost) { bestCost = cost; best = v; }
         }
     }
     const int2 center = best;
     const int r = int(radius);
-    [loop] for (int dy = -r; dy <= r; ++dy) {
-        [loop] for (int dx = -r; dx <= r; ++dx) {
-            if (dx == 0 && dy == 0) continue;
-            const int2 v = center + int2(dx, dy);
-            const float cost = Sad(v) + lambda * length(float2(v) - predicted);
-            if (cost < bestCost) { bestCost = cost; best = v; }
+    const float seedCost = bestCost - lambda * length(float2(best) - predicted);
+    if (seedCost > kExact) {   // a guess that already matches exactly (a still area, mostly) needs no search around it
+        [loop] for (int dy = -r; dy <= r; ++dy) {
+            [loop] for (int dx = -r; dx <= r; ++dx) {
+                if (dx == 0 && dy == 0) continue;
+                const int2 v = center + int2(dx, dy);
+                const float cost = SadHalf(v) + lambda * length(float2(v) - predicted);
+                if (cost < bestCost) { bestCost = cost; best = v; }
+            }
         }
     }
     float2 result = float2(best);
@@ -156,6 +167,9 @@ float Pixel(uint2 id) {
     const float2 inv = 1.0 / float2(size);
     float bestCost = 1e30; float2 best = cand[0];
     [unroll] for (int n = 0; n < 5; ++n) {
+        // a vector already tried (neighbours moving alike, which is most of a moving picture; or the own block not moving) is not tried again
+        if (n == 1 && all(abs(cand[1]) < 0.05)) continue;
+        if (n >= 2 && (all(abs(cand[n] - cand[1]) < 0.05) || all(abs(cand[n] - cand[max(n - 1, 1)]) < 0.05) || all(abs(cand[n]) < 0.05))) continue;
         float s = n <= 1 ? 0.0 : bias;
         [unroll] for (int k = 0; k < 9; ++k)
             s += abs(c[k] - tPrev.SampleLevel(sLinear, (float2(p + int2(k % 3 - 1, k / 3 - 1)) + 0.5 + cand[n]) * inv, 0)) * (1.0 / 9.0);
@@ -244,6 +258,13 @@ bool FlowEstimator::Init(ID3D12Device* dev, LogFn log) {
     if (FAILED(m_dev->CreateCommittedResource(&readback, D3D12_HEAP_FLAG_NONE, &buf, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_statsReadback)))) {
         Log("motion estimator: the statistics readback could not be made"); Shutdown(); return false;
     }
+    // the time of each stage (diagnostics only: without them the estimate still runs)
+    D3D12_QUERY_HEAP_DESC queries{}; queries.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP; queries.Count = kStamps * kSlots;
+    buf.Width = 8 * kStamps * kSlots;
+    if (FAILED(m_dev->CreateQueryHeap(&queries, IID_PPV_ARGS(&m_stamps))) ||
+        FAILED(m_dev->CreateCommittedResource(&readback, D3D12_HEAP_FLAG_NONE, &buf, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_stampReadback)))) {
+        SafeRelease(m_stamps); SafeRelease(m_stampReadback);
+    }
     return true;
 }
 
@@ -258,7 +279,9 @@ void FlowEstimator::Shutdown() {
     Release();
     for (auto*& p : m_pso) SafeRelease(p);
     SafeRelease(m_root); SafeRelease(m_heap); SafeRelease(m_stats); SafeRelease(m_statsReadback);
+    SafeRelease(m_stamps); SafeRelease(m_stampReadback);
     for (bool& b : m_statsPending) b = false;
+    for (bool& b : m_stampsPending) b = false;
     m_dev = nullptr;
 }
 
@@ -321,6 +344,8 @@ FlowEstimator::Pass FlowEstimator::MakePass(int slot, int& index, ID3D12Resource
 void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion, ID3D12Resource* distrust) {
     const int cur = m_current, prev = 1 - m_current;
     int index = 0;
+    auto stamp = [&](int i) { if (m_stamps) list->EndQuery(m_stamps, D3D12_QUERY_TYPE_TIMESTAMP, static_cast<UINT>(slot * kStamps + i)); };
+    stamp(0);
     ID3D12DescriptorHeap* heaps[] = { m_heap };
     list->SetDescriptorHeaps(1, heaps);
     list->SetComputeRootSignature(m_root);
@@ -348,6 +373,7 @@ void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Reso
         ID3D12Resource* const srv[4] = { m_luma[cur][k - 1], nullptr, nullptr, nullptr }; const DXGI_FORMAT fmt[4] = { R16, NONE, NONE, NONE };
         run(Down, srv, fmt, m_luma[cur][k], R16, Constants{ m_lw[k], m_lh[k], m_lw[k - 1], m_lh[k - 1] }, m_lw[k], m_lh[k], true);
     }
+    stamp(1);
     if (m_havePrevious) {
         for (int k = m_levels - 1; k >= 1; --k) {   // the search, coarse to fine
             const bool coarser = k + 1 < m_levels;
@@ -357,15 +383,22 @@ void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Reso
                          (coarser ? 1u : 0u) | (k == 1 ? 2u : 0u), kLambda, kBias };
             run(Search, srv, fmt, m_grid[k], RG16, c, m_gw[k], m_gh[k], true);
         }
+        stamp(2);
         {
             ID3D12Resource* const srv[4] = { m_grid[1], nullptr, nullptr, nullptr }; const DXGI_FORMAT fmt[4] = { RG16, NONE, NONE, NONE };
             run(Median, srv, fmt, m_filtered, RG16, Constants{ m_gw[1], m_gh[1] }, m_gw[1], m_gh[1], true);
         }
+        stamp(3);
     }
     {   // every pixel (zero without a frame before)
         ID3D12Resource* const srv[4] = { m_luma[cur][0], m_luma[prev][0], m_filtered, nullptr }; const DXGI_FORMAT fmt[4] = { R16, R16, RG16, NONE };
         Constants c{ m_lw[0], m_lh[0], m_gw[1], m_gh[1], 0, 0, 0, m_havePrevious ? 1u : 0u, kLambda, kBias };
         run(Pixel, srv, fmt, motion, RG16, c, m_lw[0], m_lh[0], false, distrust);
+    }
+    if (m_havePrevious && m_stamps) {
+        stamp(4);
+        list->ResolveQueryData(m_stamps, D3D12_QUERY_TYPE_TIMESTAMP, static_cast<UINT>(slot * kStamps), kStamps, m_stampReadback, static_cast<UINT64>(slot) * kStamps * 8);
+        m_stampsPending[slot] = true;
     }
     if (m_havePrevious) {   // the statistics, for ReadStats once this slot comes round again
         Barrier(list, m_stats, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -377,6 +410,18 @@ void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Reso
 }
 
 void FlowEstimator::ReadStats(int slot) {
+    if (slot >= 0 && slot < kSlots && m_stampsPending[slot] && m_stampReadback && m_timestampFreq) {
+        m_stampsPending[slot] = false;
+        const D3D12_RANGE range{ static_cast<SIZE_T>(slot) * kStamps * 8, static_cast<SIZE_T>(slot + 1) * kStamps * 8 };
+        uint64_t* t = nullptr;
+        if (SUCCEEDED(m_stampReadback->Map(0, &range, reinterpret_cast<void**>(&t)))) {
+            const uint64_t* s = t + slot * kStamps;
+            bool ordered = true; for (int i = 1; i < kStamps; ++i) ordered &= s[i] >= s[i - 1];
+            if (ordered) { for (int i = 0; i < 4; ++i) m_stageSum[i] += (s[i + 1] - s[i]) * 1000.0 / m_timestampFreq; ++m_stageCount; }
+            const D3D12_RANGE none{ 0, 0 };
+            m_stampReadback->Unmap(0, &none);
+        }
+    }
     if (slot < 0 || slot >= kSlots || !m_statsPending[slot] || !m_statsReadback) return;
     m_statsPending[slot] = false;
     const D3D12_RANGE range{ static_cast<SIZE_T>(slot) * 32, static_cast<SIZE_T>(slot) * 32 + 32 };
@@ -387,6 +432,13 @@ void FlowEstimator::ReadStats(int slot) {
     m_blocks += s[3]; m_sumLength += s[4] / 16.0; m_sumDistrust += s[5] / 100.0; m_pixels += s[6]; ++m_frames;
     const D3D12_RANGE none{ 0, 0 };
     m_statsReadback->Unmap(0, &none);
+}
+
+bool FlowEstimator::TakeStageTimes(double ms[4]) {
+    if (!m_stageCount) return false;
+    for (int i = 0; i < 4; ++i) { ms[i] = m_stageSum[i] / m_stageCount; m_stageSum[i] = 0; }
+    m_stageCount = 0;
+    return true;
 }
 
 bool FlowEstimator::TakeAverages(double& x, double& y, double& length, double& cost, double& distrust, uint64_t& frames) {

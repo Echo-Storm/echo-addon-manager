@@ -149,6 +149,7 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
     if (!build(kMotionHlsl, "sr_motion", &m_motionPso) || !build(kSharpenHlsl, "sr_sharpen", &m_sharpenPso)) return false;
     static_assert(FlowEstimator::kSlots == kSlots, "the estimator reads its statistics back per engine slot");
     if (!m_estimator.Init(m_dev, [this](const char* m) { Log("%s", m); })) Log("DLSS upscaler: the motion estimator could not start; motion comes from frame generation only");
+    m_estimator.SetTimestampFrequency(m_timestampFreq);
     // per allocator slot: the flow's view, the motion vectors', and the sharpening pass's input and output
     D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors = 4 * kSlots; heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     if (FAILED(m_dev->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&m_heap)))) { Fail("CreateDescriptorHeap"); return false; }
@@ -440,6 +441,9 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
         if (m_estimator.TakeAverages(x, y, length, cost, distrust, frames))
             Log("motion estimator: over %llu frames, average vector (%.2f, %.2f) px, average length %.2f px, match cost %.4f; motion %.2f ms of %.2f ms; "
                 "DLSS told to lean on the current frame over %.1f%% of the picture", (unsigned long long)frames, x, y, length, cost, m_motionMs, m_gpuMs, distrust * 100.0);
+        double stage[4];
+        if (m_estimator.TakeStageTimes(stage))
+            Log("motion estimator: stages %.3f ms pyramid, %.3f search, %.3f median, %.3f every pixel", stage[0], stage[1], stage[2], stage[3]);
     }
     return true;
 }
