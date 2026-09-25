@@ -68,7 +68,7 @@ bool FindNisPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z, N
     D3D11_TEXTURE2D_DESC in{}, c1{}, c2{}, o{};
     auto coefficients = [](const D3D11_TEXTURE2D_DESC& d) { return d.Width == 2 && d.Height == 64 && d.Format == DXGI_FORMAT_R32G32B32A32_FLOAT; };
     const bool ok = Texture2D(res[0], in) && Texture2D(res[1], c1) && Texture2D(res[2], c2) && Texture2D(out, o) &&
-                    coefficients(c1) && coefficients(c2) && (o.Width > in.Width || o.Height > in.Height) &&
+                    coefficients(c1) && coefficients(c2) && o.Width >= in.Width && o.Height >= in.Height &&   // 1:1 too (DLSS then runs as DLAA)
                     x == (o.Width + 31) / 32 && y == (o.Height + 23) / 24;
     for (auto*& v : srvs) SafeRelease(v);
     SafeRelease(uav); SafeRelease(res[1]); SafeRelease(res[2]);

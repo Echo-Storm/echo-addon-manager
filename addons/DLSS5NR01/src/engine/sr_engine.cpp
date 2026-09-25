@@ -289,7 +289,8 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
     if (!EnsureInputs(inW, inH)) { m_list->Close(); Fail("the motion-vector and depth textures could not be made"); return false; }
     auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
     const float ratio = std::max(static_cast<float>(outW) / inW, static_cast<float>(outH) / inH);
-    const NVSDK_NGX_PerfQuality_Value quality = ratio <= 1.55f ? NVSDK_NGX_PerfQuality_Value_MaxQuality : ratio <= 1.75f ? NVSDK_NGX_PerfQuality_Value_Balanced
+    const NVSDK_NGX_PerfQuality_Value quality = ratio <= 1.01f ? NVSDK_NGX_PerfQuality_Value_DLAA   // the game at the screen's size: anti-aliasing only
+                                              : ratio <= 1.55f ? NVSDK_NGX_PerfQuality_Value_MaxQuality : ratio <= 1.75f ? NVSDK_NGX_PerfQuality_Value_Balanced
                                               : ratio <= 2.2f ? NVSDK_NGX_PerfQuality_Value_MaxPerf : NVSDK_NGX_PerfQuality_Value_UltraPerformance;
     p->Set(NVSDK_NGX_Parameter_CreationNodeMask, 1u); p->Set(NVSDK_NGX_Parameter_VisibilityNodeMask, 1u);
     p->Set(NVSDK_NGX_Parameter_Width, inW); p->Set(NVSDK_NGX_Parameter_Height, inH);
