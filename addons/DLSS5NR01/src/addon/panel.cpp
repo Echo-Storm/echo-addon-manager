@@ -309,6 +309,10 @@ void DrawPanel() {
             "Off: it runs as soon as the frame is captured and gets the previous frame's motion, one frame late, which smears and ghosts when the camera turns, starts or stops. "
             "On is the default; the switch is here to compare the two.");
         if (!c.p.useFlow) ImGui::EndDisabled();
+        if (ImGui::Checkbox("Also with frame generation off", &c.presentMode)) changed = true;
+        Tip("With Lossless Scaling's frame generation off there is no captured frame to run on. On (the default): the model then takes the frame Lossless Scaling "
+            "presents, and its result goes onto that same frame (Lossless Scaling's frame waits for it on the GPU, so the two always match). The model's working "
+            "size is taken as for a 1920-wide frame, so it costs what it does with frame generation on. Off: without frame generation the addon does nothing.");
         }
     }
     if (kScalerAddon && eam::ui::SectionHeader("Upscaling")) {

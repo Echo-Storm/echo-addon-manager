@@ -9,6 +9,20 @@
   never waits for ever in NVIDIA's or AMD's teardown (a stuck GPU leaves it for Lossless Scaling's exit and says so), and stays loaded until
   Lossless Scaling closes once its engine has run, as Neural Rendering does. The log times the stop. The test host switches each upscaler off
   while it runs and makes a new device after it (`unload=1`, scenarios `scaler_unload`, `fsr_unload`).
+- **DLSS 5 Neural Rendering works with frame generation off.** Without frame generation there is no captured frame, so the model had
+  nothing to run on. Now, after 20 presents without a capture, it takes the frame Lossless Scaling presents (whatever the scaler), and the
+  compose adds that same frame's result, waiting for it on the GPU: the picture and its result always match, with no sliding. The next
+  frame's copy waits on the GPU for the model's run before instead of being left out, so nearly every present gets its own result (test
+  host: 184 of 190). The working size is taken as for a 1920-wide frame, so the model costs what it does with frame generation on. When
+  captures come again the usual path takes over (the bridge starts afresh at each switch). Panel: *Also with frame generation off*
+  (`presentMode`, on). The Present hook now also goes in from Lossless Scaling's other passes. Test host: `offframes=`, scenario
+  `present_mode`; `base` runs with it off to keep checking that an old result does not stay on the screen.
+- **Neural Rendering's model gets the motion measured from the frames** (the upscalers' estimator, run on the model's own input at its working
+  size), per pixel and for the frame itself, instead of frame generation's quarter-size flow; the compose still slides the result onto
+  generated frames with that flow. *The model's motion* chooses (measured, the default, or frame generation's). A working-size change
+  never waits: the estimator's old textures are retired until the GPU is past them.
+- **Neural Rendering's teardown cannot hang** either: the cross-waits between Lossless Scaling's queue and the model's are released before and
+  after the drain, and NVIDIA's teardown is left for the exit when the GPU has not finished.
 - **No more repeated pictures: a GPU wait instead.** When the upscaler has not finished a newer picture by the time Lossless Scaling needs
   one, the picture before used to be shown again: a visible hitch, 11-16% of pictures in Fallout: New Vegas with adaptive frame generation,
   even at 1080p with the GPU far from its limit (two frames close together). Now Lossless Scaling's frame waits on the GPU for the next

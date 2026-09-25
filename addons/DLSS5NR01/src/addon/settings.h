@@ -26,6 +26,7 @@ struct Config {
     int scalerHandoff = 0;               // the DLSS 4 Upscaler's handoff (ScalerLink::Handoff): 0 one frame late, 1 GPU wait, 2 DLSS runs but NIS stays,
                                          // 3 NIS runs and DLSS's picture is copied over it at Present
     NrParams p;                          // the look, and the few model settings that are not part of a look
+    bool presentMode = true;             // with frame generation off, the model takes the presented frame (see Present in runtime.cpp)
     bool freshFlow = true;               // run the model once LSFG has this frame's own motion (off: at capture, with the frame before's)
     bool lsFirst = true;                 // give Lossless Scaling's GPU work priority over the model's
     bool hotkeys = true;                 // Ctrl+Shift + an F key, read at every present

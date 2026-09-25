@@ -94,6 +94,15 @@ def motion_counts(text):
     return tuple(int(v) for v in m[-1]) if m else None
 
 
+def scenario_present_mode(ctx, res, text, frame):
+    # frame generation switched off for 6 s: after a few presents without a capture the model takes the presented frames and its result goes
+    # onto them again (the host's check-off line then counts changed pixels: the model's result, on the frame it was made from)
+    res.check('with frame generation off the model takes the presented frames', 'frame generation is off: the model takes the presented frames' in text)
+    off = re.search(r'\[check-off\] .*?: (\d+) pixels changed', text)
+    res.check('...and its result goes onto them', off is not None and int(off.group(1)) > 0, off.group(0)[12:] if off else 'no check-off line')
+    res.check('...with no failure', 'SwitchOff' not in text and 'switched off:' not in text.lower() and 'bridge init failed' not in text)
+
+
 def scenario_base(ctx, res, text, frame):
     res.check('compose applied', 'COMPOSE APPLIED' in text)
     mc = motion_counts(text)
@@ -306,7 +315,8 @@ def scenario_selftest(ctx, res, text, frame):
 
 # name, config overrides, checker
 SCENARIOS = [
-    ('base', [], scenario_base),
+    ('base', ['presentMode=0'], scenario_base),   # present mode off: with frame generation off the old result must go (present_mode tests it on)
+    ('present_mode', ['offframes=150'], scenario_present_mode),   # frame generation off for 6 s: the model takes the presented frames
     ('hud_left_half', ['hud=0,0,0.5,1', 'hudFeather=0'], scenario_hud),
     ('sharpen', ['sharpen=0.8'], scenario_sharpen),
     ('shadows_up', ['shadows=1'], scenario_shadows_up),
@@ -340,7 +350,7 @@ SCENARIOS = [
 # The everyday set (--quick): the frame reaching the model with its own motion, the older timing, an exit with no AddonShutdown, the DLSS 4
 # Upscaler in place of NIS, and the two addons loaded together. The
 # rest (looks, HUD, grain, smoothing, the self-test, the upscaler with preset M, the panel shot) run with no option, before a release.
-QUICK = {'base', 'flow_previous', 'exit_abrupt', 'scaler', 'fsr_scaler', 'pair'}
+QUICK = {'base', 'present_mode', 'flow_previous', 'exit_abrupt', 'scaler', 'fsr_scaler', 'pair'}
 
 
 def selftest_exe_checks(nr_dir, snippet):

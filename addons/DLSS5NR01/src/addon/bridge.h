@@ -31,9 +31,16 @@ public:
     bool Ensure(uint32_t w, uint32_t h, DXGI_FORMAT fmt);
     // Hands a frame (and LSFG's flow, if any) to the model. The frame is only read. frameIndex names the result (the tap count). True when a run
     // was queued.
-    bool Submit(ID3D11Texture2D* frame, ID3D11Texture2D* flow, uint32_t flowW, uint32_t flowH, const NrParams& params, bool reset, uint64_t frameIndex);
+    // orderOnGpu: with the model's run before still unfinished (as the CPU sees it), Lossless Scaling's queue waits on the GPU for it before
+    // copying this frame over the shared input, rather than this frame being left out (frame generation off, where each present shows its
+    // own frame's result).
+    bool Submit(ID3D11Texture2D* frame, ID3D11Texture2D* flow, uint32_t flowW, uint32_t flowH, const NrParams& params, bool reset, uint64_t frameIndex,
+                bool orderOnGpu = false);
     // The newest finished result: its frame index (0 = none yet), a borrowed view of it and its size (the working size).
     uint64_t NewestDelta(ID3D11ShaderResourceView** srv, uint32_t* ww, uint32_t* wh);
+    // The result of the newest run handed to the model, finished or not (0 = none): a compose that uses it waits for it on the GPU
+    // (BeginDeltaUse). Frame generation off: a present shows its own frame's result.
+    uint64_t QueuedDelta(ID3D11ShaderResourceView** srv, uint32_t* ww, uint32_t* wh);
     void BeginDeltaUse(uint64_t d);   // before recording a compose that reads result d on Lossless Scaling's context
     void EndDeltaUse(uint64_t d);     // after it
     ID3D11DeviceContext* Context() const { return m_ctx; }

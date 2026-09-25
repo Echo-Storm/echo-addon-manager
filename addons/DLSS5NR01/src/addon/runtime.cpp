@@ -89,9 +89,13 @@ void ReleaseDecision(TapDecision& d) {
     d.frame = nullptr; d.flow = nullptr;
 }
 
+bool g_presentMode = false;   // frame generation off: the model takes the presented frame (see PresentTap)
+uint64_t g_tapsSeen = 0, g_presentIndex = 0, g_presentOwn = 0, g_presentEarlier = 0;
+int g_presentsWithoutTap = 0;
 void ForgetDevice() {   // under g_frameMutex
     screenshot::Forget();
     g_bridge.Shutdown(); g_compose.Shutdown(); g_tap.Reset();
+    g_presentMode = false; g_tapsSeen = 0; g_presentsWithoutTap = 0;
     g_seen.clear(); g_tapDevice = nullptr; g_lsChain = nullptr; g_otherChain = nullptr;
 }
 
@@ -153,6 +157,8 @@ void LogProgress(const NrStats& st) {
 
 void OnPresent(IDXGISwapChain* sc);
 void Compose(IDXGISwapChain* sc);
+void PresentTap(IDXGISwapChain* sc);
+void FollowFrameGeneration(bool allowed);
 void ScalerPresentGuarded(IDXGISwapChain* sc);
 
 // The engine runs on the card Lossless Scaling's frames come from. Lossless Scaling makes devices on every card and may run a pass on more than
@@ -173,9 +179,15 @@ bool EngineOnFrameCard(const LUID& card) {
 }
 
 // One tapped pass (under g_frameMutex). Never skips Lossless Scaling's own dispatch.
+void AfterHandOver(bool started, float ceiling, const AutoQuality::Settings& autoSettings, float watchdogMs);
 void Tap(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     TapDecision d;
     if (!g_tap.Observe(ctx, x, y, z, d) || !g_tapDevice) { ReleaseDecision(d); return; }
+    if (g_presentMode) {
+        g_presentMode = false; g_bridge.Shutdown(); g_tapsSeen = g_tap.Taps(); g_presentsWithoutTap = 0;
+        Log("frame generation is on: the model takes Lossless Scaling's captured frames again (it took %llu presented frames; %llu composes had their "
+            "own frame's result, %llu the frame before's)", (unsigned long long)g_presentIndex, (unsigned long long)g_presentOwn, (unsigned long long)g_presentEarlier);
+    }
     LUID card{};
     for (const SeenDevice& s : g_seen) if (s.dev == g_tapDevice) card = s.card;
     if (!EngineOnFrameCard(card)) { ReleaseDecision(d); return; }
@@ -208,7 +220,12 @@ void Tap(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     ctx->CSSetShaderResources(0, 8, bound);
     for (ID3D11ShaderResourceView* v : bound) if (v) v->Release();
     ReleaseDecision(d);
+    AfterHandOver(started, ceiling, autoSettings, watchdogMs);
+}
 
+// After a frame was handed to the model (from the capture tap, or at Present with frame generation off): the counts, auto quality, the
+// watchdog and the live numbers (under g_frameMutex).
+void AfterHandOver(bool started, float ceiling, const AutoQuality::Settings& autoSettings, float watchdogMs) {
     const NrStats& st = g_engine.Stats();
     if (started) {
         ++g_runs; g_lastModelMs = st.nrMs; g_lastRunMs = st.totalMs; g_lastRunAtMs = GetTickCount64();
@@ -362,7 +379,7 @@ void FollowFocus() {
 // One present of any swap chain in the process (under g_frameMutex): on Lossless Scaling's, the newest finished delta goes onto the frame.
 void Present(IDXGISwapChain* sc) {
     ++g_presents; ++g_presentStages[0];
-    if (!g_tapDevice || !g_bridge.IsReady() || !g_compose.IsReady()) return;
+    if (!g_tapDevice) return;
     ++g_presentStages[1];
     bool ours;   // Lossless Scaling's chain is on the tapped device; two remembered chains, so the manager's window does not make it look again each time
     if (sc == g_lsChain) ours = true;
@@ -379,6 +396,10 @@ void Present(IDXGISwapChain* sc) {
     ++g_lsPresents;
     ReadHotkeys();
     if ((g_lsPresents & 31u) == 0) FollowFocus();
+    bool presentMode; { std::lock_guard<std::mutex> lock(g_settingsMutex); presentMode = g_config.presentMode; }
+    FollowFrameGeneration(presentMode);
+    if (g_presentMode) PresentTap(sc);
+    if (!g_bridge.IsReady() || !g_compose.IsReady()) return;
     Compose(sc);
     std::string game;
     { std::lock_guard<std::mutex> lock(g_textMutex); game = g_focusExe; }
@@ -386,14 +407,76 @@ void Present(IDXGISwapChain* sc) {
 }
 
 // The newest finished delta onto the frame about to be shown (Lossless Scaling's swap chain, under g_frameMutex).
+// ---- frame generation off: the frame taken at Present
+//
+// Without frame generation Lossless Scaling runs no capture pass, so the model would have nothing to run on. Once presents keep coming with
+// no capture (kQuietPresents), the presented frame itself is handed to the model, just before the compose, and the compose adds that same
+// frame's result, waiting for it on the GPU (as the upscalers do): the picture and its result always match, so nothing needs sliding. The
+// frame is the scaled picture (the screen's size), so the working size is taken as for a frame kPresentWidth wide: the model costs what it
+// does for the game's frame. When captures come again, the capture path takes over. Each switch starts the bridge afresh (its frame numbers
+// differ: capture counts there, presents here).
+constexpr int kQuietPresents = 20;
+constexpr float kPresentWidth = 1920.0f;
+void PresentTap(IDXGISwapChain* sc) {   // under g_frameMutex, on the presenting thread
+    LUID card{};
+    for (const SeenDevice& s : g_seen) if (s.dev == g_tapDevice) card = s.card;
+    if (!EngineOnFrameCard(card)) return;
+    ID3D11DeviceContext* ctx = nullptr; g_tapDevice->GetImmediateContext(&ctx);
+    auto log = [](const char* m) { Log("%s", m); };
+    if (!g_bridge.IsReady() && !g_bridge.Init(g_tapDevice, ctx, &g_engine, log)) { ctx->Release(); SwitchOff("bridge init failed"); return; }
+    if (!g_compose.IsReady() && !g_compose.Init(g_tapDevice, log)) { ctx->Release(); SwitchOff("compose init failed"); return; }
+    ID3D11Texture2D* buffer = nullptr;
+    if (FAILED(sc->GetBuffer(0, IID_PPV_ARGS(&buffer)))) { ctx->Release(); return; }
+    D3D11_TEXTURE2D_DESC frame; buffer->GetDesc(&frame);
+    if (frame.Width >= 64 && frame.Height >= 64 && g_bridge.Ensure(frame.Width, frame.Height, frame.Format)) {
+        { char text[96]; snprintf(text, sizeof text, "%ux%u %s at Present (frame generation off)", frame.Width, frame.Height, FormatName(frame.Format));
+          std::lock_guard<std::mutex> lock(g_textMutex); g_frameText = text; }
+        NrParams p; float watchdogMs; bool lsFirst; AutoQuality::Settings autoSettings;
+        { std::lock_guard<std::mutex> lock(g_settingsMutex); p = g_config.p; watchdogMs = g_config.watchdogMs; lsFirst = g_config.lsFirst;
+          autoSettings = { g_config.autoQuality && g_config.model == 0, g_config.autoBudgetMs, g_config.autoFloor }; }
+        const float fit = frame.Width > kPresentWidth ? kPresentWidth / static_cast<float>(frame.Width) : 1.0f;
+        const float ceiling = p.workingScale * fit;
+        p.workingScale = ceiling;
+        if (autoSettings.on) { std::lock_guard<std::mutex> lock(g_autoMutex); if (g_auto.Scale() > 0) p.workingScale = std::min(ceiling, g_auto.Scale()); }
+        g_bridge.SetLsGpuPriority(lsFirst ? 7 : 0);
+        // the scaling pass may have left the buffer bound as its output: unbound for the copy, and put back
+        ID3D11UnorderedAccessView* uavs[8] = {}; ctx->CSGetUnorderedAccessViews(0, 8, uavs);
+        ID3D11UnorderedAccessView* noUavs[8] = {}; ctx->CSSetUnorderedAccessViews(0, 8, noUavs, nullptr);
+        const bool started = g_bridge.Submit(buffer, nullptr, 0, 0, p, g_resetRequested.exchange(false), ++g_presentIndex, true);
+        ctx->CSSetUnorderedAccessViews(0, 8, uavs, nullptr);
+        for (ID3D11UnorderedAccessView* v : uavs) if (v) v->Release();
+        AfterHandOver(started, ceiling, autoSettings, watchdogMs);
+    }
+    buffer->Release(); ctx->Release();
+}
+
+// Which path hands frames to the model: the capture pass while it runs, the present when it has stopped (under g_frameMutex).
+void FollowFrameGeneration(bool allowed) {
+    const uint64_t taps = g_tap.Taps();
+    if (taps != g_tapsSeen) {
+        g_tapsSeen = taps; g_presentsWithoutTap = 0;
+        if (g_presentMode) {
+            g_presentMode = false; g_bridge.Shutdown();
+            Log("frame generation is on: the model takes Lossless Scaling's captured frames again (it took %llu presented frames; %llu composes had their "
+                "own frame's result, %llu the frame before's)", (unsigned long long)g_presentIndex, (unsigned long long)g_presentOwn, (unsigned long long)g_presentEarlier);
+        }
+    } else if (!g_presentMode && allowed && ++g_presentsWithoutTap >= kQuietPresents) {
+        g_presentMode = true; g_bridge.Shutdown(); g_presentIndex = g_presentOwn = g_presentEarlier = 0;
+        Log("frame generation is off: the model takes the presented frames (%d presents without a capture)", kQuietPresents);
+    }
+    if (g_presentMode && !allowed) { g_presentMode = false; g_bridge.Shutdown(); Log("frame generation off: taking the presented frames is switched off"); }
+}
+
 void Compose(IDXGISwapChain* sc) {
     const PresentInfo shown = g_tap.NotePresent();
     ++g_presentStages[2];
-    if (shown.target < 0) return;
+    if (shown.target < 0 && !g_presentMode) return;
     ++g_presentStages[3];
     ID3D11ShaderResourceView* delta = nullptr; uint32_t dw = 0, dh = 0;
-    const uint64_t deltaFrame = g_bridge.NewestDelta(&delta, &dw, &dh);
+    // frame generation off: this present's own result (waited for on the GPU), or, when the model was still busy, the frame before's
+    const uint64_t deltaFrame = g_presentMode ? g_bridge.QueuedDelta(&delta, &dw, &dh) : g_bridge.NewestDelta(&delta, &dw, &dh);
     if (!deltaFrame) return;
+    if (g_presentMode) { if (deltaFrame == g_presentIndex) ++g_presentOwn; else ++g_presentEarlier; }
     // A result the model has not replaced for a while belongs to another picture: frame generation was switched off (Lossless Scaling still
     // presents, but the model has nothing to run on), or the game paused. Added to every frame it would stand still on the screen.
     if (GetTickCount64() - g_lastRunAtMs > kMaxResultAgeMs) return;
@@ -406,10 +489,10 @@ void Compose(IDXGISwapChain* sc) {
     ID3D11Texture2D* buffer = nullptr;
     if (FAILED(sc->GetBuffer(0, IID_PPV_ARGS(&buffer)))) return;
     uint32_t fw = 0, fh = 0;
-    ID3D11Resource* flow = p.useFlow ? g_tap.NewestFlow(fw, fh) : nullptr;
+    ID3D11Resource* flow = p.useFlow && !g_presentMode ? g_tap.NewestFlow(fw, fh) : nullptr;   // at Present the result is the frame's own: no sliding
     Compose11::Args a;
     a.target = buffer; a.delta = delta; a.flow = flow; a.flowW = fw; a.flowH = fh; a.flowUnit = p.flowUnit;
-    a.offset = static_cast<float>(shown.target - static_cast<double>(deltaFrame)); a.isGen = shown.gen;
+    a.offset = g_presentMode ? 0.0f : static_cast<float>(shown.target - static_cast<double>(deltaFrame)); a.isGen = !g_presentMode && shown.gen;
     a.intensity = p.composeIntensity; a.maxDelta = p.maxDelta; a.ghostGuard = p.ghostGuard; a.hiProtect = p.hiProtect; a.debugView = p.debugView;
     a.sharpen = p.sharpen; a.saturation = p.saturation; a.vibrance = p.vibrance; a.brightness = p.brightness; a.contrast = p.contrast; a.gamma = p.gamma;
     a.shadows = p.shadows; a.highlights = p.highlights; a.grain = p.grain; a.grainSize = p.grainSize; a.grainSeed = static_cast<uint32_t>(g_presents);
@@ -775,6 +858,8 @@ bool OnPass(uint32_t x, uint32_t y, uint32_t z, void*) {
     if (!OwnsFrames()) return false;
     std::lock_guard<std::mutex> lock(g_frameMutex);
     if (!Tappable(ctx)) { ++g_otherPasses; return false; }
+    if (!PresentHook::Installed() && g_tapDevice && !PresentHook::Install(g_tapDevice, OnPresent, [](const char* m) { Log("%s", m); }))
+        Log("could not hook dxgi Present yet");
     TapGuarded(ctx, x, y, z);
     LogPassTable();
     return false;   // Lossless Scaling's pass always runs

@@ -184,9 +184,10 @@ void Bridge::NoteFrameTime(int64_t now, int64_t freq) {
     m_prevFrameQpc = now;
 }
 
-// Everything here is recorded on Lossless Scaling's immediate context, in order. The CPU never blocks and Lossless Scaling's queue never waits;
-// the only waits are the model queue's.
-bool Bridge::Submit(ID3D11Texture2D* frame, ID3D11Texture2D* flow, uint32_t flowW, uint32_t flowH, const NrParams& params, bool reset, uint64_t frameIndex) {
+// Everything here is recorded on Lossless Scaling's immediate context, in order. The CPU never blocks. Lossless Scaling's queue waits only with
+// orderOnGpu (frame generation off), for the model's run before; otherwise the only waits are the model queue's.
+bool Bridge::Submit(ID3D11Texture2D* frame, ID3D11Texture2D* flow, uint32_t flowW, uint32_t flowH, const NrParams& params, bool reset, uint64_t frameIndex,
+                    bool orderOnGpu) {
     if (!m_input.d3d11 || !m_copied.d3d11 || !m_engine || !m_engine->IsReady()) return false;
     LARGE_INTEGER freq; QueryPerformanceFrequency(&freq);
     const int64_t start = Now();
@@ -196,7 +197,10 @@ bool Bridge::Submit(ID3D11Texture2D* frame, ID3D11Texture2D* flow, uint32_t flow
     if (!m_engine->Prepare(m_input.w, m_input.h, m_fmt, params)) return false;
     if (!FitSlots(m_engine->Stats().workW, m_engine->Stats().workH)) return false;
     // The model is still busy with an earlier frame: skip this one.
-    if (m_inFlight && m_finished.d3d12->GetCompletedValue() < m_inFlight) { ++m_skipped; return false; }
+    if (m_inFlight && m_finished.d3d12->GetCompletedValue() < m_inFlight) {
+        if (!orderOnGpu) { ++m_skipped; return false; }
+        m_ctx4->Wait(m_finished.d3d11, m_inFlight);   // the copy below waits on the GPU until the model has read the frame before
+    }
     const bool withFlow = flow && params.useFlow && flowW && flowH && FitFlow(flowW, flowH);
     m_engine->SetFlowInput(withFlow ? m_flow.d3d12 : nullptr, m_flow.w, m_flow.h);
 
@@ -229,6 +233,14 @@ bool Bridge::TakeFrameTimeWindow(float& p50, float& p95, float& p99, float& wors
     over33 = (int)std::count_if(sorted, sorted + n, [](float ms) { return ms > 33.0f; });
     m_frameTimeCount = 0;
     return true;
+}
+
+uint64_t Bridge::QueuedDelta(ID3D11ShaderResourceView** srv, uint32_t* ww, uint32_t* wh) {
+    if (m_newestSlot < 0 || !m_inFlight || m_slots[m_newestSlot].frame != m_inFlight) return 0;   // none, or the newest run failed
+    if (srv) *srv = m_slots[m_newestSlot].delta.view;
+    if (ww) *ww = m_slots[m_newestSlot].delta.w;
+    if (wh) *wh = m_slots[m_newestSlot].delta.h;
+    return m_inFlight;
 }
 
 uint64_t Bridge::NewestDelta(ID3D11ShaderResourceView** srv, uint32_t* ww, uint32_t* wh) {

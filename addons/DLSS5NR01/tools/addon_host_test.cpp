@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -447,10 +447,13 @@ int main(int argc, char** argv) {
 
         // frame generation switched off: Lossless Scaling keeps presenting the scaled frame, but runs no LSFG pass, so the model has nothing to
         // run on. Its last result must not stay on the screen.
+        // (With presentMode on, the addon takes the presented frames after a few presents without a capture and the picture changes again: the
+        // matrix runs this with presentMode=0, and a longer stretch, offframes=, with it on.)
         uint64_t stale = 0;
-        for (int fr = 0; fr < 25; ++fr) {
+        int offFrames = 25; for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "offframes=", 10)) offFrames = std::clamp(atoi(argv[i] + 10), 25, 600);
+        for (int fr = 0; fr < offFrames; ++fr) {
             ID3D11Texture2D* bb = nullptr; sc->GetBuffer(0, IID_PPV_ARGS(&bb));
-            if (fr >= 20) { double m = 0; stale += CountChanged(dev, dc, bb, W2, H2, &m, nullptr); }   // what an earlier present of this second showed
+            if (fr >= offFrames - 5) { double m = 0; stale += CountChanged(dev, dc, bb, W2, H2, &m, nullptr); }   // what an earlier present of this stretch showed
             dc->CopyResource(bb, c2);
             bb->Release(); sc->Present(0, 0); pump();
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
