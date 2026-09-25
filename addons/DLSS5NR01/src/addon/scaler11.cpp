@@ -123,7 +123,8 @@ bool ScalerLink::Fit(Shared& t, uint32_t w, uint32_t h, DXGI_FORMAT fmt, bool en
 }
 
 bool ScalerLink::Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, SrEngine* engine, LogFn log) {
-    m_log = std::move(log); m_engine = engine; m_ctx = ctx; m_frame = 0; m_holds[0] = m_holds[1] = 0; m_described = false;
+    m_log = std::move(log); m_engine = engine; m_ctx = ctx; m_frame = 0; for (auto& h : m_holds) h = 0; m_described = false;
+    m_passes = m_skipped = m_repeats = m_lastShown = 0;
     m_atPresent = m_copiedAtPresent = 0; m_probeState = 0; m_pendingReset = false;
     if (FAILED(dev->QueryInterface(IID_PPV_ARGS(&m_dev))) || FAILED(ctx->QueryInterface(IID_PPV_ARGS(&m_ctx4)))) {
         Log("%s upscaler: Lossless Scaling's device has no shared fences (D3D11.4 is needed)", kUpscalerName); Shutdown(); return false;
@@ -143,11 +144,24 @@ bool ScalerLink::MakeGrabShader() {
     return true;
 }
 
+void ScalerLink::Unblock() {
+    if (m_copied.d3d12 && m_copied.d3d12->GetCompletedValue() < m_frame) {
+        Log("%s upscaler: the frame-copied signal had reached %llu of %llu; signalled from the CPU so the engine can finish", kUpscalerName,
+            (unsigned long long)m_copied.d3d12->GetCompletedValue(), (unsigned long long)m_frame);
+        m_copied.d3d12->Signal(m_frame);
+    }
+}
+
 void ScalerLink::Shutdown() {
-    if (m_engine && (m_in.d3d12 || m_copied.d3d12)) m_engine->Drain();
-    SafeRelease(m_inUav); SafeRelease(m_grab);
-    m_in.Release(); m_out[0].Release(); m_out[1].Release(); m_flow.Release();
-    m_holds[0] = m_holds[1] = 0; m_atPresent = 0;
+    Unblock();
+    if (m_engine && (m_in[0].d3d12 || m_copied.d3d12)) m_engine->Drain();
+    for (auto*& v : m_inUav) SafeRelease(v);
+    SafeRelease(m_grab);
+    for (auto& t : m_in) t.Release();
+    for (auto& t : m_out) t.Release();
+    for (auto& t : m_flow) t.Release();
+    for (auto& h : m_holds) h = 0;
+    m_atPresent = 0;
     SafeRelease(m_probe[0]); SafeRelease(m_probe[1]);
     m_copied.Release(); m_done.Release();
     SafeRelease(m_ctx4); SafeRelease(m_dev); m_ctx = nullptr;
@@ -186,76 +200,86 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     if (!IsReady() || !m_engine || !m_engine->IsReady()) return false;
     DescribeTargets(pass);
     if (handoff != m_handoff) {
-        Log("%s upscaler: handoff %s", kUpscalerName, handoff == Handoff::Late ? "one frame late (nothing waits)" : handoff == Handoff::Wait ? "GPU wait"
-                                         : handoff == Handoff::Observe ? "observe only (NIS stays)" : "NIS runs, DLSS's picture copied over it at Present");
-        if (m_handoff == Handoff::Wait || handoff == Handoff::Wait) m_engine->Drain();   // the two do not share the in-flight bookkeeping
-        m_handoff = handoff; m_holds[0] = m_holds[1] = 0;
+        Log("%s upscaler: handoff %s", kUpscalerName, handoff == Handoff::Late ? "the newest finished picture (nothing waits)" : handoff == Handoff::Wait ? "GPU wait"
+                                         : handoff == Handoff::Observe ? "observe only (NIS stays)" : "NIS runs, the picture copied over it at Present");
+        Unblock(); m_engine->Drain();   // the variants keep their frames differently: start from an idle engine
+        m_handoff = handoff; for (auto& h : m_holds) h = 0;
     }
-    // the shared textures: the frame as RGBA8 (the grab pass reads BGRA as RGBA), the picture in the output's format, which DLSS writes
-    // through a UAV
+    // the shared textures: the frame as RGBA8 (the grab pass reads BGRA as RGBA), the picture in the output's format, which the upscaler
+    // writes through a UAV
     const DXGI_FORMAT inFmt = DXGI_FORMAT_R8G8B8A8_UNORM, outFmt = Bridge::ViewFormat(pass.outFmt);
     if (!Bridge::FormatSupported(pass.inFmt) || (outFmt != DXGI_FORMAT_R8G8B8A8_UNORM && outFmt != DXGI_FORMAT_R10G10B10A2_UNORM && outFmt != DXGI_FORMAT_R16G16B16A16_FLOAT)) {
         if (!m_loggedFormat) { Log("%s upscaler: frame format %d -> %d is not one the upscaler can take here; NIS stays", kUpscalerName, (int)pass.inFmt, (int)pass.outFmt); m_loggedFormat = true; }
         return false;
     }
-    ID3D11Texture2D* const outBefore[2] = { m_out[0].d3d11, m_out[1].d3d11 };
-    ID3D11Texture2D* const inBefore = m_in.d3d11;
-    if (!Fit(m_in, pass.inW, pass.inH, inFmt, true, "frame") || !Fit(m_out[0], pass.outW, pass.outH, outFmt, true, "picture") ||
-        !Fit(m_out[1], pass.outW, pass.outH, outFmt, true, "second picture"))
-        return false;
-    if (m_out[0].d3d11 != outBefore[0] || m_out[1].d3d11 != outBefore[1]) m_holds[0] = m_holds[1] = 0;   // new textures hold nothing yet
-    if (m_in.d3d11 != inBefore || !m_inUav) {
-        SafeRelease(m_inUav);
-        if (FAILED(m_dev->CreateUnorderedAccessView(m_in.d3d11, nullptr, &m_inUav))) { Log("%s upscaler: the frame's UAV could not be made", kUpscalerName); return false; }
+    static const char* const inNames[kIn] = { "frame", "second frame" };
+    static const char* const outNames[kOut] = { "picture", "second picture", "third picture" };
+    bool refit = true;
+    for (int i = 0; i < kIn && refit; ++i) {
+        ID3D11Texture2D* const before = m_in[i].d3d11;
+        refit = Fit(m_in[i], pass.inW, pass.inH, inFmt, true, inNames[i]);
+        if (refit && (m_in[i].d3d11 != before || !m_inUav[i])) {
+            SafeRelease(m_inUav[i]);
+            if (FAILED(m_dev->CreateUnorderedAccessView(m_in[i].d3d11, nullptr, &m_inUav[i]))) { Log("%s upscaler: the frame's UAV could not be made", kUpscalerName); return false; }
+        }
     }
+    for (int i = 0; i < kOut && refit; ++i) {
+        ID3D11Texture2D* const before = m_out[i].d3d11;
+        refit = Fit(m_out[i], pass.outW, pass.outH, outFmt, true, outNames[i]);
+        if (refit && m_out[i].d3d11 != before) m_holds[i] = 0;   // a new texture holds nothing yet
+    }
+    if (!refit) return false;
+    ++m_passes;
 
-    // The engine is idle once it has finished the newest frame: only then may the shared frame and flow be refilled. With Wait, Lossless
-    // Scaling's own queue waited for that already, so it counts as idle.
-    const bool idle = m_handoff == Handoff::Wait || m_done.d3d11->GetCompletedValue() >= m_frame;
-    m_pendingReset = m_pendingReset || reset;   // not lost when the engine is busy and this frame is not handed over
+    // A new frame goes to the engine while fewer than kIn are with it (its queue finishes them in order, so "done" says how many are left).
+    // With Wait, Lossless Scaling's own queue waited for the one before, so there is room.
+    const uint64_t finished = m_done.d3d11->GetCompletedValue();
+    const bool room = m_handoff == Handoff::Wait || m_frame < finished + kIn;
+    m_pendingReset = m_pendingReset || reset;   // not lost when a frame is not handed over
     const SavedBindings saved(m_ctx);
-    if (idle) {
+    if (room) {
+        const uint64_t n = ++m_frame;
+        const int in = static_cast<int>(n % kIn), out = static_cast<int>(n % kOut);
         ID3D11Texture2D* flowTex = nullptr;
-        if (!estimate && flow && flowW && flowH && Fit(m_flow, flowW, flowH, DXGI_FORMAT_R16G16B16A16_FLOAT, false, "flow")) flowTex = m_flow.d3d11;
+        if (!estimate && flow && flowW && flowH && Fit(m_flow[in], flowW, flowH, DXGI_FORMAT_R16G16B16A16_FLOAT, false, in ? "second flow" : "flow")) flowTex = m_flow[in].d3d11;
         ID3D11ShaderResourceView* frame = saved.srvs[0];   // the NIS pass's own view of the frame
         m_ctx->CSSetShader(m_grab, nullptr, 0);
         m_ctx->CSSetShaderResources(0, 1, &frame);
-        m_ctx->CSSetUnorderedAccessViews(0, 1, &m_inUav, nullptr);
+        m_ctx->CSSetUnorderedAccessViews(0, 1, &m_inUav[in], nullptr);
         m_ctx->Dispatch((pass.inW + 7) / 8, (pass.inH + 7) / 8, 1);
         ID3D11ShaderResourceView* noSrv = nullptr; ID3D11UnorderedAccessView* noUav = nullptr;
         m_ctx->CSSetShaderResources(0, 1, &noSrv); m_ctx->CSSetUnorderedAccessViews(0, 1, &noUav, nullptr);
         if (flowTex) m_ctx->CopyResource(flowTex, flow);
-        const uint64_t n = ++m_frame;
         m_ctx4->Signal(m_copied.d3d11, n);
         m_ctx->Flush();   // the engine's queue waits for this signal: hand it to the GPU now
-        Shared& target = m_out[n % 2];
-        if (m_engine->Run(m_in.d3d12, pass.inW, pass.inH, inFmt, target.d3d12, pass.outW, pass.outH, outFmt, flowTex ? m_flow.d3d12 : nullptr, m_flow.w, m_flow.h,
-                          flowUnit, motionFraction, estimate, preset, sharpen, m_pendingReset, m_copied.d3d12, n, m_done.d3d12, n)) {
-            m_holds[n % 2] = n;
-            m_pendingReset = false;
-        } else {
-            m_holds[n % 2] = 0;
-            m_ctx4->Signal(m_done.d3d11, n);   // nothing was queued for this frame: mark it finished so the next one is not held back
-            if (m_handoff == Handoff::Wait) return false;
-        }
+        // The engine signals "done" = n on its own queue in every case (after the frames before it), also when it could not run this one.
+        const bool ran = m_engine->Run(m_in[in].d3d12, pass.inW, pass.inH, inFmt, m_out[out].d3d12, pass.outW, pass.outH, outFmt,
+                                       flowTex ? m_flow[in].d3d12 : nullptr, m_flow[in].w, m_flow[in].h, flowUnit, motionFraction, estimate, preset, sharpen,
+                                       m_pendingReset, m_copied.d3d12, n, m_done.d3d12, n);
+        m_holds[out] = ran ? n : 0;
+        if (ran) m_pendingReset = false;
         if (m_handoff == Handoff::Wait) {
-            m_ctx4->Wait(m_done.d3d11, n);   // a GPU wait: Lossless Scaling's queue holds until DLSS has written the picture
-            m_ctx->CopyResource(pass.out, target.d3d11);
+            if (!ran) return false;
+            m_ctx4->Wait(m_done.d3d11, n);   // a GPU wait: Lossless Scaling's queue holds until the picture is written
+            m_ctx->CopyResource(pass.out, m_out[out].d3d11);
             return true;
         }
+    } else {
+        ++m_skipped;
     }
-    Probe(m_frame ? m_frame - 1 : 0, idle);
+    // The newest picture the engine has finished (never one it is writing: those are the kIn at most after it, in other textures).
+    const uint64_t newest = m_done.d3d11->GetCompletedValue();
+    Probe(newest, room);
+    if ((m_passes % 3000) == 0)
+        Log("%s upscaler: %llu passes, %llu frames not handed over (the engine had %d already), %llu pictures shown twice", kUpscalerName,
+            (unsigned long long)m_passes, (unsigned long long)m_skipped, kIn, (unsigned long long)m_repeats);
     if (m_handoff == Handoff::Observe) return false;
-    if (m_handoff == Handoff::AtPresent) {   // NIS runs; the picture goes over its output at Present
-        const uint64_t ready = m_frame ? m_frame - 1 : 0;
-        m_atPresent = ready && m_holds[ready % 2] == ready ? ready : 0;
-        return false;
-    }
-    // Late: the picture of the frame before the newest handed over, always finished (a frame is handed over only once the one before is
-    // done) and in the texture DLSS is not writing. If the engine was still busy, that repeats the last picture and this frame is skipped.
-    const uint64_t shown = m_frame ? m_frame - 1 : 0;
-    if (!shown || m_holds[shown % 2] != shown) return false;   // nothing finished yet: NIS this once
-    m_ctx->CopyResource(pass.out, m_out[shown % 2].d3d11);
+    const bool ready = newest && m_holds[newest % kOut] == newest;
+    if (m_handoff == Handoff::AtPresent) { m_atPresent = ready ? newest : 0; return false; }   // NIS runs; the picture goes over it at Present
+    if (!ready) return false;   // nothing finished yet: NIS this once
+    if (newest == m_lastShown) ++m_repeats;
+    m_lastShown = newest;
+    m_ctx->CopyResource(pass.out, m_out[newest % kOut].d3d11);
     return true;
 }
 
@@ -265,8 +289,8 @@ void ScalerLink::PresentCopy(IDXGISwapChain* sc) {
     if (FAILED(sc->GetBuffer(0, IID_PPV_ARGS(&back)))) return;
     ID3D11Device* dev = nullptr; back->GetDevice(&dev);
     D3D11_TEXTURE2D_DESC d{}; back->GetDesc(&d);
-    const Shared& picture = m_out[m_atPresent % 2];
-    if (dev == m_dev && d.Width == picture.w && d.Height == picture.h && m_holds[m_atPresent % 2] == m_atPresent) {
+    const Shared& picture = m_out[m_atPresent % kOut];
+    if (dev == m_dev && d.Width == picture.w && d.Height == picture.h && m_holds[m_atPresent % kOut] == m_atPresent) {
         m_ctx->CopyResource(back, picture.d3d11);
         if (++m_copiedAtPresent == 1) Log("%s upscaler: first picture copied into the back buffer at Present", kUpscalerName);
         m_atPresent = 0;
@@ -278,11 +302,11 @@ void ScalerLink::PresentCopy(IDXGISwapChain* sc) {
 // Once per link, a while in: the average brightness (0-255) and the share of pure black pixels of the frame DLSS was given and the picture it
 // made, read back without waiting (the copies are mapped only once the GPU has finished them).
 void ScalerLink::Probe(uint64_t shown, bool inFresh) {
-    if (m_probeState == 2 || !shown || m_holds[shown % 2] != shown) return;
+    if (m_probeState == 2 || !shown || m_holds[shown % kOut] != shown) return;
     auto bytes8 = [](DXGI_FORMAT f) { return f == DXGI_FORMAT_R8G8B8A8_UNORM || f == DXGI_FORMAT_B8G8R8A8_UNORM || f == DXGI_FORMAT_B8G8R8X8_UNORM; };
     if (m_probeState == 0) {
         if (m_frame < 120 || !inFresh) return;
-        const Shared* src[2] = { &m_in, &m_out[shown % 2] };
+        const Shared* src[2] = { &m_in[m_frame % kIn], &m_out[shown % kOut] };
         for (int i = 0; i < 2; ++i) {
             D3D11_TEXTURE2D_DESC d{}; src[i]->d3d11->GetDesc(&d);
             d.Usage = D3D11_USAGE_STAGING; d.BindFlags = 0; d.MiscFlags = 0; d.CPUAccessFlags = D3D11_CPU_ACCESS_READ;

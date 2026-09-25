@@ -121,8 +121,14 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
     adapter->Release();
     if (FAILED(hr)) { Fail("D3D12CreateDevice 0x%08x", (unsigned)hr); return false; }
 
-    D3D12_COMMAND_QUEUE_DESC queue{}; queue.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    if (FAILED(m_dev->CreateCommandQueue(&queue, IID_PPV_ARGS(&m_queue)))) { Fail("CreateCommandQueue"); return false; }
+    // High priority: its picture is what goes on the screen, so it goes ahead of the game's own rendering on a busy GPU instead of finishing
+    // after the next frame is due (in Fallout: New Vegas a normal queue left about one frame in six to repeat, 2026-09-24).
+    D3D12_COMMAND_QUEUE_DESC queue{}; queue.Type = D3D12_COMMAND_LIST_TYPE_DIRECT; queue.Priority = D3D12_COMMAND_QUEUE_PRIORITY_HIGH;
+    if (FAILED(m_dev->CreateCommandQueue(&queue, IID_PPV_ARGS(&m_queue)))) {
+        queue.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+        if (FAILED(m_dev->CreateCommandQueue(&queue, IID_PPV_ARGS(&m_queue)))) { Fail("CreateCommandQueue"); return false; }
+        Log("%s upscaler: a high-priority queue was refused; a normal one runs", Name());
+    }
     for (auto*& a : m_alloc) if (FAILED(m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&a)))) { Fail("CreateCommandAllocator"); return false; }
     if (FAILED(m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_alloc[0], nullptr, IID_PPV_ARGS(&m_list)))) { Fail("CreateCommandList"); return false; }
     m_list->Close();
@@ -202,8 +208,12 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
     return true;
 }
 
-void SrEngine::Shutdown() {
-    if (m_queue) WaitIdle();
+bool SrEngine::Shutdown() {
+    if (m_queue && !WaitIdle()) {
+        m_ready = false; m_failed = true; m_error = "the GPU did not finish the upscaler's work; restart Lossless Scaling to use it again";
+        Log("%s upscaler: the GPU did not finish within %lu ms; the engine is left as it is until Lossless Scaling closes", Name(), kIdleWaitMs);
+        return false;
+    }
     if (m_ffx) {
         if (m_ffx->context) m_ffx->fn.DestroyContext(&m_ffx->context, nullptr);
         if (m_ffx->module) FreeLibrary(m_ffx->module);
@@ -222,6 +232,7 @@ void SrEngine::Shutdown() {
     SafeRelease(m_queue); SafeRelease(m_dev);
     for (auto& v : m_slotDone) v = 0;
     m_fenceValue = 0; m_nextSlot = 0; m_inW = m_inH = m_outW = m_outH = 0; m_preset = ~0u; m_ready = false;
+    return true;
 }
 
 ID3D12Resource* SrEngine::OpenSharedTexture(HANDLE h) {
@@ -382,9 +393,11 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
                    ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset, float sharpen, bool reset,
                    ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue) {
     if (!m_ready) return false;
+    // A frame that cannot run is still marked done, on this queue after the frames before it, so "done" only ever moves forward.
+    const auto skip = [&] { if (m_queue && done) m_queue->Signal(done, doneValue); return false; };
     const bool fsr = m_backend == Backend::Fsr;
     const bool fresh = !HasFeature() || inW != m_inW || inH != m_inH || outW != m_outW || outH != m_outH || (!fsr && preset != m_preset);
-    if (!EnsureFeature(inW, inH, outW, outH, preset)) return false;
+    if (!EnsureFeature(inW, inH, outW, outH, preset)) return skip();
     // DLSS writes into a texture of ours and the sharpening pass from there into out; FSR sharpens by itself (its RCAS)
     const bool sharpening = !fsr && sharpen > 0.001f && EnsureSharpenTarget(outW, outH, outFormat);
     LARGE_INTEGER qpcNow, qpcFreq; QueryPerformanceCounter(&qpcNow); QueryPerformanceFrequency(&qpcFreq);
@@ -395,7 +408,7 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     if (estimating && !m_estimatedLast) m_estimator.Forget();   // its frame before is not the one before this
     m_estimatedLast = estimating;
     const int slot = TakeSlot();
-    if (slot < 0) return false;
+    if (slot < 0) return skip();
     ReadTime(slot);
     m_estimator.ReadStats(slot);
 

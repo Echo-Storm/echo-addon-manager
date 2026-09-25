@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed: switching an upscaler off while a game was scaling could freeze Lossless Scaling** (Fallout: New Vegas with frame generation,
+  2026-09-24: Windows closed it as not responding). The upscaler tore itself down while still subscribed to Lossless Scaling's device events
+  and holding its frame lock; the teardown waited on the GPU, and Lossless Scaling's next device event waited on that lock. Now the addon lets
+  go of Lossless Scaling first (dispatch callback, device events), releases the engine's queue from any wait for a frame that never arrived,
+  never waits for ever in NVIDIA's or AMD's teardown (a stuck GPU leaves it for Lossless Scaling's exit and says so), and stays loaded until
+  Lossless Scaling closes once its engine has run, as Neural Rendering does. The log times the stop. The test host switches each upscaler off
+  while it runs and makes a new device after it (`unload=1`, scenarios `scaler_unload`, `fsr_unload`).
+- **Fewer repeated frames on a busy GPU.** In New Vegas up to one frame in six showed the picture before again (a judder that also reads as
+  softness), because the upscaler's GPU work queued behind the game's and was not finished when the next frame came. The engine's queue now
+  has high priority, and up to two frames may be with the engine at once (two frame buffers, three pictures in turn), so a late frame is
+  shown late instead of skipped. The log counts frames not handed over and pictures shown twice. On the test host's sliding picture both
+  upscalers land a little closer to the ideal picture (DLSS 16.6 instead of 18.4 levels, FSR 3 13.9 instead of 14.2).
+
 ## 0.9.1 (2026-09-24): the upscalers, and a new name
 
 **Echo Addon Manager is now Addon Manager for Lossless Scaling** (LS Addon Manager for short; the author is still Echo-Storm), and the

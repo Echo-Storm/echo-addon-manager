@@ -285,6 +285,14 @@ def scenario_fsr_move(ctx, res, text, frame):
               '%s against %s levels without' % (err, none))
 
 
+def scenario_unload(ctx, res, text, frame):
+    # the manager switches the upscaler off while it runs (AddonShutdown, FreeLibrary), then Lossless Scaling makes a new device: that hung once
+    stop = re.search(r'upscaler stopped: the link in (\d+) ms, the engine in (\d+) ms', text)
+    res.check('the upscaler stops promptly when switched off', stop is not None and int(stop.group(1)) + int(stop.group(2)) < 2000, stop.group(0) if stop else 'no stop line')
+    un = re.search(r'\[check-unload\].*', text)
+    res.check('...its DLL stays loaded and a new D3D11 device is made after it', un is not None and 'still loaded' in un.group(0) and 'was made' in un.group(0), un.group(0) if un else 'no unload line')
+
+
 def scenario_pair(ctx, res, text, frame):
     # both addons loaded and switched on: the upscaler works beside Neural Rendering, which keeps its frames
     res.check('neither steps aside', 'BOTH ON' in text)
@@ -321,6 +329,8 @@ SCENARIOS = [
     ('fsr_scaler', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_fsr),   # the FSR 3 Upscaler, frame generation off
     ('fsr_move_none', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_fsr_move_none),
     ('fsr_move', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_fsr_move),
+    ('scaler_unload', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'unload=1'], scenario_unload),   # switched off while running, then a new device
+    ('fsr_unload', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'unload=1'], scenario_unload),
     ('pair', ['second=DLSS4DLAA.dll'], scenario_pair),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'snapshotOnStart=1', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),

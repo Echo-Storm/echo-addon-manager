@@ -611,6 +611,14 @@ void NoteRealFrame() {
 std::atomic<uint32_t> g_scaleInW{ 0 }, g_scaleInH{ 0 }, g_scaleOutW{ 0 }, g_scaleOutH{ 0 };
 
 void StartEngineFor(const LUID& card) {   // the engine's own device only: safe on a thread of its own
+    // Once NVIDIA's or AMD's runtime has run in this process, this DLL stays loaded until Lossless Scaling closes: their code keeps state
+    // that points into ours (NGX's library is linked in), and a teardown left for the exit must not find freed code. Switching the addon off
+    // still stops everything; a newer build of it then takes effect after Lossless Scaling restarts, as with Neural Rendering's Present hook.
+    static bool pinned = false;
+    if (!pinned) {
+        HMODULE self = nullptr;
+        pinned = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, reinterpret_cast<LPCWSTR>(&StartEngineFor), &self) != 0;
+    }
     g_srStarting = true;
     SetStatus(std::string(kUpscalerName) + ": starting...");
     std::thread([card] {
@@ -716,11 +724,16 @@ ScalerView GetScalerView() {
 }
 
 void StopScaler() {
+    LARGE_INTEGER f, a, b, c; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
     for (int i = 0; i < 500 && g_srStarting; ++i) Sleep(10);
-    std::lock_guard<std::mutex> lock(g_frameMutex);
-    g_link.Shutdown();   // releases only (the engine is drained first)
+    std::lock_guard<std::mutex> lock(g_frameMutex);   // nothing else takes it now: the callbacks are gone (AddonShutdown)
+    g_link.Shutdown();   // unblocks the engine's queue (see ScalerLink::Unblock), drains it, releases the shared textures and fences
     g_linkDevice = nullptr;
-    g_sr.Shutdown();     // our own device
+    QueryPerformanceCounter(&b);
+    const bool clean = g_sr.Shutdown();   // our own device (and NVIDIA's or AMD's runtime); left for the process's exit if the GPU is stuck
+    QueryPerformanceCounter(&c);
+    Log("%s upscaler stopped: the link in %.0f ms, the engine in %.0f ms%s", kUpscalerName, (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart,
+        (c.QuadPart - b.QuadPart) * 1000.0 / f.QuadPart, clean ? "" : " (the GPU had not finished: its teardown is left for Lossless Scaling's exit)");
 }
 
 bool OnPass(uint32_t x, uint32_t y, uint32_t z, void*) {

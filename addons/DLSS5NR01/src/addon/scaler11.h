@@ -6,8 +6,9 @@
 //
 // DLSS itself runs on a D3D12 device of our own (SrEngine, engine/sr_engine.h): running NVIDIA's D3D11 DLSS on Lossless Scaling's device
 // crashed it. On Lossless Scaling's context this side only copies the frame (and frame generation's flow) into shared textures, signals a
-// shared fence, and copies DLSS's newest finished picture into the pass's output. By default that is the frame before's: Lossless
-// Scaling's queue never waits on the engine's, and the CPU never waits either (Handoff::Late).
+// shared fence, and copies the newest finished picture into the pass's output: usually the frame before's. Lossless Scaling's queue never
+// waits on the engine's, and the CPU never waits either (Handoff::Late). Up to two frames may be with the engine at once (two frame buffers,
+// three pictures in turn), so a frame that finishes late on a busy GPU delays the picture a little instead of being skipped.
 #pragma once
 #include <d3d11_4.h>
 #include <d3d12.h>
@@ -28,7 +29,10 @@ public:
     using LogFn = std::function<void(const char*)>;
     // On Lossless Scaling's render thread: the shared fences between its device and the engine's.
     bool Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, SrEngine* engine, LogFn log);
-    void Shutdown();
+    void Shutdown();   // Unblock, drain, release
+    // The engine's queue waits on the GPU for "copied" before each frame. Should a frame's signal never have reached the GPU (a device lost
+    // or replaced mid-frame), that wait would hold the queue, and every drain after it, for good: signal it from the CPU up to the newest frame.
+    void Unblock();
     // Before letting go of a device Lossless Scaling has replaced: why it went (hung, reset, removed, or not at all), and how far the two
     // fences had got, so the log says whether a wait was left unanswered.
     void ReportDeviceChange();
@@ -67,11 +71,13 @@ private:
     // The frame is read into m_in by a small compute pass through the NIS pass's own t0 view, not copied: with frame generation off that
     // frame is a keyed-mutex texture shared from Lossless Scaling's capture device, and CopyResource from it gave all black (2026-09-24).
     ID3D11ComputeShader* m_grab = nullptr;
-    ID3D11UnorderedAccessView* m_inUav = nullptr;
-    Shared m_in, m_out[2], m_flow;   // frame n's picture goes to m_out[n % 2], so the one before stays readable while DLSS writes
-    Fence m_copied, m_done;
+    static const int kIn = 2, kOut = 3;   // frames with the engine at most; pictures in turn (the one shown is never one being written)
+    ID3D11UnorderedAccessView* m_inUav[kIn] = {};
+    Shared m_in[kIn], m_out[kOut], m_flow[kIn];   // frame n reads m_in[n % kIn] (and m_flow[n % kIn]) and writes m_out[n % kOut]
+    Fence m_copied, m_done;           // "done" reaches n when the engine has finished frame n (its queue does them in order)
     uint64_t m_frame = 0;             // the newest frame handed to the engine
-    uint64_t m_holds[2] = {};         // the frame whose finished picture each m_out holds (0: none)
+    uint64_t m_holds[kOut] = {};      // the frame whose finished picture each m_out holds (0: none)
+    uint64_t m_passes = 0, m_skipped = 0, m_repeats = 0, m_lastShown = 0;   // for the log: passes, frames not handed over, pictures shown twice
     Handoff m_handoff = Handoff::Late;
     bool m_pendingReset = false;      // a history reset asked for while the engine was busy: it goes with the next frame handed over
     uint64_t m_atPresent = 0;         // AtPresent: the frame whose picture PresentCopy puts in the back buffer (0: none)

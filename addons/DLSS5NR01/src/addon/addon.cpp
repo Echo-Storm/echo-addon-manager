@@ -144,13 +144,16 @@ EAM_EXPORT void AddonInitialize(IHost* host, ImGuiContext* ctx, void* allocFunc,
 EAM_EXPORT void AddonShutdown() {
     Log("shutting down");
     g_off = true;
-    ReleaseFrames();
-    if (kScalerAddon) StopScaler();
+    // First let go of Lossless Scaling: no pass or device event reaches the addon while it tears down. (The upscaler's teardown used to come
+    // first, holding the frame lock; if it stalled, Lossless Scaling's next device event waited on that lock for ever: a hang, 2026-09-24.)
+    // The manager waits for a pass already in the callback before the call returns.
     if (g_host) {
         g_host->SetPreDispatchCallback(nullptr, nullptr);
         g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent);
         g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, OnDeviceEvent);
     }
+    ReleaseFrames();
+    if (kScalerAddon) StopScaler();
     PresentHook::Uninstall();
     DropHudSnapshot();
     for (int i = 0; i < 3000 && g_engineStarting; ++i) Sleep(10);   // a model that is loading is let finish

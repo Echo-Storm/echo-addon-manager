@@ -26,7 +26,9 @@ public:
     // On the card with this LUID; the runtime is looked for in runtimeDir (NVIDIA's nvngx_dlss.dll, or AMD's amd_fidelityfx_dx12.dll).
     // Touches no device but its own: may run on any thread.
     bool Init(const LUID& card, const std::wstring& dataPath, const std::wstring& runtimeDir, LogFn log, Backend backend = Backend::Dlss);
-    void Shutdown();
+    // False when the GPU had not finished within the wait: then nothing is torn down (NVIDIA's DLSS teardown can wait on a stuck queue for
+    // ever); the device and runtime are left for the process's exit, and the engine stays failed (the DLL is pinned, see StartEngineFor).
+    bool Shutdown();
     bool IsReady() const { return m_ready; }
     bool IsFailed() const { return m_failed; }
     const std::string& LastError() const { return m_error; }
@@ -39,7 +41,8 @@ public:
     // generation's flow (COMMON, RGBA16F) or null. The queue waits for copied >= copiedValue first and signals done = doneValue after.
     // motionFraction: the part of a real frame between two presented frames. sharpen: contrast-adaptive sharpening of DLSS's picture (0 = off;
     // DLSS 4 has none of its own, and Lossless Scaling's NIS does sharpen). estimate: measure the motion from the frames (flow is then
-    // ignored). False when nothing was queued (done is then never signalled).
+    // ignored). False when the frame could not run; done = doneValue is signalled on the engine's queue either way (after the frames
+    // before it), so it only ever moves forward.
     bool Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT inFormat, ID3D12Resource* out, uint32_t outW, uint32_t outH, DXGI_FORMAT outFormat,
              ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset, float sharpen, bool reset,
              ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue);

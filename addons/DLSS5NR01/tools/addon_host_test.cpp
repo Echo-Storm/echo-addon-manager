@@ -16,6 +16,7 @@
 #include <cmath>
 #include <chrono>
 #include <thread>
+#include <atomic>
 #include "imgui.h"
 #include "eam/addon_sdk.h"
 #include "eam/widgets.h"
@@ -173,7 +174,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -452,6 +453,28 @@ int main(int argc, char** argv) {
     }
     Shut();
     if (Shut2) Shut2();
+    for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "unload=1")) {
+        // What the manager does when the addon is switched off while Lossless Scaling runs: AddonShutdown, then FreeLibrary. Then Lossless
+        // Scaling makes a new D3D11 device (it does when scaling restarts). With DLSS's NGX library once started, that hung Lossless Scaling
+        // (2026-09-24) until the addon's DLL was kept loaded. A watchdog reports a hang instead of waiting for ever.
+        FreeLibrary(h);
+        char loadedName[MAX_PATH] = {};
+        const bool stillLoaded = GetModuleFileNameA(h, loadedName, MAX_PATH) != 0;   // still mapped after FreeLibrary: pinned
+        std::atomic<bool> made{ false };
+        const auto t0 = std::chrono::steady_clock::now();
+        std::thread([&made] {
+            ID3D11Device* d = nullptr; ID3D11DeviceContext* c = nullptr;
+            D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &d, nullptr, &c);
+            if (c) c->Release();
+            if (d) d->Release();
+            made = true;
+        }).detach();
+        while (!made && std::chrono::steady_clock::now() - t0 < std::chrono::seconds(10)) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        printf("[check-unload] addon DLL %s after FreeLibrary; a new D3D11 device %s (%.0f ms)\n", stillLoaded ? "still loaded (pinned)" : "unloaded",
+               made ? "was made" : "HUNG", ms);
+        if (!made) { fflush(stdout); ExitProcess(3); }
+    }
     if (shotMode) shot.Shutdown();
     sc->Release(); DestroyWindow(hwnd);
     ImGui::DestroyContext(ctx);
