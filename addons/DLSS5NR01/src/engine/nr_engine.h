@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 #include "forwarder/nr_api.h"
+#include "engine/flow_estimator.h"
 
 // The settings. What the model listens to was measured one knob at a time (docs/dlssnr-knobs.md): all of it is read at every run, and only the
 // working scale needs the feature made again.
@@ -28,7 +29,8 @@ struct NrParams {
     float localStructure = 1.0f;  // not limited; negative works, above 10 is garbage
     float localTone = 1.0f;       // not limited
     float skinStructure = -1.0f;  // -1 = the same as local structure (the model's own default)
-    bool useFlow = true;          // LSFG's optical flow as the model's motion vectors
+    bool useFlow = true;          // motion for the model and the compose (off: none, to compare)
+    uint32_t modelMotion = 0;     // the model's motion vectors: 0 measured from the frames (FlowEstimator, per pixel), 1 LSFG's optical flow
     float flowUnit = 2.0f;        // one flow unit is 1/flowUnit of a flow-texture pixel (measured 2.0 on Lossless Scaling 3.x)
 
     // the model's side
@@ -116,6 +118,8 @@ public:
     void Log(const char* fmt, ...);   // also used by NGX's log callback
 
 private:
+    FlowEstimator m_estimator;            // the model's motion measured from the proxy (NrParams::modelMotion 0)
+    bool m_estimatedLast = false; uint64_t m_estimates = 0;
     static const int kSlots = 4;          // command allocators in rotation
     static const int kPassDescriptors = 6, kPasses = 3;   // per pass: t0..t3, u0, u1; the passes: shrink, motion, delta
     static const int kDescriptorsPerSlot = kPassDescriptors * kPasses;

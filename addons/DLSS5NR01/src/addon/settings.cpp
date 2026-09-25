@@ -44,6 +44,7 @@ const UIntSetting kUInts[] = {
     { "style",     &NrParams::style,       0, 2, true },
     { "autoMask",  &NrParams::useAutoMask, 0, 1, true },
     { "debugView", &NrParams::debugView,   0, 5, false },
+    { "modelMotion", &NrParams::modelMotion, 0, 1, false },
 };
 
 float Limit(float v, const FloatSetting& s) { return std::clamp(v, s.lo, s.hi); }

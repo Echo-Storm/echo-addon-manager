@@ -293,6 +293,16 @@ void DrawPanel() {
         changed |= ImGui::Checkbox("Use Lossless Scaling's motion data", &c.p.useFlow);
         Tip("Feeds the motion Lossless Scaling's frame generation measures (its optical flow) to the model as motion vectors, and uses it to slide the enhancement onto the generated in-between frames. Turn it off only to test without motion.");
         { const NrStats& fs = g_engine.Stats(); ImGui::SameLine(); if (fs.hasFlow) ImGui::TextDisabled("(flow %ux%u)", fs.flowW, fs.flowH); else ImGui::TextDisabled("(no flow texture seen yet)"); }
+        {
+            int mm = static_cast<int>(c.p.modelMotion); const char* mms[] = { "Measured from the frames (per pixel)", "Lossless Scaling's flow (coarse)" };
+            if (!c.p.useFlow) ImGui::BeginDisabled();
+            if (ImGui::Combo("The model's motion", &mm, mms, 2)) { c.p.modelMotion = static_cast<uint32_t>(mm); changed = true; }
+            if (!c.p.useFlow) ImGui::EndDisabled();
+            Tip("Where the model's motion vectors come from. Measured from the frames (the default): the addon compares each frame the model sees with the one "
+                "before and finds how every part moved, per pixel and for this very frame, so the model's output holds together in motion with less smear. "
+                "Lossless Scaling's flow: the motion its frame generation measures, a quarter of the frame's size. Either way the enhancement is slid onto the "
+                "generated frames with Lossless Scaling's flow. The measurement costs a fraction of a millisecond at the model's working size.");
+        }
         if (!c.p.useFlow) ImGui::BeginDisabled();
         if (ImGui::Checkbox("Use this frame's motion (wait for Lossless Scaling's flow)", &c.freshFlow)) { changed = true; tapChanged = true; }
         Tip("On: the model runs a moment later in each frame, once Lossless Scaling has measured how this frame moved, so its motion vectors are current. "

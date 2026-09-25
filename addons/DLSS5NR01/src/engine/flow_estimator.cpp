@@ -268,15 +268,27 @@ bool FlowEstimator::Init(ID3D12Device* dev, LogFn log) {
     return true;
 }
 
-void FlowEstimator::Release() {
-    for (auto& set : m_luma) for (auto*& t : set) SafeRelease(t);
-    for (auto*& t : m_grid) SafeRelease(t);
-    SafeRelease(m_filtered);
+void FlowEstimator::Release(uint64_t retireAt) {
+    auto drop = [&](ID3D12Resource*& t) {
+        if (!t) return;
+        if (retireAt) m_retired.push_back({ t, retireAt }); else t->Release();
+        t = nullptr;
+    };
+    for (auto& set : m_luma) for (auto*& t : set) drop(t);
+    for (auto*& t : m_grid) drop(t);
+    drop(m_filtered);
     m_w = m_h = 0; m_levels = 0; m_havePrevious = false;
+}
+
+void FlowEstimator::Collect(uint64_t completed) {
+    for (size_t i = 0; i < m_retired.size();)
+        if (m_retired[i].at <= completed) { m_retired[i].texture->Release(); m_retired[i] = m_retired.back(); m_retired.pop_back(); } else ++i;
 }
 
 void FlowEstimator::Shutdown() {
     Release();
+    for (const Retired& r : m_retired) r.texture->Release();   // the caller waited for the GPU
+    m_retired.clear();
     for (auto*& p : m_pso) SafeRelease(p);
     SafeRelease(m_root); SafeRelease(m_heap); SafeRelease(m_stats); SafeRelease(m_statsReadback);
     SafeRelease(m_stamps); SafeRelease(m_stampReadback);
@@ -285,9 +297,9 @@ void FlowEstimator::Shutdown() {
     m_dev = nullptr;
 }
 
-bool FlowEstimator::Ensure(uint32_t w, uint32_t h) {
+bool FlowEstimator::Ensure(uint32_t w, uint32_t h, uint64_t retireAt) {
     if (!NeedsResize(w, h)) return true;
-    Release();
+    Release(retireAt);
     // sizes: the frame's, then halved while the next is still at least 64x32 (at most kMaxLevels; at least down to half size)
     m_lw[0] = w; m_lh[0] = h; m_levels = 1;
     while (m_levels < kMaxLevels) {

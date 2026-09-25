@@ -89,12 +89,13 @@ bool NrEngine::Shutdown() {
     SafeRelease(m_buildList); SafeRelease(m_buildAlloc); SafeRelease(m_buildFence); SafeRelease(m_buildQueue);
     if (m_buildEvent) { CloseHandle(m_buildEvent); m_buildEvent = nullptr; }
     m_buildFenceValue = 0;
-    if (m_queue && !WaitIdle()) {
+    if (m_queue && !WaitIdle()) {   // (the estimator's textures stay too: the GPU may still use them)
         m_ready = false; m_failed = true;
         Log("NrEngine: the GPU did not finish the model's work; the engine is left as it is until Lossless Scaling closes");
         return false;
     }
     ReleaseScratch();
+    m_estimator.Shutdown(); m_estimatedLast = false; m_estimates = 0;
     dlaa::Shutdown();
     if (m_caps) { NVSDK_NGX_D3D12_Shutdown1(m_dev); m_caps = nullptr; }
     if (m_forwarder) { FreeLibrary(m_forwarder); m_forwarder = nullptr; }
@@ -239,6 +240,9 @@ bool NrEngine::CreatePipelines() {
     };
     if (!build(kNrModelHlsl, "CSDown", &m_psoShrink) || !build(kNrModelHlsl, "CSFlowToMvec", &m_psoMotion) ||
         !build(kNrModelHlsl, "CSDelta", &m_psoDelta) || !build(kNrSmoothHlsl, "CSDeltaSmooth", &m_psoDeltaSmooth)) return false;
+    static_assert(FlowEstimator::kSlots == kSlots, "the estimator reads its statistics back per engine slot");
+    if (m_estimator.Init(m_dev, [this](const char* m) { Log("%s", m); })) m_estimator.SetTimestampFrequency(m_timestampFreq);
+    else Log("NrEngine: the motion estimator could not start; the model gets LSFG's flow");
 
     // a block of descriptors per allocator slot, so a list still on the GPU never sees its descriptors rewritten
     D3D12_DESCRIPTOR_HEAP_DESC heap{};
@@ -526,6 +530,8 @@ bool NrEngine::Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12
     if (slot < 0) { Log("NrEngine: the GPU is still busy with a run from %d frames ago: this frame is skipped", kSlots); return false; }
     ReadTimes(slot);
 
+    m_estimator.Collect(m_fence->GetCompletedValue());   // textures of an earlier working size, once no list uses them
+    m_estimator.ReadStats(slot);
     const int passes = m_model == Model::Dlaa ? 1 : std::clamp(static_cast<int>(m_params.passes), 1, 4);
     const bool smooth = m_params.deltaSmooth > 0.001f;
     const bool historyUsable = m_historyValid && !reset && !m_resetHistory;
@@ -571,9 +577,22 @@ bool NrEngine::Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12
     dispatch(m_psoShrink, kShrink, PassConstants{ m_ww, m_wh, m_w, m_h });
     Transition(m_proxy, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-    // 2. LSFG's flow as motion vectors in working-size pixels (zero without flow). One flow unit is W / (flowUnit * flow width) frame pixels
-    //    (measured: units of a texture flowUnit times the flow's size), and a frame pixel is ww / W working pixels.
-    {
+    // 2. the model's motion vectors, in working-size pixels. Measured from the proxy itself (the default: per pixel, this frame's own, the
+    //    picture the model sees), with its textures following a new working size without a wait (the old ones retire once the GPU is past
+    //    them). Or LSFG's flow (below). The compose keeps using LSFG's flow for the generated frames either way.
+    const bool measure = m_params.useFlow && m_params.modelMotion == 0 && m_estimator.IsReady() &&
+                         (!m_estimator.NeedsResize(m_ww, m_wh) || m_estimator.Ensure(m_ww, m_wh, m_fenceValue));
+    if (measure) {
+        if (!m_estimatedLast) m_estimator.Forget();   // its frame before is not the one before this
+        Transition(m_mvec, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        m_estimator.Record(m_list, slot, m_proxy, DXGI_FORMAT_R8G8B8A8_UNORM, m_mvec, nullptr);
+        Transition(m_mvec, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        bindOurs();   // the estimator binds its own heap and root signature
+    }
+    m_estimatedLast = measure;
+    // LSFG's flow as motion vectors in working-size pixels (zero without flow). One flow unit is W / (flowUnit * flow width) frame pixels
+    // (measured: units of a texture flowUnit times the flow's size), and a frame pixel is ww / W working pixels.
+    if (!measure) {
         const bool withFlow = m_flow && m_params.useFlow && m_flowW && m_flowH;
         const float unit = m_params.flowUnit > 0.1f ? m_params.flowUnit : 2.0f;
         PassConstants c{ m_ww, m_wh, m_flowW, m_flowH, withFlow ? 1u : 0u };
@@ -638,5 +657,13 @@ bool NrEngine::Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12
     m_slotDone[slot] = m_fenceValue;
     LARGE_INTEGER now; QueryPerformanceCounter(&now); m_slotSubmitQpc[slot] = now.QuadPart;
     ++m_stats.frames;
+    if (measure && (++m_estimates == 60 || m_estimates % 1200 == 0)) {   // what the estimate found (a check that it follows the picture)
+        double x = 0, y = 0, length = 0, cost = 0, distrust = 0; uint64_t frames = 0; double stage[4];
+        if (m_estimator.TakeAverages(x, y, length, cost, distrust, frames))
+            Log("motion estimator (the model's motion, %ux%u): over %llu frames, average vector (%.2f, %.2f) px, average length %.2f px, match cost %.4f",
+                m_ww, m_wh, (unsigned long long)frames, x, y, length, cost);
+        if (m_estimator.TakeStageTimes(stage))
+            Log("motion estimator: stages %.3f ms pyramid, %.3f search, %.3f median, %.3f every pixel", stage[0], stage[1], stage[2], stage[3]);
+    }
     return evalResult == 1;
 }

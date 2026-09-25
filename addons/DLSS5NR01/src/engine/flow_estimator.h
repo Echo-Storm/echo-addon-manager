@@ -19,6 +19,7 @@
 #include <d3d12.h>
 #include <cstdint>
 #include <functional>
+#include <vector>
 
 class FlowEstimator {
 public:
@@ -29,8 +30,10 @@ public:
     bool IsReady() const { return m_pso[0] != nullptr; }
 
     bool NeedsResize(uint32_t w, uint32_t h) const { return w != m_w || h != m_h; }
-    // Makes the pyramids and grids for frames of this size (the GPU must not be using the old ones: the engine waits first).
-    bool Ensure(uint32_t w, uint32_t h);
+    // Makes the pyramids and grids for frames of this size. retireAt 0: the GPU is not using the old ones (the caller waited). Otherwise the
+    // old textures are kept until the caller's fence passes retireAt (Collect), so the frame path never waits for a size change.
+    bool Ensure(uint32_t w, uint32_t h, uint64_t retireAt = 0);
+    void Collect(uint64_t completed);   // frees retired textures whose work the GPU has finished
     void Forget() { m_havePrevious = false; }   // the next frame has no frame before (a cut)
 
     // Records the passes. frame: the game's frame (readable, NON_PIXEL_SHADER_RESOURCE; RGBA8); motion: RG16F at the frame's size, in
@@ -53,7 +56,9 @@ private:
     Pass MakePass(int slot, int& index, ID3D12Resource* const srv[4], const DXGI_FORMAT srvFormat[4], ID3D12Resource* uav, DXGI_FORMAT uavFormat,
                   ID3D12Resource* uav2 = nullptr, DXGI_FORMAT uav2Format = DXGI_FORMAT_R8_UNORM);
     void Barrier(ID3D12GraphicsCommandList* list, ID3D12Resource* r, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to);
-    void Release();
+    void Release(uint64_t retireAt = 0);
+    struct Retired { ID3D12Resource* texture; uint64_t at; };
+    std::vector<Retired> m_retired;
     void Log(const char* fmt, ...);
 
     LogFn m_log;
