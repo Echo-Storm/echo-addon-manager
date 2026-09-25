@@ -21,6 +21,14 @@
     generation can present up to 20 frames per real one, which a count alone would take for frame generation off); the Present hook is
     tried once per device from the other passes, not on every pass (a failure would have filled the log); a presented frame whose format
     the model cannot take (HDR) says so on the status line instead of doing nothing.
+  - **It no longer waits for the model in front of every frame.** Measured in a game (4K, frame generation off): Lossless Scaling's frame sat
+    ~5.5 ms on the GPU waiting for its own result before it could be shown, and 20-50% of frames missed the 60 Hz refresh. Now the compose
+    takes the newest result that is ready (usually the frame before's) and moves it along that frame's motion vectors, which the run hands
+    over beside the result, to where the picture is now. Test host: the wait went from 4-5.5 ms to 0.02 ms per present. The old way stays as
+    *Wait for each frame's own result* (`presentWait`, off); scenario `present_wait` keeps it tested.
+  - The progress lines count presented frames in present mode (they were written on every frame: 1.8 MB in two minutes).
+- **Neural Rendering times Lossless Scaling's side on the GPU**: the hand-over copy, the compose pass, and how long Lossless Scaling's queue
+  waits for the model (D3D11 timestamps, read back a few frames late, never stalling). Logged at 60 frames and every 1200.
 - **Neural Rendering's model gets the motion measured from the frames** (the upscalers' estimator, run on the model's own input at its working
   size), per pixel and for the frame itself, instead of frame generation's quarter-size flow; the compose still slides the result onto
   generated frames with that flow. *The model's motion* chooses (measured, the default, or frame generation's). A working-size change

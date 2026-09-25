@@ -90,6 +90,7 @@ void ReleaseDecision(TapDecision& d) {
 }
 
 bool g_presentMode = false;   // frame generation off: the model takes the presented frame (see PresentTap)
+bool g_presentWait = false;   // ...and each compose waits for its own frame's result (Config::presentWait)
 uint64_t g_tapsSeen = 0, g_presentIndex = 0, g_presentOwn = 0, g_presentEarlier = 0, g_tapSeenAtMs = 0;
 int g_presentsWithoutTap = 0;
 ID3D11Device* g_presentHookTriedOn = nullptr;   // the device the Present hook was last tried from (once per device, not every pass)
@@ -225,6 +226,7 @@ void Tap(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     const float ceiling = p.workingScale;
     if (autoSettings.on) { std::lock_guard<std::mutex> lock(g_autoMutex); if (g_auto.Scale() > 0) p.workingScale = std::min(ceiling, g_auto.Scale()); }
     g_bridge.SetLsGpuPriority(lsFirst ? 7 : 0);
+    g_bridge.ShareMotion(false);   // the generated frames are moved with LSFG's flow
     // Lossless Scaling's pass may have the frame bound as an input: the copy needs it unbound, and it is put back after
     ID3D11ShaderResourceView* bound[8] = {}; ctx->CSGetShaderResources(0, 8, bound);
     ID3D11ShaderResourceView* none[8] = {}; ctx->CSSetShaderResources(0, 8, none);
@@ -408,7 +410,7 @@ void Present(IDXGISwapChain* sc) {
     ++g_lsPresents;
     ReadHotkeys();
     if ((g_lsPresents & 31u) == 0) FollowFocus();
-    bool presentMode; { std::lock_guard<std::mutex> lock(g_settingsMutex); presentMode = g_config.presentMode; }
+    bool presentMode; { std::lock_guard<std::mutex> lock(g_settingsMutex); presentMode = g_config.presentMode; g_presentWait = g_config.presentWait; }
     FollowFrameGeneration(presentMode);
     if (g_presentMode) PresentTap(sc);
     if (!g_bridge.IsReady() || !g_compose.IsReady()) return;
@@ -422,9 +424,10 @@ void Present(IDXGISwapChain* sc) {
 // ---- frame generation off: the frame taken at Present
 //
 // Without frame generation Lossless Scaling runs no capture pass, so the model would have nothing to run on. Once presents keep coming with
-// no capture (kQuietPresents), the presented frame itself is handed to the model, just before the compose, and the compose adds that same
-// frame's result, waiting for it on the GPU (as the upscalers do): the picture and its result always match, so nothing needs sliding. The
-// frame is the scaled picture (the screen's size), so the working size is taken as for a frame kPresentWidth wide: the model costs what it
+// no capture (kQuietPresents), the presented frame itself is handed to the model, just before the compose. The compose then adds the newest
+// result that is ready, usually the frame before's, moved along that frame's motion vectors (the run hands them over with the result) to
+// where the picture is now: nothing waits, so the model's time is not added before each frame is shown. With presentWait it adds this same
+// frame's result instead, waiting for it on the GPU: exact, but the model's whole run sits in front of every present. The frame is the scaled picture (the screen's size), so the working size is taken as for a frame kPresentWidth wide: the model costs what it
 // does for the game's frame. When captures come again, the capture path takes over. Each switch starts the bridge afresh (its frame numbers
 // differ: capture counts there, presents here).
 constexpr int kQuietPresents = 20;          // presents without a capture, and at least kQuietMs: frame generation can present up to 20
@@ -454,10 +457,13 @@ void PresentTap(IDXGISwapChain* sc) {   // under g_frameMutex, on the presenting
         p.workingScale = ceiling;
         if (autoSettings.on) { std::lock_guard<std::mutex> lock(g_autoMutex); if (g_auto.Scale() > 0) p.workingScale = std::min(ceiling, g_auto.Scale()); }
         g_bridge.SetLsGpuPriority(lsFirst ? 7 : 0);
+        g_bridge.ShareMotion(!g_presentWait);
         // the scaling pass may have left the buffer bound as its output: unbound for the copy, and put back
         ID3D11UnorderedAccessView* uavs[8] = {}; ctx->CSGetUnorderedAccessViews(0, 8, uavs);
         ID3D11UnorderedAccessView* noUavs[8] = {}; ctx->CSSetUnorderedAccessViews(0, 8, noUavs, nullptr);
-        const bool started = g_bridge.Submit(buffer, nullptr, 0, 0, p, g_resetRequested.exchange(false), ++g_presentIndex, true);
+        // waiting: a frame that comes while the model is still on the one before waits for it on the GPU (each frame gets its own result);
+        // not waiting: it is left out, and the one before's result, moved, stands in
+        const bool started = g_bridge.Submit(buffer, nullptr, 0, 0, p, g_resetRequested.exchange(false), ++g_presentIndex, g_presentWait);
         ctx->CSSetUnorderedAccessViews(0, 8, uavs, nullptr);
         for (ID3D11UnorderedAccessView* v : uavs) if (v) v->Release();
         AfterHandOver(started, ceiling, autoSettings, watchdogMs);
@@ -488,8 +494,9 @@ void Compose(IDXGISwapChain* sc) {
     if (shown.target < 0 && !g_presentMode) return;
     ++g_presentStages[3];
     ID3D11ShaderResourceView* delta = nullptr; uint32_t dw = 0, dh = 0;
-    // frame generation off: this present's own result (waited for on the GPU), or, when the model was still busy, the frame before's
-    const uint64_t deltaFrame = g_presentMode ? g_bridge.QueuedDelta(&delta, &dw, &dh) : g_bridge.NewestDelta(&delta, &dw, &dh);
+    // frame generation off and waiting: this present's own result (waited for on the GPU); otherwise the newest finished one
+    const bool waitForOwn = g_presentMode && g_presentWait;
+    const uint64_t deltaFrame = waitForOwn ? g_bridge.QueuedDelta(&delta, &dw, &dh) : g_bridge.NewestDelta(&delta, &dw, &dh);
     if (!deltaFrame) return;
     if (g_presentMode) { if (deltaFrame == g_presentIndex) ++g_presentOwn; else ++g_presentEarlier; }
     // A result the model has not replaced for a while belongs to another picture: frame generation was switched off (Lossless Scaling still
@@ -507,7 +514,11 @@ void Compose(IDXGISwapChain* sc) {
     ID3D11Resource* flow = p.useFlow && !g_presentMode ? g_tap.NewestFlow(fw, fh) : nullptr;   // at Present the result is the frame's own: no sliding
     Compose11::Args a;
     a.target = buffer; a.delta = delta; a.flow = flow; a.flowW = fw; a.flowH = fh; a.flowUnit = p.flowUnit;
-    a.offset = g_presentMode ? 0.0f : static_cast<float>(shown.target - static_cast<double>(deltaFrame)); a.isGen = !g_presentMode && shown.gen;
+    // not waiting, the result is usually a frame old: moved along its own frame's motion (a speed that holds for a frame or two)
+    a.motion = g_presentMode && !waitForOwn ? g_bridge.MotionOf(deltaFrame) : nullptr;
+    a.offset = !g_presentMode ? static_cast<float>(shown.target - static_cast<double>(deltaFrame))
+             : waitForOwn ? 0.0f : static_cast<float>(std::min<uint64_t>(g_presentIndex - deltaFrame, 3));
+    a.isGen = !g_presentMode && shown.gen;
     a.intensity = p.composeIntensity; a.maxDelta = p.maxDelta; a.ghostGuard = p.ghostGuard; a.hiProtect = p.hiProtect; a.debugView = p.debugView;
     a.sharpen = p.sharpen; a.saturation = p.saturation; a.vibrance = p.vibrance; a.brightness = p.brightness; a.contrast = p.contrast; a.gamma = p.gamma;
     a.shadows = p.shadows; a.highlights = p.highlights; a.grain = p.grain; a.grainSize = p.grainSize; a.grainSeed = static_cast<uint32_t>(g_presents);

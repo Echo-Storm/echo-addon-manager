@@ -311,8 +311,16 @@ void DrawPanel() {
         if (!c.p.useFlow) ImGui::EndDisabled();
         if (ImGui::Checkbox("Also with frame generation off", &c.presentMode)) changed = true;
         Tip("With Lossless Scaling's frame generation off there is no captured frame to run on. On (the default): the model then takes the frame Lossless Scaling "
-            "presents, and its result goes onto that same frame (Lossless Scaling's frame waits for it on the GPU, so the two always match). The model's working "
-            "size is taken as for a 1920-wide frame, so it costs what it does with frame generation on. Off: without frame generation the addon does nothing.");
+            "presents. The model's working size is taken as for a 1920-wide frame, so it costs what it does with frame generation on. Off: without frame "
+            "generation the addon does nothing.");
+        if (!c.presentMode) ImGui::BeginDisabled();
+        ImGui::Indent();
+        if (ImGui::Checkbox("Wait for each frame's own result", &c.presentWait)) changed = true;
+        Tip("Off (the default): each frame gets the newest result that is ready, usually the frame before's, moved along the measured motion to where the "
+            "picture is now. Nothing waits, so the model's time is not added in front of each frame. On: each frame waits on the GPU for its own result. Exact, "
+            "but the model's whole run (several milliseconds) comes before every frame is shown, which can make frames miss the display's refresh.");
+        ImGui::Unindent();
+        if (!c.presentMode) ImGui::EndDisabled();
         }
     }
     if (kScalerAddon && eam::ui::SectionHeader("Upscaling")) {

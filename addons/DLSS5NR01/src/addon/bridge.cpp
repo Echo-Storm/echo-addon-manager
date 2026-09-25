@@ -137,7 +137,7 @@ void Bridge::SetLsGpuPriority(int p) {
 
 void Bridge::DropInput() { m_input.Release(); m_fmt = DXGI_FORMAT_UNKNOWN; }
 void Bridge::DropFlow() { if (m_engine) m_engine->SetFlowInput(nullptr, 0, 0); m_flow.Release(); }
-void Bridge::DropSlots() { for (Slot& s : m_slots) { s.delta.Release(); s.frame = 0; s.releasedAt = 0; } m_newestSlot = -1; }
+void Bridge::DropSlots() { for (Slot& s : m_slots) { s.delta.Release(); s.motion.Release(); s.frame = 0; s.releasedAt = 0; } m_newestSlot = -1; }
 
 bool Bridge::Ensure(uint32_t w, uint32_t h, DXGI_FORMAT fmt) {
     const DXGI_FORMAT view = ViewFormat(fmt);
@@ -160,12 +160,13 @@ bool Bridge::FitFlow(uint32_t w, uint32_t h) {
 }
 
 bool Bridge::FitSlots(uint32_t w, uint32_t h) {
-    if (m_slots[0].delta.d3d11 && m_slots[0].delta.w == w && m_slots[0].delta.h == h) return true;
+    if (m_slots[0].delta.d3d11 && m_slots[0].delta.w == w && m_slots[0].delta.h == h && (m_slots[0].motion.d3d11 != nullptr) == m_shareMotion) return true;
     m_engine->Drain();
     DropSlots();
     for (Slot& s : m_slots)
-        if (!MakeTexture(s.delta, w, h, DXGI_FORMAT_R16G16B16A16_FLOAT, true, "result")) { DropSlots(); return false; }
-    Log("Bridge: %d shared result slots %ux%u, RGBA16F", kSlots, w, h);
+        if (!MakeTexture(s.delta, w, h, DXGI_FORMAT_R16G16B16A16_FLOAT, true, "result") ||
+            (m_shareMotion && !MakeTexture(s.motion, w, h, DXGI_FORMAT_R16G16_FLOAT, true, "motion"))) { DropSlots(); return false; }
+    Log("Bridge: %d shared result slots %ux%u, RGBA16F%s", kSlots, w, h, m_shareMotion ? ", each with its motion vectors (RG16F)" : "");
     return true;
 }
 
@@ -217,7 +218,7 @@ bool Bridge::Submit(ID3D11Texture2D* frame, ID3D11Texture2D* flow, uint32_t flow
     m_ctx4->Signal(m_copied.d3d11, frameIndex);
     const uint64_t queuedBefore = m_engine->Stats().frames;
     const bool ok = m_engine->Run(m_input.d3d12, m_slots[s].delta.d3d12, m_copied.d3d12, frameIndex, m_released.d3d12, m_slots[s].releasedAt,
-                                  m_finished.d3d12, frameIndex, reset);
+                                  m_finished.d3d12, frameIndex, reset, m_slots[s].motion.d3d12);
     // A run that was never queued never signals "finished": waiting for it would skip every frame from now on.
     if (m_engine->Stats().frames == queuedBefore) return false;
     m_inFlight = frameIndex; m_newestSlot = s;

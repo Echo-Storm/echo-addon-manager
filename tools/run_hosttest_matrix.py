@@ -317,6 +317,7 @@ def scenario_selftest(ctx, res, text, frame):
 SCENARIOS = [
     ('base', ['presentMode=0'], scenario_base),   # present mode off: with frame generation off the old result must go (present_mode tests it on)
     ('present_mode', ['offframes=150'], scenario_present_mode),   # frame generation off for 6 s: the model takes the presented frames
+    ('present_wait', ['offframes=150', 'presentWait=1'], scenario_present_mode),   # the same, each frame waiting for its own result
     ('hud_left_half', ['hud=0,0,0.5,1', 'hudFeather=0'], scenario_hud),
     ('sharpen', ['sharpen=0.8'], scenario_sharpen),
     ('shadows_up', ['shadows=1'], scenario_shadows_up),
@@ -350,7 +351,7 @@ SCENARIOS = [
 # The everyday set (--quick): the frame reaching the model with its own motion, the older timing, an exit with no AddonShutdown, the DLSS 4
 # Upscaler in place of NIS, and the two addons loaded together. The
 # rest (looks, HUD, grain, smoothing, the self-test, the upscaler with preset M, the panel shot) run with no option, before a release.
-QUICK = {'base', 'present_mode', 'flow_previous', 'exit_abrupt', 'scaler', 'fsr_scaler', 'pair'}
+QUICK = {'base', 'present_mode', 'present_wait', 'flow_previous', 'exit_abrupt', 'scaler', 'fsr_scaler', 'pair'}
 
 
 def selftest_exe_checks(nr_dir, snippet):

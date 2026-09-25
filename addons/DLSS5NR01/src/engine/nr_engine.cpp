@@ -521,7 +521,7 @@ void NrEngine::TakeBuilt() {
 //            t2 the model's last output, t3 the motion vectors
 
 bool NrEngine::Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12Fence* waitFence, uint64_t waitValue, ID3D12Fence* usedFence,
-                   uint64_t usedValue, ID3D12Fence* signalFence, uint64_t signalValue, bool reset) {
+                   uint64_t usedValue, ID3D12Fence* signalFence, uint64_t signalValue, bool reset, ID3D12Resource* sharedMotion) {
     if (!m_ready || !m_feature) return false;
     // a new feature is being made: the model cannot run meanwhile, and the frame path does not wait for it (the last result carries on)
     std::unique_lock<std::mutex> ngx(m_ngxMutex, std::try_to_lock);
@@ -600,6 +600,17 @@ bool NrEngine::Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12
         Transition(m_mvec, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         dispatch(m_psoMotion, kMotion, c);
         Transition(m_mvec, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    // the motion goes with the result (the texture comes in COMMON, like the delta); a size that does not match is left out, never copied
+    if (sharedMotion) {
+        const D3D12_RESOURCE_DESC to = sharedMotion->GetDesc();
+        if (to.Width == m_ww && to.Height == m_wh && to.Format == DXGI_FORMAT_R16G16_FLOAT) {
+            Transition(m_mvec, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            Transition(sharedMotion, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+            m_list->CopyResource(sharedMotion, m_mvec);
+            Transition(sharedMotion, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+            Transition(m_mvec, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }
     }
 
     // 3. the model: the proxy (with the motion vectors and flat depth) into m_out[0]; each further pass reads the last result and writes the

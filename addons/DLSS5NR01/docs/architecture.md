@@ -157,7 +157,12 @@ out = saturate(frame + d)
 
 `offset` is the presented frame's target position minus the delta's frame, in real-frame units.
 Positive offsets move the delta forward along LSFG's previous-to-current field (`zw`); negative
-ones move it back along current-to-previous (`xy`). The pass reads a copy of the back buffer and
+ones move it back along current-to-previous (`xy`). With frame generation off there is no LSFG
+flow: the compose takes the newest finished result (usually the frame before's) and moves it along
+that frame's own motion vectors, which the model's run copies into a texture beside the delta
+(`suv = uv + offset * motion / workingSize`, the vectors pointing to the frame before). Nothing
+waits there; with `presentWait` the compose waits on the GPU for its own frame's result instead,
+with `offset` 0. The pass reads a copy of the back buffer and
 writes the back buffer directly when it has UAV access, otherwise through a scratch texture and a
 copy. Shader state is saved and restored around it.
 

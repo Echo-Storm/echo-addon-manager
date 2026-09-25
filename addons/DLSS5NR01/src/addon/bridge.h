@@ -42,6 +42,10 @@ public:
     // The result of the newest run handed to the model, finished or not (0 = none): a compose that uses it waits for it on the GPU
     // (BeginDeltaUse). Frame generation off: a present shows its own frame's result.
     uint64_t QueuedDelta(ID3D11ShaderResourceView** srv, uint32_t* ww, uint32_t* wh);
+    // Each result slot also holds its run's motion vectors (RG16F, working-size pixels, this frame -> the one before), for moving the result
+    // onto a later frame. Takes effect when the slots are next made (a change remakes them).
+    void ShareMotion(bool on) { m_shareMotion = on; }
+    ID3D11ShaderResourceView* MotionOf(uint64_t frame) const { const int s = FindSlot(frame); return s >= 0 ? m_slots[s].motion.view : nullptr; }
     void BeginDeltaUse(uint64_t d);   // before recording a compose that reads result d on Lossless Scaling's context
     void EndDeltaUse(uint64_t d);     // after it
     ID3D11DeviceContext* Context() const { return m_ctx; }
@@ -68,7 +72,7 @@ private:
     struct SharedTexture { ID3D11Texture2D* d3d11 = nullptr; ID3D12Resource* d3d12 = nullptr; ID3D11ShaderResourceView* view = nullptr; uint32_t w = 0, h = 0; void Release(); };
     struct SharedFence { ID3D11Fence* d3d11 = nullptr; ID3D12Fence* d3d12 = nullptr; void Release(); };
     // One result slot: the frame whose delta it holds (0 = nothing usable) and the "released" value the last compose reading it signals.
-    struct Slot { SharedTexture delta; uint64_t frame = 0; uint64_t releasedAt = 0; };
+    struct Slot { SharedTexture delta, motion; uint64_t frame = 0; uint64_t releasedAt = 0; };
     static const int kSlots = 3;
     static const int kFrameTimeCap = 1200;
 
@@ -104,4 +108,5 @@ private:
     float m_frameTimes[kFrameTimeCap] = {}; int m_frameTimeCount = 0;
     int m_lsPriority = 0; bool m_lsPriorityApplied = false;
     GpuTimer11 m_submitTimes, m_composeTimes;
+    bool m_shareMotion = false;
 };

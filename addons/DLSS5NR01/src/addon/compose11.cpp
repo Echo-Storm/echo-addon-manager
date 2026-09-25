@@ -15,6 +15,7 @@ SamplerState sLinear : register(s0);
 Texture2D<float4>   tFrame : register(t0);   // a copy of the buffer being presented
 Texture2D<float4>   tDelta : register(t1);   // the delta of real frame d, at the working size
 Texture2D<float4>   tFlow  : register(t2);   // LSFG's flow: xy = current -> previous, zw = previous -> current
+Texture2D<float2>   tMotion : register(t3);  // or the model's motion for frame d, in working-size pixels, d -> the frame before
 RWTexture2D<float4> uOut   : register(u0);
 
 cbuffer Constants : register(b0) {
@@ -24,7 +25,7 @@ cbuffer Constants : register(b0) {
     float  maxDelta;
     float  hiProtect;
     uint   debugView;     // 0 result, 1 original, 2 delta x4, 3 frame role, 4 flow, 5 ghost guard weight
-    uint   flags;         // 1 flow bound, 2 a generated frame, 4 show the protected areas
+    uint   flags;         // 1 flow bound, 2 a generated frame, 4 show the protected areas, 8 the model's motion bound
     float2 uvPerUnit;     // one flow unit, in uv
     float  ghostGuard;    // 0 off .. 1 full
     float  flowPxPerUnit; // flow-texture pixels in one flow unit
@@ -129,7 +130,11 @@ void CSCompose(uint3 id : SV_DispatchThreadID) {
     if (!original) {
         const float4 flow = (flags & 1u) ? tFlow.SampleLevel(sLinear, uv, 0) : float4(0, 0, 0, 0);
         // where this pixel's content was in frame d
-        const float2 uvInD = offset > 0.0 ? uv - offset * flow.zw * uvPerUnit : uv + offset * flow.xy * uvPerUnit;
+        float2 uvInD = offset > 0.0 ? uv - offset * flow.zw * uvPerUnit : uv + offset * flow.xy * uvPerUnit;
+        if (flags & 8u) {   // frame d's own motion stands in for the frames since: where this pixel was, `offset` frames back at that speed
+            uint mw, mh; tMotion.GetDimensions(mw, mh);
+            uvInD = uv + offset * tMotion.SampleLevel(sLinear, uv, 0) / float2(mw, mh);
+        }
         const float ghost = GhostWeight(flow);
         const float highlightFade = hiProtect < 0.999 ? 1.0 - smoothstep(hiProtect, 1.0, dot(frame.rgb, kLuma)) : 1.0;
         const float3 d = clamp(tDelta.SampleLevel(sLinear, uvInD, 0).rgb * ghost * intensity, -maxDelta, maxDelta) * highlightFade;
@@ -189,14 +194,14 @@ template <class T> void SafeRelease(T*& p) { if (p) { p->Release(); p = nullptr;
 // Lossless Scaling's compute state, taken before the pass and put back after it: the pass runs in the middle of its frame.
 struct SavedComputeState {
     ID3D11DeviceContext* ctx;
-    ID3D11ComputeShader* shader = nullptr; ID3D11ShaderResourceView* srvs[3] = {}; ID3D11UnorderedAccessView* uav = nullptr;
+    ID3D11ComputeShader* shader = nullptr; ID3D11ShaderResourceView* srvs[4] = {}; ID3D11UnorderedAccessView* uav = nullptr;
     ID3D11Buffer* constants = nullptr; ID3D11SamplerState* sampler = nullptr;
     explicit SavedComputeState(ID3D11DeviceContext* c) : ctx(c) {
-        ctx->CSGetShader(&shader, nullptr, nullptr); ctx->CSGetShaderResources(0, 3, srvs); ctx->CSGetUnorderedAccessViews(0, 1, &uav);
+        ctx->CSGetShader(&shader, nullptr, nullptr); ctx->CSGetShaderResources(0, 4, srvs); ctx->CSGetUnorderedAccessViews(0, 1, &uav);
         ctx->CSGetConstantBuffers(0, 1, &constants); ctx->CSGetSamplers(0, 1, &sampler);
     }
     ~SavedComputeState() {
-        ctx->CSSetShader(shader, nullptr, 0); ctx->CSSetShaderResources(0, 3, srvs); ctx->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+        ctx->CSSetShader(shader, nullptr, 0); ctx->CSSetShaderResources(0, 4, srvs); ctx->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
         ctx->CSSetConstantBuffers(0, 1, &constants); ctx->CSSetSamplers(0, 1, &sampler);
         SafeRelease(shader); for (auto*& s : srvs) SafeRelease(s); SafeRelease(uav); SafeRelease(constants); SafeRelease(sampler);
     }
@@ -307,7 +312,8 @@ bool Compose11::Run(ID3D11DeviceContext* ctx, const Args& a) {
     const float unit = a.flowUnit > 0.1f ? a.flowUnit : 2.0f;
     Constants c{};
     c.w = desc.Width; c.h = desc.Height; c.offset = a.offset; c.intensity = a.intensity; c.maxDelta = a.maxDelta; c.hiProtect = a.hiProtect;
-    c.debugView = a.debugView; c.flags = (flowView ? 1u : 0u) | (a.isGen ? 2u : 0u) | (a.hudShow ? 4u : 0u);
+    const bool moved = !flowView && a.motion;
+    c.debugView = a.debugView; c.flags = (flowView ? 1u : 0u) | (a.isGen ? 2u : 0u) | (a.hudShow ? 4u : 0u) | (moved ? 8u : 0u);
     c.uvPerUnitX = flowView && a.flowW ? 1.0f / (unit * a.flowW) : 0.0f; c.uvPerUnitY = flowView && a.flowH ? 1.0f / (unit * a.flowH) : 0.0f;
     c.ghostGuard = flowView ? std::clamp(a.ghostGuard, 0.0f, 1.0f) : 0.0f; c.flowPxPerUnit = 1.0f / unit;
     c.sharpen = a.sharpen; c.compare = a.compare; c.splitPos = a.splitPos; c.marker = a.marker;
@@ -319,15 +325,15 @@ bool Compose11::Run(ID3D11DeviceContext* ctx, const Args& a) {
 
     {
         const SavedComputeState saved(ctx);
-        ID3D11ShaderResourceView* const srvs[3] = { m_copyView, a.delta, flowView };
+        ID3D11ShaderResourceView* const srvs[4] = { m_copyView, a.delta, flowView, moved ? a.motion : nullptr };
         ctx->CSSetShader(m_shader, nullptr, 0);
-        ctx->CSSetShaderResources(0, 3, srvs);
+        ctx->CSSetShaderResources(0, 4, srvs);
         ctx->CSSetUnorderedAccessViews(0, 1, &out, nullptr);
         ctx->CSSetConstantBuffers(0, 1, &m_constants);
         ctx->CSSetSamplers(0, 1, &m_sampler);
         ctx->Dispatch((desc.Width + 7) / 8, (desc.Height + 7) / 8, 1);
-        ID3D11ShaderResourceView* const noSrvs[3] = {}; ID3D11UnorderedAccessView* const noUav = nullptr;
-        ctx->CSSetShaderResources(0, 3, noSrvs);
+        ID3D11ShaderResourceView* const noSrvs[4] = {}; ID3D11UnorderedAccessView* const noUav = nullptr;
+        ctx->CSSetShaderResources(0, 4, noSrvs);
         ctx->CSSetUnorderedAccessViews(0, 1, &noUav, nullptr);
     }
     if (inPlace) out->Release(); else ctx->CopyResource(a.target, m_out);

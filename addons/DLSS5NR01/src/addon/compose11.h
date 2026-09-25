@@ -19,6 +19,8 @@ public:
         ID3D11Texture2D* target = nullptr;             // the swap chain buffer about to be presented (read and written)
         ID3D11ShaderResourceView* delta = nullptr;     // the delta at the working size, RGBA16F
         ID3D11Resource* flow = nullptr; uint32_t flowW = 0, flowH = 0; float flowUnit = 2.0f;   // LSFG's flow (RGBA16F), or null
+        ID3D11ShaderResourceView* motion = nullptr;    // or the model's motion for frame d (RG16F, working-size pixels, d -> the frame before):
+                                                       // the result is moved along it, `offset` frames on (frame generation off)
         float offset = 0;                              // the presented frame minus d, in real frames
         float intensity = 1, maxDelta = 0.5f, hiProtect = 0.85f; uint32_t debugView = 0; bool isGen = false;
         float ghostGuard = 0;                          // 0 = off: fades the delta where the two motion fields disagree, and with its age

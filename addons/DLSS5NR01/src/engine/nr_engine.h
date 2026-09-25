@@ -112,8 +112,10 @@ public:
     // One run from sharedIn (the frame copy) into sharedDelta (both opened from the bridge's handles, both in COMMON). The queue first waits
     // for waitFence >= waitValue (the copy is done) and usedFence >= usedValue (no present still reads sharedDelta), and afterwards signals
     // signalFence = signalValue. True when the model evaluated; Stats().frames counts every run that was queued.
+    // sharedMotion (optional, RG16F at the working size): receives the model's motion vectors beside the delta, so a compose can move this
+    // result onto a later frame (frame generation off, not waiting for each frame's own result).
     bool Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12Fence* waitFence, uint64_t waitValue, ID3D12Fence* usedFence,
-             uint64_t usedValue, ID3D12Fence* signalFence, uint64_t signalValue, bool reset);
+             uint64_t usedValue, ID3D12Fence* signalFence, uint64_t signalValue, bool reset, ID3D12Resource* sharedMotion = nullptr);
 
     void Log(const char* fmt, ...);   // also used by NGX's log callback
 
