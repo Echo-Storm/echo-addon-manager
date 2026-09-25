@@ -36,7 +36,11 @@ $addons = @(
     # DLSS 4 DLAA: built from the same sources; its addon.json lives in products\DLSS4DLAA, and NVIDIA's DLSS runtime ships in its dlss folder
     @{ Id = 'DLSS4DLAA'; Wip = $true; Dir = "$root\addons\DLSS5NR01\products\DLSS4DLAA"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS4DLAA.dll');
        Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; 'LICENSE.txt' = "$root\addons\DLSS5NR01\LICENSE";
-                  'dlss\nvngx_dlss.dll' = "$root\addons\DLSS5NR01\external\ngx\bin\nvngx_dlss.dll" } }
+                  'dlss\nvngx_dlss.dll' = "$root\addons\DLSS5NR01\external\ngx\bin\nvngx_dlss.dll" } },
+    # FSR 3 Upscaler: the same sources again; AMD's FidelityFX runtime (MIT, signed by AMD) ships in its fsr folder (tools\fetch_ffx_sdk.ps1)
+    @{ Id = 'FSR3UPSC'; Wip = $true; Dir = "$root\addons\DLSS5NR01\products\FSR3UPSC"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('FSR3UPSC.dll');
+       Extra = @{ 'AMD-FidelityFX-LICENSE.txt' = "$root\addons\DLSS5NR01\third_party\ffx\LICENSE.txt"; 'LICENSE.txt' = "$root\addons\DLSS5NR01\LICENSE";
+                  'fsr\amd_fidelityfx_dx12.dll' = "$root\addons\DLSS5NR01\external\ffx\bin\amd_fidelityfx_dx12.dll" } }
 )
 $included = @(); $skipped = @()
 foreach ($a in $addons) {

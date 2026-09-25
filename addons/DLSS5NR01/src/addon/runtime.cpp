@@ -437,7 +437,7 @@ void OnPresent(IDXGISwapChain* sc) {
     }
     if (g_off || g_engineStarting || !sc) return;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); if (!g_config.enabled) return; }
-    if (kDlaaAddon) { ScalerPresentGuarded(sc); return; }   // the upscaler: DLSS's picture over NIS's (Handoff::AtPresent)
+    if (kScalerAddon) { ScalerPresentGuarded(sc); return; }   // the upscaler: DLSS's picture over NIS's (Handoff::AtPresent)
     if (!OwnsFrames()) return;
     std::lock_guard<std::mutex> lock(g_frameMutex);
     PresentGuarded(sc);
@@ -472,7 +472,7 @@ std::string FrameOwner() {
     const DWORD n = GetEnvironmentVariableA(kOwnerVariable, name, sizeof name);
     return n > 0 && n < sizeof name ? name : "";
 }
-void ClaimFrames() { if (kDlaaAddon) return; SetEnvironmentVariableA(kOwnerVariable, kAddonId); g_ownsFrames = true; g_ownerCheckedAt = GetTickCount64(); }
+void ClaimFrames() { if (kScalerAddon) return; SetEnvironmentVariableA(kOwnerVariable, kAddonId); g_ownsFrames = true; g_ownerCheckedAt = GetTickCount64(); }
 void ReleaseFrames() { if (FrameOwner() == kAddonId) SetEnvironmentVariableA(kOwnerVariable, nullptr); g_ownsFrames = false; }
 
 bool OwnsFrames() {   // the caller has checked that this addon is on
@@ -492,7 +492,7 @@ bool OwnsFrames() {   // the caller has checked that this addon is on
 }
 
 void SettleFramesAtStart() {
-    if (kDlaaAddon) return;   // the upscaler works beside Neural Rendering
+    if (kScalerAddon) return;   // the upscaler works beside Neural Rendering
     bool on; { std::lock_guard<std::mutex> lock(g_settingsMutex); on = g_config.enabled; }
     if (!on) return;
     const std::string owner = FrameOwner();
@@ -557,8 +557,8 @@ void OnDeviceEvent(uint32_t id, const void*, uint32_t, void*) {
     const Card card = CardOf(dev);
     { std::lock_guard<std::mutex> lock(g_textMutex); g_cardName = card.name; g_cardDrivesDisplay = card.drivesDisplay; }
     Log("device %p on '%s' LUID %08x:%08x display=%d -> %s", static_cast<void*>(dev), card.name.c_str(), card.luid.HighPart, card.luid.LowPart, card.drivesDisplay ? 1 : 0,
-        card.nvidia ? "NVIDIA, ok" : "not NVIDIA, ignored");
-    if (!card.nvidia) SetStatus("waiting: LS device is not an NVIDIA adapter");
+        card.nvidia ? "NVIDIA, ok" : kFsrScaler ? "not NVIDIA, ok for FSR 3" : "not NVIDIA, ignored");
+    if (!card.nvidia && !kFsrScaler) SetStatus("waiting: LS device is not an NVIDIA adapter");
     else if (!g_engine.IsReady()) SetStatus("waiting for LSFG dispatches");
     // The engine starts from the tap, on the card whose device actually runs LSFG (one card, a hybrid laptop, or either card of a two-card
     // machine), not from these events, which come for every device Lossless Scaling makes.
@@ -611,9 +611,10 @@ void StartEngineFor(const LUID& card) {   // the engine's own device only: safe 
     SetStatus("DLSS: starting...");
     std::thread([card] {
         LARGE_INTEGER f, a, b; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
-        const bool ok = g_sr.Init(card, g_addonDir, g_addonDir + L"\\dlss", [](const char* m) { Log("%s", m); });
+        const bool ok = kFsrScaler ? g_sr.Init(card, g_addonDir, g_addonDir + L"\\fsr", [](const char* m) { Log("%s", m); }, SrEngine::Backend::Fsr)
+                                   : g_sr.Init(card, g_addonDir, g_addonDir + L"\\dlss", [](const char* m) { Log("%s", m); });
         QueryPerformanceCounter(&b);
-        Log("DLSS upscaler: engine %s in %.0f ms, on a thread of its own", ok ? "started" : "failed", (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart);
+        Log("%s upscaler: engine %s in %.0f ms, on a thread of its own", kUpscalerName, ok ? "started" : "failed", (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart);
         SetStatus(ok ? "DLSS ready" : g_sr.LastError());
         g_srStarting = false;
     }).detach();
@@ -637,7 +638,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     if (!g_srStarting && dev) {
         if (!g_sr.IsReady() && !g_sr.IsFailed()) {
             const Card card = CardOf(dev);
-            if (card.nvidia) StartEngineFor(card.luid);
+            if (card.nvidia || kFsrScaler) StartEngineFor(card.luid);   // FSR 3 runs on any card
             else if (g_nisSeen == 1) SetStatus("waiting: Lossless Scaling's device is not an NVIDIA card");
         } else if (g_sr.IsReady()) {
             if (dev != g_linkDevice) {   // Lossless Scaling's (new) device: the link is made on it, here on its render thread
@@ -648,7 +649,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
             int handoffMode; { std::lock_guard<std::mutex> settings(g_settingsMutex); handoffMode = g_config.scalerHandoff; }
             if (handoffMode == static_cast<int>(ScalerLink::Handoff::AtPresent) && !PresentHook::Installed() &&
                 !PresentHook::Install(dev, OnPresent, [](const char* m) { Log("%s", m); }))
-                Log("DLSS upscaler: could not hook Present; the picture cannot go over NIS's there");
+                Log("%s upscaler: could not hook Present; the picture cannot go over NIS's there", kUpscalerName);
             if (g_linkDevice == dev && g_compare.load() != 2) {   // "original only" lets NIS run, for comparing
                 NrParams p; unsigned preset; int handoff, motion;
                 { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; handoff = g_config.scalerHandoff; motion = g_config.motionSource; }
@@ -679,8 +680,8 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
         } else if (g_compare.load() == 2) g_host->SetStatus(kAddonId, "Showing Lossless Scaling's NIS (Before / after)", 0);
     }
     if (replaced && (g_upscaled == 1 || g_upscaled % 3000 == 0))
-        Log("DLSS scaler: %llu frames upscaled, NIS passes seen %llu, %u per real frame, DLSS %.2f ms", (unsigned long long)g_upscaled,
-            (unsigned long long)g_nisSeen, g_nisPerFrame, g_sr.GpuMs());
+        Log("%s scaler: %llu frames upscaled, NIS passes seen %llu, %u per real frame, %s %.2f ms", kUpscalerName, (unsigned long long)g_upscaled,
+            (unsigned long long)g_nisSeen, g_nisPerFrame, kUpscalerName, g_sr.GpuMs());
     return replaced;   // true: Lossless Scaling's NIS pass is skipped, DLSS's picture is in its output
 }
 
@@ -727,7 +728,7 @@ bool OnPass(uint32_t x, uint32_t y, uint32_t z, void*) {
     auto* const ctx = static_cast<ID3D11DeviceContext*>(g_host ? g_host->GetDispatchingContext() : nullptr);
     if (t_ownWork || g_off || g_engineStarting || !ctx) return false;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); if (!g_config.enabled) return false; }
-    if (kDlaaAddon) return ScalerGuarded(ctx, x, y, z);   // DLSS as the scaler: this addon's whole frame path
+    if (kScalerAddon) return ScalerGuarded(ctx, x, y, z);   // DLSS as the scaler: this addon's whole frame path
     if (!OwnsFrames()) return false;
     std::lock_guard<std::mutex> lock(g_frameMutex);
     if (!Tappable(ctx)) { ++g_otherPasses; return false; }

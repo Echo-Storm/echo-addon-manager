@@ -102,12 +102,12 @@ void Start(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void
 
     Loaded loaded = LoadSettings(host, kAddonId);
     { std::lock_guard<std::mutex> lock(g_settingsMutex); g_config = loaded.config; g_looks = std::move(loaded.looks);
-      g_config.model = kDlaaAddon ? 1 : 0;     // each addon of the pair runs its own model
+      g_config.model = kScalerAddon ? 1 : 0;     // each addon of the pair runs its own model
       if (kWip && std::string(host->GetConfig(kAddonId, "wipRun", "0")) != "1") g_config.enabled = false; }   // see product.h
     SettleFramesAtStart();
     g_compare = loaded.compareStart; g_splitPos = loaded.splitStart;
     ApplyTapRoles();
-    if (!kDlaaAddon) ScanRequirements();   // Neural Rendering's model file, helper and self-test; DLAA's runtime ships with it
+    if (!kScalerAddon) ScanRequirements();   // Neural Rendering's model file, helper and self-test; DLAA's runtime ships with it
     // a switch for the offline test host: run the compatibility test without a click
     if (std::string(host->GetConfig(kAddonId, "selfTestOnStart", "0")) == "1") RunSelfTest();
     if (std::string(host->GetConfig(kAddonId, "snapshotOnStart", "0")) == "1") screenshot::RequestSnapshot();   // likewise: a snapshot for the HUD editor
@@ -145,7 +145,7 @@ EAM_EXPORT void AddonShutdown() {
     Log("shutting down");
     g_off = true;
     ReleaseFrames();
-    if (kDlaaAddon) StopScaler();
+    if (kScalerAddon) StopScaler();
     if (g_host) {
         g_host->SetPreDispatchCallback(nullptr, nullptr);
         g_host->UnsubscribeEvent(EAM_EVENT_D3D11_DEVICE_READY, OnDeviceEvent);
@@ -169,7 +169,9 @@ EAM_EXPORT const char* GetAddonName() { return kProductName; }
 EAM_EXPORT const char* GetAddonVersion() { return "0.8.0"; }
 EAM_EXPORT const char* GetAddonAuthor() { return "Echo-Storm"; }
 EAM_EXPORT const char* GetAddonDescription() {
-    return kDlaaAddon
+    return kFsrScaler
+        ? "Upscales with AMD FidelityFX Super Resolution 3 in place of Lossless Scaling's NIS scaler, on any graphics card, with the motion measured from the frames. AMD's FSR 3 runtime is included. Work in progress."
+        : kScalerAddon
         ? "Upscales with NVIDIA DLSS Super Resolution in place of Lossless Scaling's NIS scaler, on every frame it presents, real and generated. NVIDIA's DLSS runtime is included. Work in progress."
         : "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. Needs your own copy of nvngx_dlssnr.dll (not included, never downloaded).";
 }

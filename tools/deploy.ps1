@@ -3,9 +3,9 @@
 #     sessions get lost;
 #   * refuses while Lossless Scaling itself is running (it holds the DLLs open), unless -StopLS is given AND the game is not running;
 #   * backs the old file up into <LS folder>\backups\ (never deletes) with a timestamp before replacing it.
-#   powershell -File deploy.ps1 -What host|nr|dlaa|all [-StopLS] [-LsDir '<Lossless Scaling folder>']   (or set the LS_DIR environment variable) [-Game WowB]
+#   powershell -File deploy.ps1 -What host|nr|dlaa|fsr|all [-StopLS] [-LsDir '<Lossless Scaling folder>']   (or set the LS_DIR environment variable) [-Game WowB]
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('host', 'nr', 'dlaa', 'all')][string]$What,
+    [Parameter(Mandatory = $true)][ValidateSet('host', 'nr', 'dlaa', 'fsr', 'all')][string]$What,
     [switch]$StopLS,
     [string]$LsDir = $(if ($env:LS_DIR) { $env:LS_DIR } else { 'C:\Program Files (x86)\Steam\steamapps\common\Lossless Scaling' }),
     [string]$Game = 'WowB'
@@ -18,6 +18,10 @@ $items = @{
     dlaa     = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS4DLAA.dll"; Dst = "$LsDir\addons\DLSS4DLAA\DLSS4DLAA.dll"; Extra = @("$root\addons\DLSS5NR01\products\DLSS4DLAA\addon.json",
                   @{ Src = "$root\addons\DLSS5NR01\build\Release\dlss\nvngx_dlss.dll"; Rel = 'dlss\nvngx_dlss.dll' }, @{ Src = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; Rel = 'NVIDIA-LICENSE.txt' },
                   @{ Src = "$root\addons\DLSS5NR01\LICENSE"; Rel = 'LICENSE.txt' }) }
+    fsr      = @{ Src = "$root\addons\DLSS5NR01\build\Release\FSR3UPSC.dll"; Dst = "$LsDir\addons\FSR3UPSC\FSR3UPSC.dll"; Extra = @("$root\addons\DLSS5NR01\products\FSR3UPSC\addon.json",
+                  @{ Src = "$root\addons\DLSS5NR01\build\Release\fsr\amd_fidelityfx_dx12.dll"; Rel = 'fsr\amd_fidelityfx_dx12.dll' },
+                  @{ Src = "$root\addons\DLSS5NR01\third_party\ffx\LICENSE.txt"; Rel = 'AMD-FidelityFX-LICENSE.txt' },
+                  @{ Src = "$root\addons\DLSS5NR01\LICENSE"; Rel = 'LICENSE.txt' }) }
 }
 if (-not (Test-Path "$LsDir\Lossless.dll")) { Write-Host "No Lossless Scaling folder at $LsDir (pass -LsDir or set LS_DIR)."; exit 4 }
 if (Get-Process $Game -ErrorAction SilentlyContinue) { Write-Host "$Game is running: not touching the Lossless Scaling folder. Close the game first."; exit 2 }
@@ -27,7 +31,7 @@ if ($ls) {
     Stop-Process -Id $ls.Id; Start-Sleep 2
 }
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$names = if ($What -eq 'all') { @('host', 'nr', 'dlaa') } else { @($What) }
+$names = if ($What -eq 'all') { @('host', 'nr', 'dlaa', 'fsr') } else { @($What) }
 foreach ($n in $names) {
     $it = $items[$n]
     if (-not (Test-Path $it.Src)) { Write-Host "[$n] not built: $($it.Src)"; continue }

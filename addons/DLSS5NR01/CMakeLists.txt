@@ -36,7 +36,7 @@ target_compile_definitions(nr_selftest PRIVATE NR_ADDON_VERSION_TEXT="${CMAKE_MA
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/addon.json)
 add_dependencies(nr_selftest nr_forwarder)
 
-# ---- the addons: DLSS 5 Neural Rendering (DLSS5NR01) and DLSS 4 DLAA (DLSS4DLAA), from the same sources (src/addon/product.h) ----
+# ---- the addons: DLSS 5 Neural Rendering (DLSS5NR01), the DLSS 4 Upscaler (DLSS4DLAA) and the FSR 3 Upscaler (FSR3UPSC), from the same sources (src/addon/product.h) ----
 set(NR_ADDON_SOURCES
     src/addon/addon.cpp src/addon/runtime.cpp src/addon/panel.cpp src/addon/tasks.cpp src/addon/settings.cpp src/addon/log.cpp
     src/addon/screenshot.cpp src/addon/screenshot_pixels.cpp src/addon/hud_editor.cpp src/addon/auto_quality.cpp
@@ -48,7 +48,7 @@ set(NR_ADDON_SOURCES
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 function(nr_addon target)
     add_library(${target} SHARED ${NR_ADDON_SOURCES})
-    target_include_directories(${target} PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
+    target_include_directories(${target} PRIVATE src ${NGX_DIR}/include ${CMAKE_SOURCE_DIR}/third_party/ffx/include ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${imgui_SOURCE_DIR})
     target_link_libraries(${target} PRIVATE ${NGX_LIB} d3d12 d3d11 dxgi d3dcompiler user32 gdi32 advapi32 shlwapi ole32 shell32 comdlg32 windowscodecs)
     set_target_properties(${target} PROPERTIES PREFIX "" OUTPUT_NAME "${target}")
     # Keep a PDB and a linker map next to the Release DLL so the offsets in a crash backtrace can be resolved.
@@ -70,6 +70,16 @@ if(EXISTS ${NGX_DIR}/bin/nvngx_dlss.dll)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGX_DIR}/bin/nvngx_dlss.dll $<TARGET_FILE_DIR:DLSS4DLAA>/dlss)
 endif()
 
+nr_addon(FSR3UPSC)
+target_compile_definitions(FSR3UPSC PRIVATE NR_PRODUCT_FSR)
+# AMD's FidelityFX runtime (FSR 3.1), in an fsr folder next to the built addon (as in the release): tools/fetch_ffx_sdk.ps1 fetches it
+set(FFX_DLL ${CMAKE_SOURCE_DIR}/external/ffx/bin/amd_fidelityfx_dx12.dll)
+if(EXISTS ${FFX_DLL})
+    add_custom_command(TARGET FSR3UPSC POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:FSR3UPSC>/fsr
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FFX_DLL} $<TARGET_FILE_DIR:FSR3UPSC>/fsr)
+endif()
+
 # ---- offline test host: loads the built addon with a fake IHost, headless ImGui and a synthetic LSFG pattern ----
 add_executable(nr_hosttest tools/addon_host_test.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -77,7 +87,7 @@ add_executable(nr_hosttest tools/addon_host_test.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp)
 target_include_directories(nr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${CMAKE_SOURCE_DIR}/../../manager/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(nr_hosttest PRIVATE d3d11 dxgi d3dcompiler)
-add_dependencies(nr_hosttest DLSS5NR01 DLSS4DLAA)
+add_dependencies(nr_hosttest DLSS5NR01 DLSS4DLAA FSR3UPSC)
 
 # ---- offline test of the frame tap (which pass is the capture, the motion hand-over, presents); a D3D11 device, no model, no SDK at run time ----
 add_executable(nr_taptest tools/tap_test.cpp src/addon/frame_tap.cpp)

@@ -1,5 +1,6 @@
 #include "addon/scaler11.h"
 #include "addon/bridge.h"
+#include "addon/product.h"
 #include "engine/sr_engine.h"
 #include <d3dcompiler.h>
 #include <cstdarg>
@@ -92,9 +93,9 @@ void ScalerLink::Log(const char* fmt, ...) {
 }
 
 bool ScalerLink::MakeFence(Fence& f, const char* name) {
-    if (FAILED(m_dev->CreateFence(0, D3D11_FENCE_FLAG_SHARED, IID_PPV_ARGS(&f.d3d11)))) { Log("DLSS upscaler: the %s fence could not be made", name); return false; }
+    if (FAILED(m_dev->CreateFence(0, D3D11_FENCE_FLAG_SHARED, IID_PPV_ARGS(&f.d3d11)))) { Log("%s upscaler: the %s fence could not be made", kUpscalerName, name); return false; }
     HANDLE handle = nullptr;
-    if (FAILED(f.d3d11->CreateSharedHandle(nullptr, GENERIC_ALL, nullptr, &handle))) { Log("DLSS upscaler: the %s fence could not be shared", name); f.Release(); return false; }
+    if (FAILED(f.d3d11->CreateSharedHandle(nullptr, GENERIC_ALL, nullptr, &handle))) { Log("%s upscaler: the %s fence could not be shared", kUpscalerName, name); f.Release(); return false; }
     f.d3d12 = m_engine->OpenSharedFence(handle);
     CloseHandle(handle);
     if (!f.d3d12) { f.Release(); return false; }
@@ -115,9 +116,9 @@ bool ScalerLink::Fit(Shared& t, uint32_t w, uint32_t h, DXGI_FORMAT fmt, bool en
         if (SUCCEEDED(hr)) { hr = dxgi->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &handle); dxgi->Release(); }
         if (SUCCEEDED(hr)) { t.d3d12 = m_engine->OpenSharedTexture(handle); CloseHandle(handle); if (!t.d3d12) hr = E_FAIL; }
     }
-    if (FAILED(hr)) { Log("DLSS upscaler: the shared %s (%ux%u, format %d) could not be made: 0x%08x", name, w, h, (int)fmt, (unsigned)hr); t.Release(); return false; }
+    if (FAILED(hr)) { Log("%s upscaler: the shared %s (%ux%u, format %d) could not be made: 0x%08x", kUpscalerName, name, w, h, (int)fmt, (unsigned)hr); t.Release(); return false; }
     t.w = w; t.h = h; t.fmt = fmt;
-    Log("DLSS upscaler: shared %s %ux%u, format %d", name, w, h, (int)fmt);
+    Log("%s upscaler: shared %s %ux%u, format %d", kUpscalerName, name, w, h, (int)fmt);
     return true;
 }
 
@@ -125,7 +126,7 @@ bool ScalerLink::Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, SrEngine* eng
     m_log = std::move(log); m_engine = engine; m_ctx = ctx; m_frame = 0; m_holds[0] = m_holds[1] = 0; m_described = false;
     m_atPresent = m_copiedAtPresent = 0; m_probeState = 0;
     if (FAILED(dev->QueryInterface(IID_PPV_ARGS(&m_dev))) || FAILED(ctx->QueryInterface(IID_PPV_ARGS(&m_ctx4)))) {
-        Log("DLSS upscaler: Lossless Scaling's device has no shared fences (D3D11.4 is needed)"); Shutdown(); return false;
+        Log("%s upscaler: Lossless Scaling's device has no shared fences (D3D11.4 is needed)", kUpscalerName); Shutdown(); return false;
     }
     if (!MakeFence(m_copied, "copied") || !MakeFence(m_done, "done") || !MakeGrabShader()) { Shutdown(); return false; }
     return true;
@@ -134,11 +135,11 @@ bool ScalerLink::Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, SrEngine* eng
 bool ScalerLink::MakeGrabShader() {
     ID3DBlob* code = nullptr, * error = nullptr;
     if (FAILED(D3DCompile(kGrabHlsl, strlen(kGrabHlsl), "scaler_grab", nullptr, nullptr, "CSGrab", "cs_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code, &error))) {
-        Log("DLSS upscaler: the grab shader: %s", error ? static_cast<const char*>(error->GetBufferPointer()) : "?"); SafeRelease(error); return false;
+        Log("%s upscaler: the grab shader: %s", kUpscalerName, error ? static_cast<const char*>(error->GetBufferPointer()) : "?"); SafeRelease(error); return false;
     }
     const HRESULT hr = m_dev->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &m_grab);
     code->Release();
-    if (FAILED(hr)) { Log("DLSS upscaler: the grab shader could not be made: 0x%08x", (unsigned)hr); return false; }
+    if (FAILED(hr)) { Log("%s upscaler: the grab shader could not be made: 0x%08x", kUpscalerName, (unsigned)hr); return false; }
     return true;
 }
 
@@ -159,7 +160,7 @@ void ScalerLink::ReportDeviceChange() {
                      : reason == DXGI_ERROR_DEVICE_HUNG ? "HUNG (its GPU work stopped making progress)"
                      : reason == DXGI_ERROR_DEVICE_RESET ? "RESET" : reason == DXGI_ERROR_DEVICE_REMOVED ? "REMOVED" : "other";
     const uint64_t copied = m_copied.d3d11 ? m_copied.d3d11->GetCompletedValue() : 0, done = m_done.d3d11 ? m_done.d3d11->GetCompletedValue() : 0;
-    Log("DLSS upscaler: Lossless Scaling's device changed; the old one: 0x%08x %s. Frames handed over %llu, 'copied' reached %llu, 'done' reached %llu",
+    Log("%s upscaler: Lossless Scaling's device changed; the old one: 0x%08x %s. Frames handed over %llu, 'copied' reached %llu, 'done' reached %llu", kUpscalerName,
         (unsigned)reason, name, (unsigned long long)m_frame, (unsigned long long)copied, (unsigned long long)done);
 }
 
@@ -171,13 +172,13 @@ void ScalerLink::DescribeTargets(const NisPass& pass) {
         D3D11_TEXTURE2D_DESC d{}; if (!Texture2D(r, d)) return;
         DXGI_USAGE usage = 0; IDXGIResource* dxgi = nullptr;
         if (SUCCEEDED(r->QueryInterface(IID_PPV_ARGS(&dxgi)))) { dxgi->GetUsage(&usage); dxgi->Release(); }
-        Log("DLSS upscaler: the NIS pass's %s: %ux%u format %d, bind 0x%x, misc 0x%x, usage 0x%x%s", name, d.Width, d.Height, (int)d.Format,
+        Log("%s upscaler: the NIS pass's %s: %ux%u format %d, bind 0x%x, misc 0x%x, usage 0x%x%s", kUpscalerName, name, d.Width, d.Height, (int)d.Format,
             d.BindFlags, d.MiscFlags, (unsigned)usage, (usage & DXGI_USAGE_BACK_BUFFER) ? " (the swap chain's back buffer)" : "");
     };
     describe("input", pass.in);
     describe("output", pass.out);
     ID3D11ShaderResourceView* view = nullptr; m_ctx->CSGetShaderResources(0, 1, &view);   // how NIS reads the frame (an sRGB view would linearise it)
-    if (view) { D3D11_SHADER_RESOURCE_VIEW_DESC vd{}; view->GetDesc(&vd); Log("DLSS upscaler: the NIS pass reads the frame as format %d", (int)vd.Format); view->Release(); }
+    if (view) { D3D11_SHADER_RESOURCE_VIEW_DESC vd{}; view->GetDesc(&vd); Log("%s upscaler: the NIS pass reads the frame as format %d", kUpscalerName, (int)vd.Format); view->Release(); }
 }
 
 bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset,
@@ -185,7 +186,7 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     if (!IsReady() || !m_engine || !m_engine->IsReady()) return false;
     DescribeTargets(pass);
     if (handoff != m_handoff) {
-        Log("DLSS upscaler: handoff %s", handoff == Handoff::Late ? "one frame late (nothing waits)" : handoff == Handoff::Wait ? "GPU wait"
+        Log("%s upscaler: handoff %s", kUpscalerName, handoff == Handoff::Late ? "one frame late (nothing waits)" : handoff == Handoff::Wait ? "GPU wait"
                                          : handoff == Handoff::Observe ? "observe only (NIS stays)" : "NIS runs, DLSS's picture copied over it at Present");
         if (m_handoff == Handoff::Wait || handoff == Handoff::Wait) m_engine->Drain();   // the two do not share the in-flight bookkeeping
         m_handoff = handoff; m_holds[0] = m_holds[1] = 0;
@@ -194,7 +195,7 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     // through a UAV
     const DXGI_FORMAT inFmt = DXGI_FORMAT_R8G8B8A8_UNORM, outFmt = Bridge::ViewFormat(pass.outFmt);
     if (!Bridge::FormatSupported(pass.inFmt) || (outFmt != DXGI_FORMAT_R8G8B8A8_UNORM && outFmt != DXGI_FORMAT_R10G10B10A2_UNORM && outFmt != DXGI_FORMAT_R16G16B16A16_FLOAT)) {
-        if (!m_loggedFormat) { Log("DLSS upscaler: frame format %d -> %d is not one DLSS can take here; NIS stays", (int)pass.inFmt, (int)pass.outFmt); m_loggedFormat = true; }
+        if (!m_loggedFormat) { Log("%s upscaler: frame format %d -> %d is not one the upscaler can take here; NIS stays", kUpscalerName, (int)pass.inFmt, (int)pass.outFmt); m_loggedFormat = true; }
         return false;
     }
     ID3D11Texture2D* const outBefore[2] = { m_out[0].d3d11, m_out[1].d3d11 };
@@ -205,7 +206,7 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     if (m_out[0].d3d11 != outBefore[0] || m_out[1].d3d11 != outBefore[1]) m_holds[0] = m_holds[1] = 0;   // new textures hold nothing yet
     if (m_in.d3d11 != inBefore || !m_inUav) {
         SafeRelease(m_inUav);
-        if (FAILED(m_dev->CreateUnorderedAccessView(m_in.d3d11, nullptr, &m_inUav))) { Log("DLSS upscaler: the frame's UAV could not be made"); return false; }
+        if (FAILED(m_dev->CreateUnorderedAccessView(m_in.d3d11, nullptr, &m_inUav))) { Log("%s upscaler: the frame's UAV could not be made", kUpscalerName); return false; }
     }
 
     // The engine is idle once it has finished the newest frame: only then may the shared frame and flow be refilled. With Wait, Lossless
@@ -265,7 +266,7 @@ void ScalerLink::PresentCopy(IDXGISwapChain* sc) {
     const Shared& picture = m_out[m_atPresent % 2];
     if (dev == m_dev && d.Width == picture.w && d.Height == picture.h && m_holds[m_atPresent % 2] == m_atPresent) {
         m_ctx->CopyResource(back, picture.d3d11);
-        if (++m_copiedAtPresent == 1) Log("DLSS upscaler: first picture copied into the back buffer at Present");
+        if (++m_copiedAtPresent == 1) Log("%s upscaler: first picture copied into the back buffer at Present", kUpscalerName);
         m_atPresent = 0;
     }
     if (dev) dev->Release();
@@ -296,7 +297,7 @@ void ScalerLink::Probe(uint64_t shown, bool inFresh) {
     }
     for (int i = 0; i < 2; ++i) {
         D3D11_TEXTURE2D_DESC d{}; m_probe[i]->GetDesc(&d);
-        if (!bytes8(d.Format)) { Log("DLSS upscaler: probe: the %s is format %d (not read)", names[i], (int)d.Format); continue; }
+        if (!bytes8(d.Format)) { Log("%s upscaler: probe: the %s is format %d (not read)", kUpscalerName, names[i], (int)d.Format); continue; }
         double sum = 0; uint64_t n = 0, black = 0;
         for (uint32_t y = 0; y < d.Height; y += 16) {
             const uint8_t* row = static_cast<const uint8_t*>(maps[i].pData) + static_cast<size_t>(y) * maps[i].RowPitch;
@@ -306,7 +307,7 @@ void ScalerLink::Probe(uint64_t shown, bool inFresh) {
                 sum += v / 3.0; ++n; if (v == 0) ++black;
             }
         }
-        Log("DLSS upscaler: probe: the %s (%ux%u) averages %.1f of 255, %.1f%% of it pure black", names[i], d.Width, d.Height, n ? sum / n : 0.0, n ? 100.0 * black / n : 0.0);
+        Log("%s upscaler: probe: the %s (%ux%u) averages %.1f of 255, %.1f%% of it pure black", kUpscalerName, names[i], d.Width, d.Height, n ? sum / n : 0.0, n ? 100.0 * black / n : 0.0);
     }
     for (int i = 0; i < 2; ++i) m_ctx->Unmap(m_probe[i], 0);
     SafeRelease(m_probe[0]); SafeRelease(m_probe[1]);

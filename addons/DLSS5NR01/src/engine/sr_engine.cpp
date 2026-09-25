@@ -8,6 +8,12 @@
 #include "nvsdk_ngx.h"
 #include "nvsdk_ngx_defs.h"
 #include "nvsdk_ngx_params.h"
+#include "ffx_api/ffx_api.h"
+#include "ffx_api/ffx_upscale.h"
+#include "ffx_api/ffx_api_loader.h"
+#include "ffx_api/dx12/ffx_api_dx12.h"
+
+struct SrEngine::FfxState { HMODULE module = nullptr; ffxFunctions fn{}; ffxContext context = nullptr; };
 
 namespace {
 
@@ -71,7 +77,18 @@ const char* ResultName(NVSDK_NGX_Result r) {
     }
 }
 
+// AMD's runtime reports problems through a callback without a user pointer: the engine that loaded it sets where they go.
+std::function<void(const char*)> g_ffxLog;
+void FfxMessage(uint32_t type, const wchar_t* message) {
+    if (!g_ffxLog || !message) return;
+    char text[512]; WideCharToMultiByte(CP_UTF8, 0, message, -1, text, sizeof text, nullptr, nullptr);
+    char line[560]; snprintf(line, sizeof line, "FSR 3 %s: %s", type == FFX_API_MESSAGE_TYPE_ERROR ? "error" : "warning", text);
+    g_ffxLog(line);
+}
+
 } // namespace
+
+bool SrEngine::HasFeature() const { return m_backend == Backend::Fsr ? (m_ffx && m_ffx->context) : m_feature != nullptr; }
 
 void SrEngine::Log(const char* fmt, ...) {
     if (!m_log) return;
@@ -82,13 +99,13 @@ void SrEngine::Log(const char* fmt, ...) {
 void SrEngine::Fail(const char* fmt, ...) {
     char text[256]; va_list a; va_start(a, fmt); vsnprintf(text, sizeof text, fmt, a); va_end(a);
     m_error = text; m_failed = true; m_ready = false;
-    Log("DLSS upscaler FAILED: %s", text);
+    Log("%s upscaler FAILED: %s", Name(), text);
 }
 
 // ---- starting and stopping
 
-bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::wstring& runtimeDir, LogFn log) {
-    m_log = std::move(log); m_failed = false; m_error.clear();
+bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::wstring& runtimeDir, LogFn log, Backend backend) {
+    m_log = std::move(log); m_failed = false; m_error.clear(); m_backend = backend;
     IDXGIFactory1* factory = nullptr;
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) { Fail("CreateDXGIFactory1"); return false; }
     IDXGIAdapter1* adapter = nullptr;
@@ -148,12 +165,25 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
     };
     if (!build(kMotionHlsl, "sr_motion", &m_motionPso) || !build(kSharpenHlsl, "sr_sharpen", &m_sharpenPso)) return false;
     static_assert(FlowEstimator::kSlots == kSlots, "the estimator reads its statistics back per engine slot");
-    if (!m_estimator.Init(m_dev, [this](const char* m) { Log("%s", m); })) Log("DLSS upscaler: the motion estimator could not start; motion comes from frame generation only");
+    if (!m_estimator.Init(m_dev, [this](const char* m) { Log("%s", m); })) Log("%s upscaler: the motion estimator could not start; motion comes from frame generation only", Name());
     m_estimator.SetTimestampFrequency(m_timestampFreq);
     // per allocator slot: the flow's view, the motion vectors', and the sharpening pass's input and output
     D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors = 4 * kSlots; heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     if (FAILED(m_dev->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&m_heap)))) { Fail("CreateDescriptorHeap"); return false; }
     m_descriptorSize = m_dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+    if (m_backend == Backend::Fsr) {   // AMD's runtime from the addon's fsr folder (signed by AMD; loaded by its full path only)
+        m_ffx = new FfxState;
+        const std::wstring path = runtimeDir + L"\\amd_fidelityfx_dx12.dll";
+        m_ffx->module = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        if (!m_ffx->module) { Fail("AMD's FSR 3 runtime could not be loaded from %ls (error %lu)", path.c_str(), GetLastError()); return false; }
+        ffxLoadFunctions(&m_ffx->fn, m_ffx->module);
+        if (!m_ffx->fn.CreateContext || !m_ffx->fn.DestroyContext || !m_ffx->fn.Dispatch) { Fail("AMD's FSR 3 runtime lacks the FidelityFX API"); return false; }
+        g_ffxLog = [this](const char* m) { Log("%s", m); };
+        m_ready = true;
+        Log("FSR 3 upscaler ready on its own D3D12 device (runtime from %ls)", runtimeDir.c_str());
+        return true;
+    }
 
     // NGX, with NVIDIA's runtime from the addon's dlss folder
     const wchar_t* paths[] = { runtimeDir.c_str() };
@@ -174,9 +204,15 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
 
 void SrEngine::Shutdown() {
     if (m_queue) WaitIdle();
+    if (m_ffx) {
+        if (m_ffx->context) m_ffx->fn.DestroyContext(&m_ffx->context, nullptr);
+        if (m_ffx->module) FreeLibrary(m_ffx->module);
+        delete m_ffx; m_ffx = nullptr;
+        g_ffxLog = nullptr;
+    }
     if (m_feature) { NVSDK_NGX_D3D12_ReleaseFeature(static_cast<NVSDK_NGX_Handle*>(m_feature)); m_feature = nullptr; }
     if (m_params) { NVSDK_NGX_D3D12_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(m_params)); m_params = nullptr; }
-    if (m_dev) NVSDK_NGX_D3D12_Shutdown1(m_dev);
+    if (m_dev && m_backend == Backend::Dlss) NVSDK_NGX_D3D12_Shutdown1(m_dev);
     m_estimator.Shutdown(); m_estimatedLast = false; m_estimates = 0;
     SafeRelease(m_motion); SafeRelease(m_distrust); SafeRelease(m_depth); SafeRelease(m_depthUpload);
     SafeRelease(m_motionPso); SafeRelease(m_sharpenPso); SafeRelease(m_unsharpened); m_unsharpenedW = m_unsharpenedH = 0; SafeRelease(m_rootSig); SafeRelease(m_heap);
@@ -190,12 +226,12 @@ void SrEngine::Shutdown() {
 
 ID3D12Resource* SrEngine::OpenSharedTexture(HANDLE h) {
     ID3D12Resource* r = nullptr;
-    if (FAILED(m_dev->OpenSharedHandle(h, IID_PPV_ARGS(&r)))) Log("DLSS upscaler: a shared texture could not be opened");
+    if (FAILED(m_dev->OpenSharedHandle(h, IID_PPV_ARGS(&r)))) Log("%s upscaler: a shared texture could not be opened", Name());
     return r;
 }
 ID3D12Fence* SrEngine::OpenSharedFence(HANDLE h) {
     ID3D12Fence* f = nullptr;
-    if (FAILED(m_dev->OpenSharedHandle(h, IID_PPV_ARGS(&f)))) Log("DLSS upscaler: a shared fence could not be opened");
+    if (FAILED(m_dev->OpenSharedHandle(h, IID_PPV_ARGS(&f)))) Log("%s upscaler: a shared fence could not be opened", Name());
     return f;
 }
 
@@ -282,16 +318,36 @@ bool SrEngine::EnsureSharpenTarget(uint32_t w, uint32_t h, DXGI_FORMAT fmt) {
 }
 
 bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t outH, unsigned preset) {
-    if (m_feature && inW == m_inW && inH == m_inH && outW == m_outW && outH == m_outH && preset == m_preset) return true;
+    if (m_backend == Backend::Fsr) preset = 0;   // FSR has no models to choose
+    if (HasFeature() && inW == m_inW && inH == m_inH && outW == m_outW && outH == m_outH && preset == m_preset) return true;
     LARGE_INTEGER f, a, b; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
     if (!WaitIdle()) { Fail("the GPU did not finish the earlier work"); return false; }
     for (auto& v : m_slotDone) v = 0;
     if (m_feature) { NVSDK_NGX_D3D12_ReleaseFeature(static_cast<NVSDK_NGX_Handle*>(m_feature)); m_feature = nullptr; }
+    if (m_ffx && m_ffx->context) { m_ffx->fn.DestroyContext(&m_ffx->context, nullptr); m_ffx->context = nullptr; }
     m_alloc[0]->Reset();
     m_list->Reset(m_alloc[0], nullptr);
     if (!EnsureInputs(inW, inH)) { m_list->Close(); Fail("the motion-vector and depth textures could not be made"); return false; }
-    auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
     const float ratio = std::max(static_cast<float>(outW) / inW, static_cast<float>(outH) / inH);
+    if (m_backend == Backend::Fsr) {   // the depth upload runs first; FSR's context needs no command list
+        m_list->Close();
+        ID3D12CommandList* upload[] = { m_list };
+        m_queue->ExecuteCommandLists(1, upload);
+        WaitIdle();
+        SafeRelease(m_depthUpload);
+        ffxCreateBackendDX12Desc backendDesc{}; backendDesc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_DX12; backendDesc.device = m_dev;
+        ffxCreateContextDescUpscale desc{}; desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE; desc.header.pNext = &backendDesc.header;
+        desc.flags = 0;   // LDR colour; motion at the game's size; no jitter, no inverted or infinite depth
+        desc.maxRenderSize = { inW, inH }; desc.maxUpscaleSize = { outW, outH }; desc.fpMessage = FfxMessage;
+        const ffxReturnCode_t rc = m_ffx->fn.CreateContext(&m_ffx->context, &desc.header, nullptr);
+        QueryPerformanceCounter(&b);
+        if (rc != FFX_API_RETURN_OK || !m_ffx->context) { m_ffx->context = nullptr; Fail("FSR 3 could not make its upscaling context (code %u)", rc); return false; }
+        m_inW = inW; m_inH = inH; m_outW = outW; m_outH = outH; m_preset = preset;
+        m_buildMs = (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
+        Log("FSR 3 upscaler: %ux%u -> %ux%u (x%.2f), made in %.0f ms", inW, inH, outW, outH, ratio, m_buildMs);
+        return true;
+    }
+    auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
     const NVSDK_NGX_PerfQuality_Value quality = ratio <= 1.01f ? NVSDK_NGX_PerfQuality_Value_DLAA   // the game at the screen's size: anti-aliasing only
                                               : ratio <= 1.55f ? NVSDK_NGX_PerfQuality_Value_MaxQuality : ratio <= 1.75f ? NVSDK_NGX_PerfQuality_Value_Balanced
                                               : ratio <= 2.2f ? NVSDK_NGX_PerfQuality_Value_MaxPerf : NVSDK_NGX_PerfQuality_Value_UltraPerformance;
@@ -316,7 +372,7 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
     if (NVSDK_NGX_FAILED(r) || !handle) { Fail("CreateFeature(DLSS): %s", ResultName(r)); return false; }
     m_feature = handle; m_inW = inW; m_inH = inH; m_outW = outW; m_outH = outH; m_preset = preset;
     m_buildMs = (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
-    Log("DLSS upscaler: %ux%u -> %ux%u (x%.2f), preset %u, made in %.0f ms", inW, inH, outW, outH, ratio, preset, m_buildMs);
+    Log("%s upscaler: %ux%u -> %ux%u (x%.2f), preset %u, made in %.0f ms", Name(), inW, inH, outW, outH, ratio, preset, m_buildMs);
     return true;
 }
 
@@ -326,9 +382,14 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
                    ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset, float sharpen, bool reset,
                    ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue) {
     if (!m_ready) return false;
-    const bool fresh = !m_feature || inW != m_inW || inH != m_inH || outW != m_outW || outH != m_outH || preset != m_preset;
+    const bool fsr = m_backend == Backend::Fsr;
+    const bool fresh = !HasFeature() || inW != m_inW || inH != m_inH || outW != m_outW || outH != m_outH || (!fsr && preset != m_preset);
     if (!EnsureFeature(inW, inH, outW, outH, preset)) return false;
-    const bool sharpening = sharpen > 0.001f && EnsureSharpenTarget(outW, outH, outFormat);   // DLSS writes there, the sharpening pass writes out
+    // DLSS writes into a texture of ours and the sharpening pass from there into out; FSR sharpens by itself (its RCAS)
+    const bool sharpening = !fsr && sharpen > 0.001f && EnsureSharpenTarget(outW, outH, outFormat);
+    LARGE_INTEGER qpcNow, qpcFreq; QueryPerformanceCounter(&qpcNow); QueryPerformanceFrequency(&qpcFreq);
+    const float frameMs = m_lastRunQpc ? std::clamp(static_cast<float>((qpcNow.QuadPart - m_lastRunQpc) * 1000.0 / qpcFreq.QuadPart), 1.0f, 100.0f) : 16.7f;
+    m_lastRunQpc = qpcNow.QuadPart;
     bool estimating = estimate && m_estimator.IsReady();
     if (estimating && m_estimator.NeedsResize(inW, inH)) { WaitIdle(); estimating = m_estimator.Ensure(inW, inH); }
     if (estimating && !m_estimatedLast) m_estimator.Forget();   // its frame before is not the one before this
@@ -386,8 +447,27 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     Transition(m_motion, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 3 + 1);
 
-    // 2. DLSS
+    // 2. the upscaler: FSR 3, or DLSS
+    bool evaluated = true; char evalError[96] = {};
+    if (fsr) {
+        ffxDispatchDescUpscale d{}; d.header.type = FFX_API_DISPATCH_DESC_TYPE_UPSCALE;
+        d.commandList = m_list;
+        d.color = ffxApiGetResourceDX12(in, FFX_API_RESOURCE_STATE_COMPUTE_READ);
+        d.depth = ffxApiGetResourceDX12(m_depth, FFX_API_RESOURCE_STATE_COMPUTE_READ);
+        d.motionVectors = ffxApiGetResourceDX12(m_motion, FFX_API_RESOURCE_STATE_COMPUTE_READ);
+        d.reactive = ffxApiGetResourceDX12(estimating ? m_distrust : nullptr, FFX_API_RESOURCE_STATE_COMPUTE_READ);   // where the motion cannot be trusted
+        d.output = ffxApiGetResourceDX12(out, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
+        d.jitterOffset = { 0.0f, 0.0f }; d.motionVectorScale = { 1.0f, 1.0f };   // vectors in the game's pixels
+        d.renderSize = { inW, inH }; d.upscaleSize = { outW, outH };
+        d.enableSharpening = sharpen > 0.001f; d.sharpness = std::clamp(sharpen, 0.0f, 1.0f);
+        d.frameTimeDelta = frameMs; d.preExposure = 1.0f; d.reset = reset || fresh;
+        d.cameraNear = 0.1f; d.cameraFar = 1000.0f; d.cameraFovAngleVertical = 1.0f; d.viewSpaceToMetersFactor = 1.0f;   // the depth is flat anyway
+        d.flags = FFX_UPSCALE_FLAG_NON_LINEAR_COLOR_SRGB;   // the frame as the game shows it (gamma-encoded)
+        const ffxReturnCode_t rc = m_ffx->fn.Dispatch(&m_ffx->context, &d.header);
+        if (rc != FFX_API_RETURN_OK) { evaluated = false; snprintf(evalError, sizeof evalError, "FSR 3 dispatch failed (code %u)", rc); }
+    }
     auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
+    if (!fsr) {
     p->Set(NVSDK_NGX_Parameter_Color, in);
     p->Set(NVSDK_NGX_Parameter_Output, sharpening ? m_unsharpened : out);
     p->Set(NVSDK_NGX_Parameter_Depth, m_depth);
@@ -403,6 +483,8 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     p->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Width, inW);
     p->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Height, inH);
     const NVSDK_NGX_Result r = NVSDK_NGX_D3D12_EvaluateFeature_C(m_list, static_cast<NVSDK_NGX_Handle*>(m_feature), p, nullptr);
+    if (NVSDK_NGX_FAILED(r)) { evaluated = false; snprintf(evalError, sizeof evalError, "EvaluateFeature(DLSS): %s", ResultName(r)); }
+    }
 
     // 3. sharpening, from DLSS's picture into the shared output (DLSS leaves its own heap and root signature bound)
     if (sharpening) {
@@ -434,13 +516,13 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     m_queue->Signal(done, doneValue);
     m_queue->Signal(m_fence, ++m_fenceValue);
     m_slotDone[slot] = m_fenceValue;
-    if (NVSDK_NGX_FAILED(r)) { Fail("EvaluateFeature(DLSS): %s", ResultName(r)); return false; }
+    if (!evaluated) { Fail("%s", evalError); return false; }
     ++m_runs;
     if (estimating && (++m_estimates == 60 || m_estimates % 1200 == 0)) {   // what the estimate found (a check that it follows the picture)
         double x = 0, y = 0, length = 0, cost = 0, distrust = 0; uint64_t frames = 0;
         if (m_estimator.TakeAverages(x, y, length, cost, distrust, frames))
             Log("motion estimator: over %llu frames, average vector (%.2f, %.2f) px, average length %.2f px, match cost %.4f; motion %.2f ms of %.2f ms; "
-                "DLSS told to lean on the current frame over %.1f%% of the picture", (unsigned long long)frames, x, y, length, cost, m_motionMs, m_gpuMs, distrust * 100.0);
+                "the upscaler told to lean on the current frame over %.1f%% of the picture", (unsigned long long)frames, x, y, length, cost, m_motionMs, m_gpuMs, distrust * 100.0);
         double stage[4];
         if (m_estimator.TakeStageTimes(stage))
             Log("motion estimator: stages %.3f ms pyramid, %.3f search, %.3f median, %.3f every pixel", stage[0], stage[1], stage[2], stage[3]);

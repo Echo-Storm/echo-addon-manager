@@ -261,6 +261,30 @@ def scenario_move_4k(ctx, res, text, frame):
     res.check('...and DLSS stays close to the moving picture', err is not None and err < 30, '%s levels' % err)
 
 
+def scenario_fsr(ctx, res, text, frame):
+    res.check('the FSR 3 Upscaler loads AMD\'s runtime on a D3D12 device of its own', 'FSR 3 upscaler ready on its own D3D12 device' in text)
+    made = re.search(r'FSR 3 upscaler: \d+x\d+ -> \d+x\d+ \(x[0-9.]+\), made in \d+ ms', text)
+    res.check('...makes FSR 3 for the NIS pass\'s sizes', made is not None, made.group(0) if made else 'no line')
+    res.check('...with no FSR 3 errors', 'FSR 3 error' not in text and 'FSR 3 dispatch failed' not in text)
+    scenario_scaler_noflow(ctx, res, text, frame)
+
+
+def scenario_fsr_move_none(ctx, res, text, frame):
+    scenario_fsr(ctx, res, text, frame)
+    err = move_error(text)
+    res.check('a sliding picture is measured against the moving picture', err is not None, '%s levels' % err)
+    if err is not None:
+        ctx['fsr_move_error_none'] = err
+
+
+def scenario_fsr_move(ctx, res, text, frame):
+    scenario_fsr(ctx, res, text, frame)
+    err = move_error(text)
+    none = ctx.get('fsr_move_error_none')
+    res.check('with the measured motion, FSR 3 follows the sliding picture better than with none', err is not None and none is not None and err < none * 0.85,
+              '%s against %s levels without' % (err, none))
+
+
 def scenario_pair(ctx, res, text, frame):
     # both addons loaded and switched on: the upscaler works beside Neural Rendering, which keeps its frames
     res.check('neither steps aside', 'BOTH ON' in text)
@@ -293,7 +317,10 @@ SCENARIOS = [
     ('scaler_bgra', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_scaler_noflow),   # frame generation off: only NIS, on the BGRA8 capture
     ('scaler_move_none', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_move_none),   # a sliding picture, DLSS told nothing moves
     ('scaler_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_move),
-    ('dlaa_4k_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'nisW=3840', 'nisH=2160', 'nisScale=1'], scenario_move_4k),   # DLAA at 4K on the sliding picture: the estimate's cost   # ... and with the motion measured from the frames
+    ('dlaa_4k_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'nisW=3840', 'nisH=2160', 'nisScale=1'], scenario_move_4k),   # DLAA at 4K on the sliding picture: the estimate's cost
+    ('fsr_scaler', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_fsr),   # the FSR 3 Upscaler, frame generation off
+    ('fsr_move_none', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_fsr_move_none),
+    ('fsr_move', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_fsr_move),
     ('pair', ['second=DLSS4DLAA.dll'], scenario_pair),
     ('exit_abrupt', ['exitmode=abrupt'], scenario_none),   # the process ends with the addon loaded and no AddonShutdown, as Lossless Scaling does
     ('ui_shot', ['shot=@OUT@/ui_nr_panel.bmp', 'snapshotOnStart=1', 'hud=0,0,0.3,0.17/0.86,0,1,0.24', 'deltaSmooth=0.3', 'grain=0.2', 'shadows=0.2', 'presetNames=Night raid|Bright zone', 'preset.Night raid=shadows=0.4;grain=0.15', 'preset.Bright zone=highlights=-0.3;sharpen=0.2'], scenario_none),

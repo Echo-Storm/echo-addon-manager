@@ -64,7 +64,7 @@ void DrawPanel() {
     }
     else { ImGui::PushStyleColor(ImGuiCol_Text, g_runs ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::Text("%s", status.c_str()); ImGui::PopStyleColor(); }
     if (g_engine.IsFailed()) { ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "engine: %s", g_engine.Stats().lastError); ImGui::SameLine(); if (ImGui::SmallButton("Retry engine")) RestartEngine(); Tip("Try to start the DLSS model again on the current graphics card."); }
-    if (!kDlaaAddon) {   // ---- Requirements: what this needs, what was found, and what to do about anything missing
+    if (!kScalerAddon) {   // ---- Requirements: what this needs, what was found, and what to do about anything missing
         const bool have = RequirementsScanned();
         const req::Report rep = Requirements({ g_engine.IsFailed(), g_engine.IsReady(), g_runs > 0, g_engine.Stats().lastError });
         Block("Requirements");
@@ -115,6 +115,16 @@ void DrawPanel() {
               if (!msg.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", msg.c_str()); ImGui::PopStyleColor(); } }
         }
     }
+    else if (kFsrScaler) {   // ---- FSR 3's requirements: any DirectX 12 card, and AMD's runtime, which ships in the addon's fsr folder
+        Block("Requirements");
+        const std::wstring runtime = g_addonDir + L"\\fsr\\amd_fidelityfx_dx12.dll";
+        const bool present = GetFileAttributesW(runtime.c_str()) != INVALID_FILE_ATTRIBUTES;
+        if (present) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kAccent), "AMD's FSR 3 runtime is in place (it comes with this addon).");
+        else ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "AMD's FSR 3 runtime is missing: the addon's fsr folder should hold amd_fidelityfx_dx12.dll. Reinstall the addon.");
+        Note("Works on any graphics card with DirectX 12 (AMD, NVIDIA or Intel). In Lossless Scaling choose NIS as the Scaling Type (FSR 3 takes the place of that pass), "
+             "and let the game run in a window smaller than your screen, for example 2560x1440 on a 4K screen; at the screen's own size it anti-aliases instead. "
+             "Frame generation can be on or off. Only one of the FSR 3 and DLSS 4 Upscalers works at a time.");
+    }
     else {   // ---- DLAA's requirements: an NVIDIA RTX card, and NVIDIA's runtime, which ships in the addon's dlss folder
         Block("Requirements");
         const std::wstring runtime = g_addonDir + L"\\dlss\\nvngx_dlss.dll";
@@ -124,7 +134,7 @@ void DrawPanel() {
         Note("Needs an NVIDIA RTX graphics card. In Lossless Scaling choose NIS as the Scaling Type (DLSS takes the place of that pass), and let the game run in a window "
              "smaller than your screen so there is something to upscale, for example 2560x1440 on a 4K screen. Frame generation can be on or off: with it on, its motion is used.");
     }
-    if (!kDlaaAddon) {   // looks are Neural Rendering's
+    if (!kScalerAddon) {   // looks are Neural Rendering's
     Block("Saved looks (load and save your settings)");
     Note("A look is a saved set of the sliders below. Pick one from the list to load it. Save updates the look you picked; Save as new keeps the sliders as they are now under a name of your choice.");
     ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.3f));
@@ -206,7 +216,7 @@ void DrawPanel() {
     }
 
     Block(kProductName);
-    const bool dlaa = kDlaaAddon;
+    const bool dlaa = kScalerAddon;
     {
         const std::string label = std::string("Enable ") + kProductName;
         if (kWip) {
@@ -232,7 +242,7 @@ void DrawPanel() {
             Note("%s is on now. Turning this on switches it off: only one of the two works on the frames at a time.", ProductNameOf(owner.c_str()));
     }
     bool modelChanged = false;
-    if (dlaa) {
+    if (dlaa && !kFsrScaler) {
         int preset = c.dlaaPreset == 13 ? 1 : 0;
         const char* presets[] = { "NVIDIA's default (K, DLSS 4)", "M (DLSS 4.5, second-generation transformer)" };
         if (ImGui::Combo("DLSS model", &preset, presets, 2)) { c.dlaaPreset = preset == 1 ? 13u : 0u; changed = true; modelChanged = true; }
@@ -266,7 +276,12 @@ void DrawPanel() {
         if (dlaa) {   // the upscaler: where DLSS's motion vectors come from
             const char* sources[] = { "Measured from the frames (any game)", "Lossless Scaling's frame generation", "None" };
             if (ImGui::Combo("Motion", &c.motionSource, sources, 3)) changed = true;
-            Tip("DLSS combines several frames, and needs to know where each pixel was in the frame before; a game with DLSS built in tells it. Here:\n"
+            Tip(kFsrScaler ? "FSR 3 combines several frames, and needs to know where each pixel was in the frame before; a game with FSR built in tells it. Here:\n"
+                           "Measured from the frames: the upscaler compares each frame with the one before and finds how every part of the picture moved. "
+                           "Works with frame generation on or off, in any game. Costs a little GPU time (shown under Upscaling).\n"
+                           "Lossless Scaling's frame generation: the motion its frame generation measures (only with frame generation on; coarser, a quarter of the game's size).\n"
+                           "None: FSR 3 assumes nothing moves. Sharp when still, smeared when the camera turns: this is here to compare." :
+                "DLSS combines several frames, and needs to know where each pixel was in the frame before; a game with DLSS built in tells it. Here:\n"
                 "Measured from the frames: the upscaler compares each frame with the one before and finds how every part of the picture moved. "
                 "Works with frame generation on or off, in any game. Costs a little GPU time (shown under Upscaling).\n"
                 "Lossless Scaling's frame generation: the motion its frame generation measures (only with frame generation on; coarser, a quarter of the game's size).\n"
@@ -284,24 +299,27 @@ void DrawPanel() {
         if (!c.p.useFlow) ImGui::EndDisabled();
         }
     }
-    if (kDlaaAddon && eam::ui::SectionHeader("Upscaling")) {
+    if (kScalerAddon && eam::ui::SectionHeader("Upscaling")) {
         const ScalerView v = GetScalerView();
-        if (v.starting) ImGui::TextDisabled("Loading NVIDIA's DLSS runtime...");
-        else if (v.failed) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "DLSS could not run: %s. Lossless Scaling's NIS runs as usual.", v.error.c_str());
+        const char* const U = kUpscalerName;
+        if (v.starting) ImGui::TextDisabled(kFsrScaler ? "Loading AMD's FSR 3 runtime..." : "Loading NVIDIA's DLSS runtime...");
+        else if (v.failed) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "%s could not run: %s. Lossless Scaling's NIS runs as usual.", U, v.error.c_str());
         else if (!v.nisSeen) ImGui::TextWrapped("Waiting for Lossless Scaling's NIS pass. Choose NIS as the Scaling Type and scale a game that runs in a window smaller than the screen.");
-        else if (!v.ready) ImGui::TextDisabled("NIS pass found (%ux%u -> %ux%u); DLSS is not running yet.", v.inW, v.inH, v.outW, v.outH);
+        else if (!v.ready) ImGui::TextDisabled("NIS pass found (%ux%u -> %ux%u); %s is not running yet.", v.inW, v.inH, v.outW, v.outH, U);
         else {
-            ImGui::TextWrapped("DLSS upscales %ux%u -> %ux%u (x%.2f) in place of NIS: %.2f ms a frame on the GPU (motion %.2f ms of it), %llu frames so far%s.", v.inW, v.inH,
+            ImGui::TextWrapped("%s upscales %ux%u -> %ux%u (x%.2f) in place of NIS: %.2f ms a frame on the GPU (motion %.2f ms of it), %llu frames so far%s.", U, v.inW, v.inH,
                                v.outW, v.outH, v.inW ? (float)v.outW / v.inW : 0.0f, v.gpuMs, v.motionMs, (unsigned long long)v.runs,
                                v.perFrame > 1 ? " (real and generated frames alike)" : "");
             if (g_compare.load() == 2) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "Showing Lossless Scaling's NIS for comparison (Before / after hotkey).");
         }
         changed |= SL("Sharpening", &c.p.sharpen, 0.0f, 1.0f, c.p.sharpen <= 0.001f ? "off" : "%.2f");
-        Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond. DLSS 4 has no sharpening of its own, "
-            "while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer next to NIS. Try 0.2 to 0.4.");
-        Note("Compare with the Before / after hotkey (Compare and hotkeys): it switches between DLSS and Lossless Scaling's own NIS while you play.");
+        if (kFsrScaler) Tip("FSR 3's own sharpening (AMD's RCAS), part of its upscaling pass. Lossless Scaling's NIS sharpens too (its Sharpness setting), "
+                            "so without it FSR 3 can look softer next to NIS. Try 0.2 to 0.5.");
+        else Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond. DLSS 4 has no sharpening of its own, "
+                 "while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer next to NIS. Try 0.2 to 0.4.");
+        Note("Compare with the Before / after hotkey (Compare and hotkeys): it switches between %s and Lossless Scaling's own NIS while you play.", U);
     }
-    if (!kDlaaAddon && eam::ui::SectionHeader("Quality and performance")) {
+    if (!kScalerAddon && eam::ui::SectionHeader("Quality and performance")) {
         // The model costs ~10 ms + ~7 ms per megapixel on Ampere. The working scale is the only cost lever: past the
         // frame interval the model simply skips frames and the present side carries the last delta forward.
         if (dlaa) Note("DLAA works on the whole frame, so there is no model resolution to choose.");
@@ -358,7 +376,7 @@ void DrawPanel() {
         changed |= SL("Protect bright areas from", &c.p.hiProtect, 0.5f, 1.0f, c.p.hiProtect >= 0.999f ? "off" : "%.2f");
         Tip("The model's change fades out as a pixel's brightness rises from this level to white, so highlights are not crushed. At the far right (off) the change applies everywhere.");
     }
-    if (!kDlaaAddon && eam::ui::SectionHeader("Picture (sharpness, tone, colour, grain)")) {
+    if (!kScalerAddon && eam::ui::SectionHeader("Picture (sharpness, tone, colour, grain)")) {
         // Compose side, applied to every presented frame, real and generated alike.
         changed |= SL("Sharpen", &c.p.sharpen, 0.0f, 1.0f, c.p.sharpen <= 0.001f ? "off" : "%.2f");
         Tip("Contrast-adaptive sharpening of every presented frame, after the model's change is added. The model and the upscale both soften the picture; a little sharpening (0.2 to 0.4) puts the bite back. Costs almost nothing.");
@@ -381,7 +399,7 @@ void DrawPanel() {
         { int gs = (int)c.p.grainSize; const int dgs = (int)kDefaults.grainSize; if (eam::ui::SliderInt("Grain size", &gs, 1, 4, "%d px", 0, &dgs)) { c.p.grainSize = (float)gs; changed = true; } }
         Tip("How big each grain speck is, in screen pixels. 1 is the finest; on a 4K screen 2 looks closest to film.");
     }
-    if (!kDlaaAddon && eam::ui::SectionHeader("Keep the HUD untouched")) {
+    if (!kScalerAddon && eam::ui::SectionHeader("Keep the HUD untouched")) {
         Note("Areas where the picture stays exactly as Lossless Scaling made it (no model change, sharpening, tone, colour or grain): for action bars, the minimap, chat and text. Draw them on a snapshot of the game.");
         const bool busy = screenshot::Busy();
         if (busy) ImGui::BeginDisabled();
@@ -440,7 +458,7 @@ void DrawPanel() {
             fname(c.keyAB), fname(c.keySplit), fname(c.keySharpDn), fname(c.keySharpUp), fname(c.keyPreset), fname(c.keyShot), c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
         Note("A small square appears in the screen's top-left corner for a moment: green enhanced, red original, amber split, blue sharpen changed, purple preset.");
     }
-    if (!kDlaaAddon && eam::ui::SectionHeader("Screenshots")) {
+    if (!kScalerAddon && eam::ui::SectionHeader("Screenshots")) {
         Note("Saves the picture as you see it, with the addon's result, the scaling and frame generation in it, as a PNG. It is taken at the next frame Lossless Scaling shows, so the game must be running and scaled.");
         const bool busy = screenshot::Busy();
         if (busy) ImGui::BeginDisabled();
@@ -463,7 +481,7 @@ void DrawPanel() {
         bool ok; const std::string result = screenshot::LastResult(ok);
         if (!result.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", result.c_str()); ImGui::PopStyleColor(); }
     }
-    if (!kDlaaAddon && eam::ui::SectionHeader("Games (a look per program)")) {
+    if (!kScalerAddon && eam::ui::SectionHeader("Games (a look per program)")) {
         std::string cur; { std::lock_guard<std::mutex> lk(g_textMutex); cur = g_focusExe; }
         ImGui::Text("Program in focus: %s", cur.empty() ? "(none seen yet)" : cur.c_str());
         Tip("The program that had focus most recently, ignoring Lossless Scaling's own windows. While a game is being scaled this is the game.");

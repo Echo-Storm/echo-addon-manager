@@ -54,6 +54,16 @@
   - The log says once per device what the NIS pass reads and writes (with frame generation off, its output is the swap chain's back buffer)
     and how bright the frame DLSS gets and the picture it makes are, so a black picture shows in the log.
 
+- **FSR 3 Upscaler (prototype, not in the release package), a third addon from the same sources (`FSR3UPSC`).** AMD FidelityFX Super
+  Resolution 3.1 in place of Lossless Scaling's NIS pass, on any DirectX 12 graphics card (AMD, NVIDIA or Intel), with the same engine,
+  handoff and measured motion as the DLSS 4 Upscaler. It loads AMD's prebuilt runtime (`amd_fidelityfx_dx12.dll`, FidelityFX SDK v1.1.4,
+  MIT, signed by AMD) from its `fsr` folder; `tools/fetch_ffx_sdk.ps1` fetches it (pinned SHA-256, AMD's signature checked), and the
+  FidelityFX API headers are in `addons/DLSS5NR01/third_party/ffx`. FSR gets the frame, the measured motion, a flat depth and the distrust
+  mask as its reactive mask, and sharpens with its own RCAS (the Sharpening slider). It conflicts with the DLSS 4 Upscaler (both take the
+  NIS pass): turning one on turns the other off. Offline, on the sliding aliased picture at 1.5x: FSR 3 lands 14 levels off the ideal
+  picture with the measured motion (30 without), at about 1 ms; DLSS 4 (K) 18 (59 without), at about 2 ms.
+  - The upscaler products' log lines name their upscaler (DLSS or FSR 3).
+
 ## 0.8.0 (2026-09-24): the interface pass
 
 The manager and Neural Rendering now show 0.8.0.
