@@ -39,7 +39,9 @@ public:
     // Records the passes. frame: the game's frame (readable, NON_PIXEL_SHADER_RESOURCE; RGBA8); motion: RG16F at the frame's size, in
     // UNORDERED_ACCESS, receives the vectors; distrust: R8 at the frame's size, in UNORDERED_ACCESS, receives the mask (0 trusted .. 1 not).
     // Leaves the command list's descriptor heap and root signature changed.
-    void Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion, ID3D12Resource* distrust);
+    // stability 0..1: how far the distrust mask looks past flicker (see the pixel pass).
+    void Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion, ID3D12Resource* distrust,
+                float stability = 0.0f);
     // After the engine has reused the slot (its earlier work is finished): that frame's statistics join the running totals.
     void ReadStats(int slot);
     // The average vector (game pixels), match cost (0..1 per pixel) and distrust (0..1) since the last call; false when no frame was measured.

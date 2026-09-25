@@ -14,7 +14,7 @@ template <class T> void SafeRelease(T*& p) { if (p) { p->Release(); p = nullptr;
 const char* const kCommonHlsl = R"(
 RWByteAddressBuffer uStats : register(u7);
 SamplerState sLinear : register(s0);
-cbuffer C : register(b0) { uint2 size; uint2 grid; uint2 coarse; uint radius; uint flags; float lambda; float bias; uint2 unused; };
+cbuffer C : register(b0) { uint2 size; uint2 grid; uint2 coarse; uint radius; uint flags; float lambda; float bias; float stability; uint unused; };
 )";
 
 // the frame's brightness at its own size (and the statistics cleared for this frame)
@@ -144,6 +144,10 @@ void main(uint3 id : SV_DispatchThreadID) {
 // match best. "Not moving" wins a tie (a HUD or text that stays put must not slide), and another block's vector must beat the own block's by
 // `bias`. flags: 1 there is a frame before (else zero). The distrust mask rises from 0 to 1 as even the best match's difference goes from
 // kTrusted to kUntrusted (brightness 0..1, averaged over the 3x3).
+// stability (0..1) moves that judgement from the pixel's 3x3 to the average brightness of its 5x5 surroundings (and widens the thresholds):
+// shimmer (thin lines and leaves flickering from frame to frame) moves light around inside the surroundings and leaves their average about
+// the same, while something newly uncovered changes it. So at 1 flicker is no longer reported, and the upscaler averages it out over its
+// history instead of passing it through.
 const char* const kPixelHlsl = R"(
 Texture2D<float> tCur : register(t0);
 Texture2D<float> tPrev : register(t1);
@@ -165,18 +169,32 @@ float Pixel(uint2 id) {
     float c[9];
     [unroll] for (int k = 0; k < 9; ++k) c[k] = tCur.Load(int3(clamp(p + int2(k % 3 - 1, k / 3 - 1), int2(0, 0), last), 0));
     const float2 inv = 1.0 / float2(size);
-    float bestCost = 1e30; float2 best = cand[0];
+    float bestCost = 1e30; float2 best = cand[0]; float bestPrev = 0;
     [unroll] for (int n = 0; n < 5; ++n) {
         // a vector already tried (neighbours moving alike, which is most of a moving picture; or the own block not moving) is not tried again
         if (n == 1 && all(abs(cand[1]) < 0.05)) continue;
         if (n >= 2 && (all(abs(cand[n] - cand[1]) < 0.05) || all(abs(cand[n] - cand[max(n - 1, 1)]) < 0.05) || all(abs(cand[n]) < 0.05))) continue;
-        float s = n <= 1 ? 0.0 : bias;
-        [unroll] for (int k = 0; k < 9; ++k)
-            s += abs(c[k] - tPrev.SampleLevel(sLinear, (float2(p + int2(k % 3 - 1, k / 3 - 1)) + 0.5 + cand[n]) * inv, 0)) * (1.0 / 9.0);
-        if (s < bestCost) { bestCost = s; best = cand[n]; }
+        float s = n <= 1 ? 0.0 : bias, sp = 0;
+        [unroll] for (int k = 0; k < 9; ++k) {
+            const float prev = tPrev.SampleLevel(sLinear, (float2(p + int2(k % 3 - 1, k / 3 - 1)) + 0.5 + cand[n]) * inv, 0);
+            s += abs(c[k] - prev) * (1.0 / 9.0); sp += prev;
+        }
+        if (s < bestCost) { bestCost = s; best = cand[n]; bestPrev = sp; }
     }
     uMotion[id.xy] = best;
-    const float distrust = saturate((bestCost - kTrusted) / (kUntrusted - kTrusted));
+    float cost = bestCost;
+    if (stability > 0.001) {   // the 5x5 around: the 3x3 plus four bilinear taps, each the mean of a 2x2 in a corner
+        float sc = 0;
+        [unroll] for (int k = 0; k < 9; ++k) sc += c[k];
+        float tc = 0, tp = 0;
+        [unroll] for (int k = 0; k < 4; ++k) {
+            const float2 at = float2(p) + 0.5 + float2(k & 1 ? 1.5 : -1.5, k & 2 ? 1.5 : -1.5);
+            tc += tCur.SampleLevel(sLinear, at * inv, 0); tp += tPrev.SampleLevel(sLinear, (at + best) * inv, 0);
+        }
+        const float around = abs((sc + 4.0 * tc) - (bestPrev + 4.0 * tp)) * (1.0 / 25.0);
+        cost = lerp(bestCost, around, stability) / (1.0 + stability);
+    }
+    const float distrust = saturate((cost - kTrusted) / (kUntrusted - kTrusted));
     uDistrust[id.xy] = distrust;
     return distrust;
 }
@@ -198,7 +216,7 @@ void main(uint3 id : SV_DispatchThreadID, uint index : SV_GroupIndex) {
 }
 )";
 
-struct Constants { uint32_t w, h, gw, gh, cw, ch, radius, flags; float lambda, bias; uint32_t unused[2]; };
+struct Constants { uint32_t w, h, gw, gh, cw, ch, radius, flags; float lambda, bias, stability; uint32_t unused; };
 constexpr float kLambda = 0.003f;   // match cost per pixel of straying from the coarser size's guess
 constexpr float kBias = 0.004f;     // a pixel's extra cost for another block's vector (or none) over its own
 
@@ -353,7 +371,8 @@ FlowEstimator::Pass FlowEstimator::MakePass(int slot, int& index, ID3D12Resource
     return p;
 }
 
-void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion, ID3D12Resource* distrust) {
+void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion, ID3D12Resource* distrust,
+                           float stability) {
     const int cur = m_current, prev = 1 - m_current;
     int index = 0;
     auto stamp = [&](int i) { if (m_stamps) list->EndQuery(m_stamps, D3D12_QUERY_TYPE_TIMESTAMP, static_cast<UINT>(slot * kStamps + i)); };
@@ -404,7 +423,7 @@ void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Reso
     }
     {   // every pixel (zero without a frame before)
         ID3D12Resource* const srv[4] = { m_luma[cur][0], m_luma[prev][0], m_filtered, nullptr }; const DXGI_FORMAT fmt[4] = { R16, R16, RG16, NONE };
-        Constants c{ m_lw[0], m_lh[0], m_gw[1], m_gh[1], 0, 0, 0, m_havePrevious ? 1u : 0u, kLambda, kBias };
+        Constants c{ m_lw[0], m_lh[0], m_gw[1], m_gh[1], 0, 0, 0, m_havePrevious ? 1u : 0u, kLambda, kBias, std::clamp(stability, 0.0f, 1.0f) };
         run(Pixel, srv, fmt, motion, RG16, c, m_lw[0], m_lh[0], false, distrust);
     }
     if (m_havePrevious && m_stamps) {

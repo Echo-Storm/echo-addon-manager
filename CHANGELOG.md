@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Upscalers: a Stability slider** (DLSS 4 and FSR 3, off by default) for shimmer on thin lines and leaves. Without the game's sub-pixel
+  camera shifts a line thinner than a pixel flickers from frame to frame, and the motion measurement reported that flicker as "do not trust
+  the history here", so the upscaler passed it straight through. With stability up, the distrust mask judges by the average brightness of a
+  pixel's 5x5 surroundings (which flicker leaves about the same and something newly uncovered changes), and FSR 3's own tuning keys are set
+  (velocity factor, shading change, accumulation per frame, disocclusion accumulation; logged on a change). Test host: on a sliding picture
+  the upscaler was told to distrust 0.1% of it rather than 0.6%, and followed the slide as well as before. Scenarios `scaler_stable`,
+  `fsr_stable`.
 - **Fixed: switching an upscaler off while a game was scaling could freeze Lossless Scaling** (Fallout: New Vegas with frame generation,
   2026-09-24: Windows closed it as not responding). The upscaler tore itself down while still subscribed to Lossless Scaling's device events
   and holding its frame lock; the teardown waited on the GPU, and Lossless Scaling's next device event waited on that lock. Now the addon lets

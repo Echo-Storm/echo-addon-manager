@@ -15,6 +15,7 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <cstdint>
+#include <atomic>
 #include <functional>
 #include <string>
 #include "engine/flow_estimator.h"
@@ -47,6 +48,9 @@ public:
              ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset, float sharpen, bool reset,
              ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue);
 
+    // Stability 0..1 (from the next run): the motion's distrust mask looks past flicker, and FSR 3 keeps more of its history and reacts less
+    // to small changes of shading. Less shimmer on thin lines and leaves; more trailing behind what moves. 0 = as before.
+    void SetStability(float s) { m_stability.store(s < 0.0f ? 0.0f : s > 1.0f ? 1.0f : s); }
     double GpuMs() const { return m_gpuMs; }   // everything a run does, on the GPU, smoothed
     double MotionMs() const { return m_motionMs; }   // of that, the motion (the estimate, or the flow pass)
     uint64_t Runs() const { return m_runs; }
@@ -79,6 +83,10 @@ private:
     ID3D12QueryHeap* m_timestamps = nullptr; ID3D12Resource* m_timestampReadback = nullptr; uint64_t m_timestampFreq = 1;
     double m_gpuMs = 0, m_motionMs = 0;
     FlowEstimator m_estimator; bool m_estimatedLast = false; uint64_t m_estimates = 0;
+    std::atomic<float> m_stability{ 0.0f };
+    float m_ffxStability = -1.0f;      // the stability FSR's context was last configured for (-1: not yet)
+    float m_loggedStability = -1.0f;
+    void ConfigureFsrStability(float s);
     // the motion pass
     ID3D12RootSignature* m_rootSig = nullptr; ID3D12PipelineState* m_motionPso = nullptr; ID3D12PipelineState* m_sharpenPso = nullptr;
     ID3D12Resource* m_unsharpened = nullptr; uint32_t m_unsharpenedW = 0, m_unsharpenedH = 0; DXGI_FORMAT m_unsharpenedFmt = DXGI_FORMAT_UNKNOWN;   // DLSS's picture before sharpening

@@ -356,6 +356,7 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
         QueryPerformanceCounter(&b);
         if (rc != FFX_API_RETURN_OK || !m_ffx->context) { m_ffx->context = nullptr; Fail("FSR 3 could not make its upscaling context (code %u)", rc); return false; }
         m_inW = inW; m_inH = inH; m_outW = outW; m_outH = outH; m_preset = preset;
+        m_ffxStability = -1.0f;   // a new context has AMD's defaults
         m_buildMs = (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
         Log("FSR 3 upscaler: %ux%u -> %ux%u (x%.2f), made in %.0f ms", inW, inH, outW, outH, ratio, m_buildMs);
         return true;
@@ -391,6 +392,30 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
 
 // ---- one frame
 
+// FSR 3.1's tuning keys (AMD's defaults at 0): at 1 it keeps more history where the reactive mask or a disocclusion would cut it, lets a
+// thin object that keeps uncovering its background build up history sooner, reacts less to small changes of shading and to motion.
+void SrEngine::ConfigureFsrStability(float s) {
+    if (!m_ffx || !m_ffx->context || !m_ffx->fn.Configure || s == m_ffxStability) return;
+    const struct { uint64_t key; float value; const char* name; } keys[] = {
+        { FFX_API_CONFIGURE_UPSCALE_KEY_FVELOCITYFACTOR, 1.0f - 0.5f * s, "velocity factor" },
+        { FFX_API_CONFIGURE_UPSCALE_KEY_FSHADINGCHANGESCALE, 1.0f - 0.75f * s, "shading change" },
+        { FFX_API_CONFIGURE_UPSCALE_KEY_FACCUMULATIONADDEDPERFRAME, 0.333f + 0.3f * s, "accumulation per frame" },
+        { FFX_API_CONFIGURE_UPSCALE_KEY_FMINDISOCCLUSIONACCUMULATION, -0.333f + 0.6f * s, "disocclusion accumulation" },
+    };
+    bool ok = true;
+    for (const auto& k : keys) {
+        float value = k.value;
+        ffxConfigureDescUpscaleKeyValue d{}; d.header.type = FFX_API_CONFIGURE_DESC_TYPE_UPSCALE_KEYVALUE; d.key = k.key; d.ptr = &value;
+        if (m_ffx->fn.Configure(&m_ffx->context, &d.header) != FFX_API_RETURN_OK) ok = false;
+    }
+    m_ffxStability = s;
+    if (std::abs(s - m_loggedStability) >= 0.05f || (s == 0.0f) != (m_loggedStability == 0.0f)) {   // not every step of a slider being dragged
+        m_loggedStability = s;
+        Log("FSR 3 upscaler: stability %.2f: velocity factor %.2f, shading change %.2f, accumulation per frame %.3f, disocclusion accumulation %.3f%s", s,
+            keys[0].value, keys[1].value, keys[2].value, keys[3].value, ok ? "" : " (FSR refused some of them)");
+    }
+}
+
 bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT inFormat, ID3D12Resource* out, uint32_t outW, uint32_t outH, DXGI_FORMAT outFormat,
                    ID3D12Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset, float sharpen, bool reset,
                    ID3D12Fence* copied, uint64_t copiedValue, ID3D12Fence* done, uint64_t doneValue) {
@@ -406,6 +431,8 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     LARGE_INTEGER qpcNow, qpcFreq; QueryPerformanceCounter(&qpcNow); QueryPerformanceFrequency(&qpcFreq);
     const float frameMs = m_lastRunQpc ? std::clamp(static_cast<float>((qpcNow.QuadPart - m_lastRunQpc) * 1000.0 / qpcFreq.QuadPart), 1.0f, 100.0f) : 16.7f;
     m_lastRunQpc = qpcNow.QuadPart;
+    const float stability = m_stability.load();
+    if (fsr) ConfigureFsrStability(stability);
     bool estimating = estimate && m_estimator.IsReady();
     if (estimating && m_estimator.NeedsResize(inW, inH)) { WaitIdle(); estimating = m_estimator.Ensure(inW, inH); }
     if (estimating && !m_estimatedLast) m_estimator.Forget();   // its frame before is not the one before this
@@ -446,7 +473,7 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     ID3D12DescriptorHeap* heaps[] = { m_heap };
     if (estimating) {
         Transition(m_distrust, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        m_estimator.Record(m_list, slot, in, inFormat == DXGI_FORMAT_UNKNOWN ? DXGI_FORMAT_R8G8B8A8_UNORM : inFormat, m_motion, m_distrust);
+        m_estimator.Record(m_list, slot, in, inFormat == DXGI_FORMAT_UNKNOWN ? DXGI_FORMAT_R8G8B8A8_UNORM : inFormat, m_motion, m_distrust, stability);
         Transition(m_distrust, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     } else {
         m_list->SetDescriptorHeaps(1, heaps);

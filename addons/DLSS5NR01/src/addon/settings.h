@@ -23,6 +23,7 @@ struct Config {
     // The upscalers: when no newer picture is finished, Lossless Scaling's queue waits on the GPU for the next one rather than show the same
     // picture again (ScalerLink::Upscale). A CPU wait tried before made repeats more frequent on a busy GPU and is gone (2026-09-25).
     bool scalerGpuWait = true;
+    float scalerStability = 0.0f;        // the upscalers: less shimmer, more trailing (SrEngine::SetStability)
     int scalerHandoff = 0;               // the DLSS 4 Upscaler's handoff (ScalerLink::Handoff): 0 one frame late, 1 GPU wait, 2 DLSS runs but NIS stays,
                                          // 3 NIS runs and DLSS's picture is copied over it at Present
     NrParams p;                          // the look, and the few model settings that are not part of a look

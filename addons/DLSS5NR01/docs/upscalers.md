@@ -40,6 +40,10 @@ multisampling (MSAA 4x/8x) costs a lot and adds little here; keep the game's own
 - **Motion**: *Measured from the frames* (the default), *Lossless Scaling's frame generation* (its flow: coarser, a quarter of the game's size,
   and only with frame generation on), or *None* (the upscaler assumes nothing moves: sharp when still, smeared when the camera turns; there to
   compare).
+- **Stability** (off to start with): less shimmer on thin lines, wires and leaves, for a little more trailing behind what moves. The motion
+  measurement then judges trust by a pixel's surroundings rather than the pixel itself, so flicker is no longer reported as "do not trust the
+  history here" and the upscaler averages it out; FSR 3 also keeps more history and reacts less to small shading changes (AMD's tuning keys).
+  Real motion is followed as before. 0.5 is a good start.
 - **Before / after** (Ctrl+Shift+F6): switches between the upscaler and Lossless Scaling's own NIS while you play. The hotkeys work only while
   the upscaler is actually upscaling.
 
@@ -62,7 +66,9 @@ The addon adds one frame of latency: the picture shown is the one the upscaler f
   lean on the current frame instead of its history.
 - **Fine detail**: a game with DLSS built in shifts its camera by a fraction of a pixel every frame, which lets DLSS rebuild detail finer
   than the render size. A captured frame has no such shifts (and no depth), so the upscalers work from what each frame shows; camera motion
-  gives them some of the same variety.
+  gives them some of the same variety. The same goes for anti-aliasing: a line thinner than a pixel is simply missing in parts of the frame,
+  and no upscaler can draw it back. Turn on the game's own anti-aliasing (MSAA) if it has one: in Fallout: New Vegas 8x (`iMultiSample=8`)
+  made a large difference, and the upscaler on top of it looks better again. Stability then calms what shimmer is left.
 - **Text and HUD** are part of the captured frame, so the upscaler treats them like the rest of the picture; thin text can come out a little
   softer or dimmer than with NIS (FSR 3 keeps it crisper than DLSS). A game with DLSS built in draws its HUD after upscaling. Keeping NIS for
   HUD areas is on the roadmap.

@@ -350,6 +350,14 @@ void DrawPanel() {
         else Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond; above about 0.6 its effect is amplified "
                  "past CAS's own maximum. DLSS 4 has no sharpening of its own, while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer "
                  "next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
+        { const float off = 0.0f; changed |= eam::ui::SliderFloat("Stability", &c.scalerStability, 0.0f, 1.0f, c.scalerStability <= 0.001f ? "off" : "%.2f", 0, &off); }
+        { char tip[768];
+          snprintf(tip, sizeof tip, "Less shimmer on thin lines, wires and leaves, at the cost of more trailing behind what moves. The game gives the upscaler no "
+                   "sub-pixel camera shifts, so a line thinner than a pixel flickers from frame to frame; with this up, the motion measurement stops reporting that "
+                   "flicker as a place not to trust the history, so %s averages it out over the frames before%s. Off: as before. Try 0.5, then move it while "
+                   "you look at a fence or a power line. The game's own anti-aliasing (MSAA) is still what draws thin lines in the first place.",
+                   U, kFsrScaler ? ", and FSR 3 keeps more of its history and reacts less to small changes of shading" : "");
+          Tip(tip); }
         if (ImGui::Checkbox("Wait on the GPU rather than repeat a picture", &c.scalerGpuWait)) changed = true;
         Tip("When the upscaler has not finished a new picture by the time Lossless Scaling needs one (two frames close together, as adaptive frame generation makes "
             "them), the picture before would be shown again: a small judder. On (the default), Lossless Scaling's frame waits on the GPU for the new picture instead, "
