@@ -218,6 +218,9 @@ def scenario_scaler_noflow(ctx, res, text, frame):
     # frame generation off: no capture or flow passes, NIS on the BGRA8 frame
     nis = re.search(r'\[check-nis\].*', text)
     res.check('with frame generation off (no flow, a BGRA8 frame) DLSS still replaces NIS', 'DLSS REPLACED NIS' in text, nis.group(0)[12:] if nis else 'no check line')
+    still = re.search(r'motion estimator: over \d+ frames, average vector \((-?[0-9.]+), (-?[0-9.]+)\) px, average length ([0-9.]+) px', text)
+    if still and 'nismove=1' not in ctx.get('keys', []):   # a still picture: the estimate must be exactly still (a small wrong offset blurs text)
+        res.check('on a still picture the measured motion is zero', float(still.group(3)) < 0.01, 'average length %s px' % still.group(3))
 
 
 def move_error(text):

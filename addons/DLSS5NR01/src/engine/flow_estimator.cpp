@@ -49,6 +49,7 @@ Texture2D<float> tCur : register(t0);
 Texture2D<float> tPrev : register(t1);
 Texture2D<float2> tCoarse : register(t2);
 RWTexture2D<float2> uGrid : register(u0);
+static const float kExact = 0.0005, kShallow = 0.002;   // an exact match (brightness 0..1, per pixel); the least rise either side to refine on
 static float cw[64];
 static int2 origin;
 float Sad(int2 v) {
@@ -91,11 +92,14 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
     }
     float2 result = float2(best);
-    if (flags & 2) {   // a parabola through the costs either side, in x and in y
+    if (flags & 2) {
+        // A fraction of a pixel: the costs of summed differences rise in a V around the true position, so two lines of equal slope through
+        // the costs either side (not a parabola, which pulls toward whole pixels). Not where the match is already exact (a still picture
+        // must give exactly zero: a small wrong offset would slide DLSS's history every frame and blur text), nor where the V is too shallow.
         const float c0 = Sad(best), xm = Sad(best - int2(1, 0)), xp = Sad(best + int2(1, 0)), ym = Sad(best - int2(0, 1)), yp = Sad(best + int2(0, 1));
-        const float dx = xm - 2.0 * c0 + xp, dy = ym - 2.0 * c0 + yp;
-        if (dx > 1e-5) result.x += clamp(0.5 * (xm - xp) / dx, -0.5, 0.5);
-        if (dy > 1e-5) result.y += clamp(0.5 * (ym - yp) / dy, -0.5, 0.5);
+        const float sx = max(xm, xp) - c0, sy = max(ym, yp) - c0;
+        if (c0 > kExact && sx > kShallow) result.x += clamp(0.5 * (xm - xp) / sx, -0.5, 0.5);
+        if (c0 > kExact && sy > kShallow) result.y += clamp(0.5 * (ym - yp) / sy, -0.5, 0.5);
         uStats.InterlockedAdd(0, uint(c0 * 4096.0));
         uStats.InterlockedAdd(4, asuint(int(round(result.x * 32.0))));   // game pixels (twice this size's), 1/16 pixel
         uStats.InterlockedAdd(8, asuint(int(round(result.y * 32.0))));
@@ -125,8 +129,9 @@ void main(uint3 id : SV_DispatchThreadID) {
 }
 )";
 
-// Every pixel at the game's size: its own block's vector, the three nearest blocks' and "not moving"; the one under which its 3x3 surroundings
-// match best (the own block's is preferred by `bias` where they match alike). flags: 1 there is a frame before (else zero).
+// Every pixel at the game's size: "not moving", its own block's vector and the three nearest blocks'; the one under which its 3x3 surroundings
+// match best. "Not moving" wins a tie (a HUD or text that stays put must not slide), and another block's vector must beat the own block's by
+// `bias`. flags: 1 there is a frame before (else zero).
 const char* const kPixelHlsl = R"(
 Texture2D<float> tCur : register(t0);
 Texture2D<float> tPrev : register(t1);
@@ -140,17 +145,17 @@ void main(uint3 id : SV_DispatchThreadID) {
     const int2 cell = min(p >> 3, gl);
     const int2 q = int2((p.x & 7) < 4 ? -1 : 1, (p.y & 7) < 4 ? -1 : 1);
     float2 cand[5];
-    cand[0] = tGrid.Load(int3(cell, 0)) * 2.0;
-    cand[1] = tGrid.Load(int3(clamp(cell + int2(q.x, 0), int2(0, 0), gl), 0)) * 2.0;
-    cand[2] = tGrid.Load(int3(clamp(cell + int2(0, q.y), int2(0, 0), gl), 0)) * 2.0;
-    cand[3] = tGrid.Load(int3(clamp(cell + q, int2(0, 0), gl), 0)) * 2.0;
-    cand[4] = float2(0, 0);
+    cand[0] = float2(0, 0);
+    cand[1] = tGrid.Load(int3(cell, 0)) * 2.0;
+    cand[2] = tGrid.Load(int3(clamp(cell + int2(q.x, 0), int2(0, 0), gl), 0)) * 2.0;
+    cand[3] = tGrid.Load(int3(clamp(cell + int2(0, q.y), int2(0, 0), gl), 0)) * 2.0;
+    cand[4] = tGrid.Load(int3(clamp(cell + q, int2(0, 0), gl), 0)) * 2.0;
     float c[9];
     [unroll] for (int k = 0; k < 9; ++k) c[k] = tCur.Load(int3(clamp(p + int2(k % 3 - 1, k / 3 - 1), int2(0, 0), last), 0));
     const float2 inv = 1.0 / float2(size);
     float bestCost = 1e30; float2 best = cand[0];
     [unroll] for (int n = 0; n < 5; ++n) {
-        float s = n == 0 ? 0.0 : bias;
+        float s = n <= 1 ? 0.0 : bias;
         [unroll] for (int k = 0; k < 9; ++k)
             s += abs(c[k] - tPrev.SampleLevel(sLinear, (float2(p + int2(k % 3 - 1, k / 3 - 1)) + 0.5 + cand[n]) * inv, 0)) * (1.0 / 9.0);
         if (s < bestCost) { bestCost = s; best = cand[n]; }
