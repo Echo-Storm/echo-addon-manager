@@ -7,8 +7,8 @@ Two addons, built from Neural Rendering's sources, that take the place of Lossle
 | **DLSS 4 Upscaler** (`DLSS4DLAA`) | NVIDIA DLSS Super Resolution (models K and M) | an NVIDIA RTX card | NVIDIA's DLSS runtime 310.9.1 (`dlss\nvngx_dlss.dll`, NVIDIA's licence) |
 | **FSR 3 Upscaler** (`FSR3UPSC`) | AMD FidelityFX Super Resolution 3.1 | any DirectX 12 card (AMD, NVIDIA, Intel) | AMD's FidelityFX runtime (`fsr\amd_fidelityfx_dx12.dll`, FidelityFX SDK v1.1.4, MIT, signed by AMD) |
 
-Both are **work in progress** (0.9.1): they work and can be switched on, and the release zip leaves them out until they have been tried in
-more games. They were developed and tested with World of Warcraft: Forever on an RTX 4070 Ti SUPER.
+Both are a **preview** (0.9.1, work in progress): they come in the download switched off, and so far they were developed and tested with
+World of Warcraft: Forever only, on an RTX 4070 Ti SUPER.
 
 A temporal upscaler builds each picture from several frames, so it has to know where every pixel was in the frame before. A game with DLSS or
 FSR built in tells it; Lossless Scaling does not. These addons **measure that motion from the frames themselves**, so they work in any game

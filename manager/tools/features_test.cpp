@@ -77,10 +77,10 @@ static void ReShadeOnce(bool layerOnTop) {
     WNDCLASSEXW wc = { sizeof wc };
     wc.lpfnWndProc = DefWindowProcW;
     wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = L"EchoAddonManagerClass";
+    wc.lpszClassName = L"LSAddonManagerClass";
     RegisterClassExW(&wc);
     WindowThread own;
-    own.cls = L"EchoAddonManagerClass";
+    own.cls = L"LSAddonManagerClass";
     own.Start();
     const WNDPROC ownOriginal = (WNDPROC)GetWindowLongPtrW(own.hwnd, GWLP_WNDPROC);
 

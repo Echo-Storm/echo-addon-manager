@@ -7,7 +7,7 @@ Status on 2026-09-24, at version 0.9.1 (the current work is on `main`).
 
 | # | For 1.0 | State | Notes |
 |---|---------|-------|-------|
-| 1 | **An installer**: install, update, repair after a Lossless Scaling update, uninstall | **Done** (0.6.0) | `EchoAddonManagerSetup.exe`: one file, a small wizard, with the core (folder detection, backups, rollback, repair, uninstall) tested on fake folders and the exe tested end to end. Tried on a real install by the maintainer (the folder search, the pages, reinstall, and an update from 0.5.0 to 0.6.0, which worked); the "restart as administrator" path and Windows SmartScreen's reaction are not verified. See below. |
+| 1 | **An installer**: install, update, repair after a Lossless Scaling update, uninstall | **Done** (0.6.0) | `LSAddonManagerSetup.exe`: one file, a small wizard, with the core (folder detection, backups, rollback, repair, uninstall) tested on fake folders and the exe tested end to end. Tried on a real install by the maintainer (the folder search, the pages, reinstall, and an update from 0.5.0 to 0.6.0, which worked); the "restart as administrator" path and Windows SmartScreen's reaction are not verified. See below. |
 | 2 | **An update check** | **Done** (0.5.0) | Once a day, on by default, off in *Settings > Updates*; never downloads or installs; the only network access. |
 | 3 | **A frozen, documented addon API** | **Done** on `main` | The API is at 1.0.0, documented (`docs/addon-authors.md`), with a written compatibility promise (`docs/api-compatibility.md`: what will and will not change before 2.0) and a sample addon (`examples/SampleAddon`) that builds against the SDK and is tested against the real manager. |
 | 4 | **Every shipped feature checked in real use** | **Needs you** | Neural Rendering, the window, the tray and hotkey, and the exit path are checked live. Not yet: ReShade passthrough (hotkey and auto-click) and Windowed mode (the virtual display after a restart) have only passed offline tests. A short live try settles both. |
@@ -25,7 +25,7 @@ What it has to do (and what it must never do):
 - **Find the Lossless Scaling folder**: from a running `LosslessScaling.exe`, Steam's library folders, the usual locations and the last folder used, or let the person pick it.
   Non-Steam copies are common, so picking must always work.
 - **Refuse while Lossless Scaling is running**, and say why.
-- **Tell whose `Lossless.dll` is whose without loading it.** Our `Lossless.dll` carries a version resource (product "Echo Addon Manager"); Lossless Scaling's says "Lossless Scaling".
+- **Tell whose `Lossless.dll` is whose without loading it.** Our `Lossless.dll` carries a version resource (product "Addon Manager for Lossless Scaling"); Lossless Scaling's says "Lossless Scaling".
 - **Install** by backing up, renaming the original `Lossless.dll` to `Lossless_original.dll`, putting ours in its place, and copying the addons and icons. It never touches the person's
   `config.json`, their other addons or `addons\.removed`. Everything is verified by hash afterwards, and any failure rolls the folder back to how it was.
 - **Repair after a Lossless Scaling update**, which puts its own `Lossless.dll` back and removes ours: keep the new original as `Lossless_original.dll` and put ours in again.
@@ -57,7 +57,7 @@ What it has to do (and what it must never do):
     or finding the HUD automatically, which would be an addon of its own.
   - **Windows of another shape than the screen** (4:3 games): Lossless Scaling scales them into part of the screen, which the upscalers
     leave to NIS for now. Taking that case too matters for old games.
-  - Then: drop the WIP label, put them in the release zip (and its install notes), and a user-guide chapter.
+  - Then: drop the WIP label (0.9.1 ships them as a preview, switched off), and a user-guide chapter.
 
 ## Ideas for after 1.0
 

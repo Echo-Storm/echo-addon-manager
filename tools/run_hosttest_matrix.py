@@ -311,7 +311,7 @@ SCENARIOS = [
     ('ghost_on', ['flowsplit=1', 'ghostGuard=1'], scenario_ghost_on),
     ('flow_previous', ['freshFlow=0'], scenario_flow_previous),
     ('selftest', ['selfTestOnStart=1'], scenario_selftest),
-    ('scaler', ['addon=DLSS4DLAA.dll', 'nis=1'], scenario_scaler),
+    ('scaler', ['addon=DLSS4DLAA.dll', 'nis=1', 'sharpen=0'], scenario_scaler),   # no sharpening (the upscalers' default is 0.3): the baseline for scaler_sharp
     ('scaler_m', ['addon=DLSS4DLAA.dll', 'nis=1', 'dlaaPreset=13'], scenario_scaler),
     ('scaler_sharp', ['addon=DLSS4DLAA.dll', 'nis=1', 'sharpen=0.5'], scenario_scaler),
     ('scaler_bgra', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_scaler_noflow),   # frame generation off: only NIS, on the BGRA8 capture

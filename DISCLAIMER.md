@@ -1,6 +1,6 @@
 # Disclaimer
 
-Echo Addon Manager is an unofficial add-on manager for Lossless Scaling. It is not affiliated with, endorsed by or supported by
+Addon Manager for Lossless Scaling (LS Addon Manager) is an unofficial add-on manager for Lossless Scaling. It is not affiliated with, endorsed by or supported by
 the Lossless Scaling developers.
 
 It works by loading in place of Lossless Scaling's own `Lossless.dll` (the original is kept beside it, renamed) and forwarding to

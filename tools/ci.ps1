@@ -32,7 +32,7 @@ Run 'sample addon' "$root\manager\build\Release\eam_sampletest.exe"
 
 Section 'the installer'
 Configure "$root\installer" "$root\installer\build"
-Build "$root\installer\build" @('setup_core', 'setup_cli', 'setup_test', 'setup_payload_test', 'pack_payload', 'EchoAddonManagerSetup')
+Build "$root\installer\build" @('setup_core', 'setup_cli', 'setup_test', 'setup_payload_test', 'pack_payload', 'LSAddonManagerSetup')
 Run 'installer core (fake Lossless Scaling folders)' "$root\installer\build\Release\setup_test.exe"
 Run 'installer file bundle' "$root\installer\build\Release\setup_payload_test.exe"
 Run 'Setup exe, silent mode' 'powershell' @('-NoProfile', '-File', "$root\installer\tests\setup_exe_test.ps1", '-Root', $root, '-NoWindow')

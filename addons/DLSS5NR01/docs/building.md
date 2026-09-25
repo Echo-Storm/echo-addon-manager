@@ -34,7 +34,7 @@ Outputs in `build\Release`:
 
 | File | What |
 |---|---|
-| `DLSS5NR01.dll` | the Echo Addon Manager addon |
+| `DLSS5NR01.dll` | the LS Addon Manager addon |
 | `nvngx.dll_dlss5nr01.dll` | the forwarder, the only module that calls the DLSSNR snippet |
 | `nr_hosttest.exe` | offline test host for the addon |
 

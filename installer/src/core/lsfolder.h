@@ -27,7 +27,7 @@ std::vector<std::wstring> ScanDrive(const std::wstring& driveRoot);
 // Every place worth offering, best first, each checked with LooksLikeLosslessScaling and listed once.
 std::vector<Candidate> FindCandidates();
 
-// The folder used last time (kept in HKCU\Software\EchoAddonManager).
+// The folder used last time (kept in HKCU\Software\LSAddonManager).
 void RememberFolder(const std::wstring& dir);
 std::wstring RememberedFolder();
 void UseRegistryKeyForTest(const wchar_t* subkey);   // tests keep their own key, so they never touch the person's remembered folder; null restores the normal one

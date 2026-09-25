@@ -1,4 +1,4 @@
-"""Draws the Echo icon for Echo Addon Manager (window, taskbar, tray): a dark rounded tile in the palette of the author's other
+"""Draws the Echo icon for LS Addon Manager (window, taskbar, tray): a dark rounded tile in the palette of the author's other
 apps with a stack of frames (a bright one in front, two fainter echoes behind it). Writes a multi-size .ico (16..256, each size drawn on its
 own with weights tuned for that size, not just scaled down) and a 256 px .png.
 

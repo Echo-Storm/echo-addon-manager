@@ -79,7 +79,7 @@ EAM_EXPORT uint32_t GetAddonCapabilities() { return EAM_CAP_HAS_SETTINGS; }   //
 
 EAM_EXPORT const char* GetAddonName() { return "Sample Addon"; }
 EAM_EXPORT const char* GetAddonVersion() { return "1.0.0"; }
-EAM_EXPORT const char* GetAddonAuthor() { return "Echo Addon Manager project"; }
+EAM_EXPORT const char* GetAddonAuthor() { return "Echo-Storm"; }
 EAM_EXPORT const char* GetAddonDescription() { return "A small example addon: settings, a settings panel, a status line and a metric."; }
 
 // ---- the settings panel: called by the manager, once per frame, while this addon's page is open -----------------------------------------------

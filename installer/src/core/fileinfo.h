@@ -7,7 +7,7 @@ namespace setup {
 
 struct VersionResource {
     bool ok = false;               // the file has a version resource
-    std::string product;           // "Lossless Scaling" or "Echo Addon Manager"
+    std::string product;           // "Lossless Scaling", or ours: "Addon Manager for Lossless Scaling" (before 0.9.1 "Echo Addon Manager")
     std::string company;
     std::string description;
     std::string fileVersion;       // "3.2.2.0", "0.4.1"

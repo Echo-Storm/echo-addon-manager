@@ -1,4 +1,4 @@
-# Builds Release and assembles dist\EchoAddonManager-<version>-x64.zip: the manager, the addons that build, EchoAddonManagerSetup.exe (one file that carries them all),
+# Builds Release and assembles dist\LSAddonManager-<version>-x64.zip: the manager, the addons that build, LSAddonManagerSetup.exe (one file that carries them all),
 # an install note, and the licences.
 # The DLSSNR model is never packaged. NVIDIA's NGX library is linked into Neural Rendering and ships under NVIDIA's licence (NOTICE.md), with
 # NVIDIA-LICENSE.txt beside it. Neural Rendering is left out (with a note) when it did not build; work-in-progress addons unless -IncludeWip.
@@ -18,7 +18,7 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { Write-Host 'Some target did not build (Neural Rendering needs the NVIDIA SDK in external\ngx); packaging what is there.' }
 }
 
-$name = "EchoAddonManager-$Version-x64"
+$name = "LSAddonManager-$Version-x64"
 $dist = "$root\dist"
 $stage = "$dist\$name"
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
@@ -33,12 +33,13 @@ $addons = @(
     @{ Id = 'DLSS5NR01'; Dir = "$root\addons\DLSS5NR01"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS5NR01.dll', 'nvngx.dll_dlss5nr01.dll', 'nr_selftest.exe');
        # NVIDIA's files, under NVIDIA's licence (NOTICE.md): the licence must travel with the binaries that contain NVIDIA's code
        Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt" } },
-    # DLSS 4 Upscaler: built from the same sources; its addon.json lives in products\DLSS4DLAA, and NVIDIA's DLSS runtime ships in its dlss folder
-    @{ Id = 'DLSS4DLAA'; Wip = $true; Dir = "$root\addons\DLSS5NR01\products\DLSS4DLAA"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS4DLAA.dll');
+    # DLSS 4 Upscaler (a preview since 0.9.1: its addon.json keeps it off until switched on): built from the same sources; its addon.json lives
+    # in products\DLSS4DLAA, and NVIDIA's DLSS runtime ships in its dlss folder
+    @{ Id = 'DLSS4DLAA'; Dir = "$root\addons\DLSS5NR01\products\DLSS4DLAA"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS4DLAA.dll');
        Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; 'LICENSE.txt' = "$root\addons\DLSS5NR01\LICENSE";
                   'dlss\nvngx_dlss.dll' = "$root\addons\DLSS5NR01\external\ngx\bin\nvngx_dlss.dll" } },
     # FSR 3 Upscaler: the same sources again; AMD's FidelityFX runtime (MIT, signed by AMD) ships in its fsr folder (tools\fetch_ffx_sdk.ps1)
-    @{ Id = 'FSR3UPSC'; Wip = $true; Dir = "$root\addons\DLSS5NR01\products\FSR3UPSC"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('FSR3UPSC.dll');
+    @{ Id = 'FSR3UPSC'; Dir = "$root\addons\DLSS5NR01\products\FSR3UPSC"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('FSR3UPSC.dll');
        Extra = @{ 'AMD-FidelityFX-LICENSE.txt' = "$root\addons\DLSS5NR01\third_party\ffx\LICENSE.txt"; 'LICENSE.txt' = "$root\addons\DLSS5NR01\LICENSE";
                   'fsr\amd_fidelityfx_dx12.dll' = "$root\addons\DLSS5NR01\external\ffx\bin\amd_fidelityfx_dx12.dll" } }
 )
@@ -73,8 +74,8 @@ $bundle = "$dist\payload-$Version.bin"
 & "$setupBuild\Release\pack_payload.exe" $payloadDir $bundle
 if ($LASTEXITCODE -ne 0) { throw 'packing the installer files failed' }
 & cmake -S "$root\installer" -B $setupBuild "-DSETUP_PAYLOAD=$bundle" | Out-Null
-& cmake --build $setupBuild --config Release --target EchoAddonManagerSetup 2>&1 | Select-String -Pattern ' error |warning C' | ForEach-Object { Write-Host $_.Line }
-$setupExe = "$setupBuild\Release\EchoAddonManagerSetup.exe"
+& cmake --build $setupBuild --config Release --target LSAddonManagerSetup 2>&1 | Select-String -Pattern ' error |warning C' | ForEach-Object { Write-Host $_.Line }
+$setupExe = "$setupBuild\Release\LSAddonManagerSetup.exe"
 if (-not (Test-Path $setupExe)) { throw 'the Setup exe did not build' }
 
 # Check the finished exe as a person would use it: it must report the version it carries, and install into a fake Lossless Scaling folder byte for byte
@@ -104,13 +105,13 @@ if (Test-Path $fakeOriginal) {
     Write-Host '  (Setup exe installed-files check skipped: build the installer tests first to get the stand-in Lossless.dll)'
 }
 Remove-Item -Recurse -Force $check -ErrorAction SilentlyContinue
-Copy-Item $setupExe "$stage\EchoAddonManagerSetup.exe"
+Copy-Item $setupExe "$stage\LSAddonManagerSetup.exe"
 Remove-Item -Recurse -Force $payloadDir
 
 Copy-Item "$root\LICENSE" "$stage\LICENSE.txt"
 Copy-Item "$root\NOTICE.md", "$root\DISCLAIMER.md", "$root\CHANGELOG.md" $stage
 @"
-Echo Addon Manager $Version
+LS Addon Manager $Version
 =============================
 
 The addon manager for Lossless Scaling. Read DISCLAIMER.md first.
@@ -126,9 +127,9 @@ RTX 4070 Ti SUPER. Other games and setups are untested.
 The manager checks github.com once a day for a newer release of this project (on by default; turn it off in Settings > Updates). It only compares version
 numbers: nothing is downloaded or installed, and it is the only thing the manager sends over the internet.
 
-Easiest: run EchoAddonManagerSetup.exe
+Easiest: run LSAddonManagerSetup.exe
 -------
-Close Lossless Scaling, run EchoAddonManagerSetup.exe and follow it: it finds the Lossless Scaling folder (or lets you pick it, for copies that are not
+Close Lossless Scaling, run LSAddonManagerSetup.exe and follow it: it finds the Lossless Scaling folder (or lets you pick it, for copies that are not
 from Steam), installs, updates, repairs the install after a Lossless Scaling update, and uninstalls. Everything it replaces is backed up first, your settings
 and other addons are never touched, and it undoes itself if anything goes wrong. Like every file in this project it is unsigned, so Windows SmartScreen may
 warn you ("More info", then "Run anyway"); it runs without administrator rights unless the Lossless Scaling folder needs them. Or do it by hand:
@@ -143,15 +144,20 @@ Install by hand (Lossless Scaling 3.2.2.0 was the tested version)
 5. DLSS 5 Neural Rendering also needs nvngx_dlssnr.dll next to LosslessScaling.exe. It is not included and this project does not say where to
    find it. ReShade input passthrough and Windowed mode are built into the manager (its Features tab); they arrive switched off.
    If you used the old separate ReShade or Windowed addon folders, the manager ignores them; you can remove them.
+6. Preview (work in progress): the DLSS 4 Upscaler (NVIDIA RTX) and the FSR 3 Upscaler (any DirectX 12 graphics card) take the place of
+   Lossless Scaling's NIS scaler with DLSS or FSR 3, using motion they measure from the frames. They arrive switched off: switch one on in
+   the addon list (only one of the two runs at a time), choose NIS as the Scaling Type in Lossless Scaling, and run the game in a window
+   smaller than the screen (for example 2560x1440 on a 4K screen). Tried in World of Warcraft: Forever only so far.
+   Guide: https://github.com/Echo-Storm/ls-addon-manager/blob/main/addons/DLSS5NR01/docs/upscalers.md
 
 Updating: close Lossless Scaling and copy the new files over the old ones. Your settings (addons\config.json) carry over.
 From 0.1.0: Neural Rendering is now addons\DLSS5NR01 (it was addons\LSP-NeuralRender) and its saved settings and looks move to the new name by themselves
 the first time it starts. ReShade passthrough and Windowed mode are built in (Features tab). The old LSP-NeuralRender, LSP-ReShade and LSP-Windowed
 folders are ignored by the manager; you can remove them.
-After a Lossless Scaling update: it may put its own Lossless.dll back. Run EchoAddonManagerSetup.exe again (it offers "Repair"), or by hand: delete the stale Lossless_original.dll, rename the new
+After a Lossless Scaling update: it may put its own Lossless.dll back. Run LSAddonManagerSetup.exe again (it offers "Repair"), or by hand: delete the stale Lossless_original.dll, rename the new
 Lossless.dll to Lossless_original.dll, and copy ours in again.
 
-Uninstall: run EchoAddonManagerSetup.exe and choose Uninstall, or by hand: delete our Lossless.dll, rename Lossless_original.dll back to Lossless.dll, and delete the addons folder if you like.
+Uninstall: run LSAddonManagerSetup.exe and choose Uninstall, or by hand: delete our Lossless.dll, rename Lossless_original.dll back to Lossless.dll, and delete the addons folder if you like.
 
 Licence: MIT (LICENSE.txt). Credits and third-party licences: NOTICE.md.
 "@ | Set-Content -Encoding UTF8 "$stage\INSTALL.txt"

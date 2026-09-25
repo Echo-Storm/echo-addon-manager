@@ -138,7 +138,7 @@ PayloadInfo CheckPayload(const std::wstring& payloadDir) {
     const std::wstring dll = JoinPath(payloadDir, L"Lossless.dll");
     if (!Exists(dll)) { p.error = "the installer's own Lossless.dll is missing from " + Narrow(payloadDir); return p; }
     const DllInfo info = InspectDll(dll);
-    if (info.kind != DllKind::Ours) { p.error = "the Lossless.dll that came with this installer is not Echo Addon Manager's"; return p; }
+    if (info.kind != DllKind::Ours) { p.error = "the Lossless.dll that came with this installer is not LS Addon Manager's"; return p; }
     p.version = info.version;
     p.ok = true;
     return p;
@@ -207,8 +207,8 @@ Result Install(const std::wstring& lsDir, const std::wstring& payloadDir) {
     fs::remove(fs::path(backupDir), ec);       // empty when nothing had to be saved
     if (Exists(backupDir)) r.backupDir = backupDir; else r.backupDir.clear();
     r.ok = true;
-    r.message = std::string(before.situation == Situation::Installed ? "Updated to " : (before.situation == Situation::AfterLsUpdate ? "Repaired: Echo Addon Manager " : "Installed Echo Addon Manager ")) + payload.version + ".";
-    if (r.message.rfind("Updated to ", 0) == 0) r.message = "Updated Echo Addon Manager to " + payload.version + ".";
+    r.message = std::string(before.situation == Situation::Installed ? "Updated to " : (before.situation == Situation::AfterLsUpdate ? "Repaired: LS Addon Manager " : "Installed LS Addon Manager ")) + payload.version + ".";
+    if (r.message.rfind("Updated to ", 0) == 0) r.message = "Updated LS Addon Manager to " + payload.version + ".";
     return r;
 }
 
@@ -217,7 +217,7 @@ Result Uninstall(const std::wstring& lsDir, bool removeAddons) {
     const State before = Inspect(lsDir);
     if (before.situation == Situation::NotLosslessScaling) return Fail(r, "Lossless Scaling was not found in this folder.");
     if (before.running) return Fail(r, "Close Lossless Scaling first: it keeps these files open.");
-    if (before.situation == Situation::NotInstalled) { r.ok = true; r.message = "Echo Addon Manager is not installed here; nothing to do."; return r; }
+    if (before.situation == Situation::NotInstalled) { r.ok = true; r.message = "LS Addon Manager is not installed here; nothing to do."; return r; }
     if (before.situation != Situation::Installed && before.situation != Situation::AfterLsUpdate) return Fail(r, Advise(before, "").headline);
 
     Journal j(r.log);
@@ -227,7 +227,7 @@ Result Uninstall(const std::wstring& lsDir, bool removeAddons) {
         if (!MakeDirs(backupDir)) throw Failure{ "could not create the backups folder" };
         r.backupDir = backupDir;
         if (before.situation == Situation::Installed) {
-            Rename(j, lossless, JoinPath(backupDir, L"Lossless.dll.ours"), "moved Echo Addon Manager's Lossless.dll to the backups");
+            Rename(j, lossless, JoinPath(backupDir, L"Lossless.dll.ours"), "moved LS Addon Manager's Lossless.dll to the backups");
             Rename(j, original, lossless, "put Lossless Scaling's own Lossless.dll back");
         } else {   // Lossless Scaling had already put its own back: only the stale copy is left over
             Rename(j, original, JoinPath(backupDir, L"Lossless_original.dll.old"), "moved the stale Lossless_original.dll to the backups");

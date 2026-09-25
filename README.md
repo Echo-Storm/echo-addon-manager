@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/images/banner.svg" alt="Echo Addon Manager: the addon manager for Lossless Scaling" width="100%"></p>
+<p align="center"><img src="docs/images/banner.svg" alt="Addon Manager for Lossless Scaling" width="100%"></p>
 
 <p align="center"><b>The addon manager for Lossless Scaling.</b><br>Install, switch on and tune addons from one window, and watch your frame rate and GPU while you play.</p>
 
@@ -12,19 +12,19 @@
 > **Tested with World of Warcraft: Forever.** This project was developed and tested against **World of Warcraft: Forever** (the beta; it runs as `WowB.exe`), on Lossless Scaling 3.2.2.0, Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested. DLSS 5 Neural Rendering in particular has only been
 > tried in World of Warcraft: Forever.
 
-**Echo Addon Manager** loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it an addon system: one window to install, switch on and tune
+**Addon Manager for Lossless Scaling** (LS Addon Manager for short; called Echo Addon Manager up to 0.8.0) loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it an addon system: one window to install, switch on and tune
 addons, a live view of frame time and GPU load while a game runs, and one-click backup of every setting. It comes with the **DLSS 5 Neural Rendering** addon, two upscaler addons in the works (**DLSS 4** and **FSR 3**) and two built-in features,
 **ReShade input passthrough** and **Windowed mode**. It is free and MIT-licensed. It is an unofficial project, not affiliated with the Lossless Scaling developers: read the
 [disclaimer](DISCLAIMER.md) before you install it.
 
-[![build](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml/badge.svg)](https://github.com/Echo-Storm/echo-addon-manager/actions/workflows/build.yml)
+[![build](https://github.com/Echo-Storm/ls-addon-manager/actions/workflows/build.yml/badge.svg)](https://github.com/Echo-Storm/ls-addon-manager/actions/workflows/build.yml)
 
 Status: **0.9.1**, on the way to 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
 
 ## Get started
 
-1. Download `EchoAddonManager-<version>-x64.zip` from the [releases page](https://github.com/Echo-Storm/echo-addon-manager/releases) and unzip it.
-2. Close Lossless Scaling, then run **`EchoAddonManagerSetup.exe`** from the zip. It looks for your Lossless Scaling folder (Steam or not; if it does not find it, choose **Use a different folder...**),
+1. Download `LSAddonManager-<version>-x64.zip` from the [releases page](https://github.com/Echo-Storm/ls-addon-manager/releases) and unzip it.
+2. Close Lossless Scaling, then run **`LSAddonManagerSetup.exe`** from the zip. It looks for your Lossless Scaling folder (Steam or not; if it does not find it, choose **Use a different folder...**),
    says what state it is in, and offers the one thing that fits: **Install**, **Update**, **Repair** or **Uninstall**.
 3. Start Lossless Scaling. The manager window opens by itself.
 
@@ -97,8 +97,8 @@ And one **addon**, which is separate because it needs an NVIDIA GPU and a file y
 |-------|--------------|---------|
 | **DLSS 5 Neural Rendering** | Runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures and applies the result to every frame it presents, real and generated, without ever making Lossless Scaling wait. Saved looks, per-game looks, HUD protection drawn on a snapshot of the game, screenshots of what you see, an auto mode that keeps the model within a time budget, shadows and highlights, colour, film grain and temporal smoothing. Changing the model resolution never stalls the game. Needs an NVIDIA RTX GPU and a copy of `nvngx_dlssnr.dll` that you supply. [More](addons/DLSS5NR01/README.md) | on |
 
-Two more addons are **work in progress**: they work and can be switched on in a build from source, and the release zip leaves them out until
-they have been tried in more games. Each takes the place of Lossless Scaling's NIS scaler (choose **NIS** as the Scaling Type and run the game in
+Two more addons come as a **preview** (work in progress): they are in the download but arrive switched off, and so far they have been tried
+in World of Warcraft: Forever only. Switch one on in the addon list ([guide](addons/DLSS5NR01/docs/upscalers.md)). Each takes the place of Lossless Scaling's NIS scaler (choose **NIS** as the Scaling Type and run the game in
 a window smaller than the screen) with a temporal upscaler, fed with motion that the addon measures from the frames themselves, so no game support
 and no frame generation are needed. Only one of the two runs at a time.
 
@@ -132,7 +132,7 @@ The areas are saved with each look, so every game can have its own layout.
 show an **Open the download page** button. It is **on by default** and can be turned off in *Settings > Updates*; *Check now* always works. It only compares version numbers: **nothing is downloaded or
 installed**, and it is the only thing the manager ever sends over the internet (GitHub sees your IP address and the program's name and version, as with any download).
 
-**To update:** download the new zip, close Lossless Scaling, run `EchoAddonManagerSetup.exe` and choose **Update**. Your settings carry over.
+**To update:** download the new zip, close Lossless Scaling, run `LSAddonManagerSetup.exe` and choose **Update**. Your settings carry over.
 
 ## If something goes wrong
 
@@ -169,13 +169,13 @@ Files the manager reads and writes, all inside the Lossless Scaling folder:
 | `addons\trusted_addons.json` | Optional: `{ "<addon id>": ["<sha256 of its DLL>"] }`, used by the Security setting. |
 | `addons\.removed\` | Addons you removed, each in a folder with a timestamp. |
 | `backups\` | What Setup replaced, and copies of settings made before a restore replaced them. |
-| `logs\EchoAddonManager.log` | The manager's log. It rolls over to `.old` at 8 MB. Addons may write their own log files here too (Neural Rendering does). |
+| `logs\LSAddonManager.log` | The manager's log. It rolls over to `.old` at 8 MB. Addons may write their own log files here too (Neural Rendering does). |
 
 ## How it works
 
 ```
 LosslessScaling.exe
-  └─ loads Lossless.dll          <- Echo Addon Manager (takes the original's place)
+  └─ loads Lossless.dll          <- LS Addon Manager (takes the original's place)
        ├─ loads Lossless_original.dll (the real engine) and forwards its exports untouched
        ├─ watches DirectX 11 compute work and shader loading, for addons that ask
        ├─ loads addons from addons\
@@ -185,7 +185,7 @@ LosslessScaling.exe
 Because it loads as a proxy DLL, nothing in Lossless Scaling is patched on disk and removing it puts everything back. Addons share the manager's
 Dear ImGui context, so they draw their settings inline and look the same.
 
-Setup never loads either `Lossless.dll` to tell them apart: it reads their version resources (Lossless Scaling's says "Lossless Scaling", ours says "Echo Addon Manager").
+Setup never loads either `Lossless.dll` to tell them apart: it reads their version resources (Lossless Scaling's says "Lossless Scaling", ours says "Addon Manager for Lossless Scaling").
 
 ## Build from source
 
@@ -219,7 +219,7 @@ Start from the [sample addon](examples/SampleAddon): a small, commented, tested 
 
 ## Credits
 
-Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta**, and we are grateful for it: its idea of a proxy
+Addon Manager for Lossless Scaling began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta**, and we are grateful for it: its idea of a proxy
 `Lossless.dll` with addons, its addon interface (which is why its addons still load here) and the ReShade and Windowed features, which started there as addons.
 The manager's code has since been rewritten; about a tenth of its lines still match the original's, mostly declarations and common idioms (`tools/measure_original_share.py`
 measures it). Neural Rendering began as **andreiday**'s DLSS 5 plugin for LosslessProxy and has been rewritten and extended here; about a tenth of its lines still

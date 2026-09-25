@@ -1,9 +1,9 @@
-// Echo Addon Manager Setup: a small wizard over the installer core (installer.h), and a silent mode for scripts and tests.
+// LS Addon Manager Setup: a small wizard over the installer core (installer.h), and a silent mode for scripts and tests.
 //
-//   EchoAddonManagerSetup.exe                                         the wizard
-//   EchoAddonManagerSetup.exe --folder <Lossless Scaling folder>      the wizard, starting with that folder
-//   EchoAddonManagerSetup.exe --silent status|install|uninstall --folder <dir> [--remove-addons] [--payload <dir>] [--log <file>]
-//   EchoAddonManagerSetup.exe --version                               what this setup carries (used by the build to check it)
+//   LSAddonManagerSetup.exe                                         the wizard
+//   LSAddonManagerSetup.exe --folder <Lossless Scaling folder>      the wizard, starting with that folder
+//   LSAddonManagerSetup.exe --silent status|install|uninstall --folder <dir> [--remove-addons] [--payload <dir>] [--log <file>]
+//   LSAddonManagerSetup.exe --version                               what this setup carries (used by the build to check it)
 //
 // The files it installs are a resource of this exe (see payload.h); --payload <dir> uses a folder instead (for development and tests).
 // The wizard is Windows' own TaskDialog: a few pages moved between with TDM_NAVIGATE_PAGE. Nothing here decides anything about files: that is the core's job.
@@ -53,14 +53,14 @@ std::wstring PlanText(Action a) {
     switch (a) {
     case Action::Install:
         return std::wstring(L"Lossless Scaling's own Lossless.dll is kept, renamed Lossless_original.dll (the manager passes everything on to it). "
-                            L"Echo Addon Manager's Lossless.dll takes its place, with its two icon files and the addons folder.") + safety;
+                            L"LS Addon Manager's Lossless.dll takes its place, with its two icon files and the addons folder.") + safety;
     case Action::Update:
-        return std::wstring(L"The earlier Echo Addon Manager files are replaced with these; Lossless_original.dll stays as it is.") + safety;
+        return std::wstring(L"The earlier LS Addon Manager files are replaced with these; Lossless_original.dll stays as it is.") + safety;
     case Action::Repair:
-        return std::wstring(L"Lossless Scaling updated itself and put its own Lossless.dll back over Echo Addon Manager's. Setup keeps that new one as Lossless_original.dll "
-                            L"and puts Echo Addon Manager's Lossless.dll back in.") + safety;
+        return std::wstring(L"Lossless Scaling updated itself and put its own Lossless.dll back over LS Addon Manager's. Setup keeps that new one as Lossless_original.dll "
+                            L"and puts LS Addon Manager's Lossless.dll back in.") + safety;
     case Action::Reinstall:
-        return std::wstring(L"Puts the Echo Addon Manager files back as they come in this download.") + safety;
+        return std::wstring(L"Puts the LS Addon Manager files back as they come in this download.") + safety;
     default: return L"";
     }
 }
@@ -141,7 +141,7 @@ HRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, LONG_PTR 
 Page& NewPage(App& a, const std::wstring& instruction, const std::wstring& content, bool closeButton = true) {
     a.pages.push_back(std::make_unique<Page>());
     Page& p = *a.pages.back();
-    p.title = L"Echo Addon Manager " + (a.payload.ok ? W(a.payload.version) + L" " : std::wstring()) + L"Setup";
+    p.title = L"LS Addon Manager " + (a.payload.ok ? W(a.payload.version) + L" " : std::wstring()) + L"Setup";
     p.instruction = instruction;
     p.content = content;
     p.footer = kNoModelNotice;
@@ -229,7 +229,7 @@ Page& ChooserPage(App& a, const std::wstring& why) {
         if (i >= 8) break;
         const State s = Inspect(c.dir);
         std::wstring line = c.dir + L"\n";
-        line += s.installedVersion.empty() ? L"Echo Addon Manager is not installed here" : L"Echo Addon Manager " + W(s.installedVersion) + L" is installed here";
+        line += s.installedVersion.empty() ? L"LS Addon Manager is not installed here" : L"LS Addon Manager " + W(s.installedVersion) + L" is installed here";
         if (!s.lsVersion.empty()) line += L"  |  Lossless Scaling " + W(s.lsVersion);
         line += L"  |  found: " + W(c.how);
         p.links.push_back({kCandidate0 + i, line});
@@ -319,7 +319,7 @@ std::wstring PlaceModel(App& a, const std::wstring& src) {
 void StartWork(HWND hwnd, App& a, bool uninstall, bool removeAddons) {
     a.done = false;
     a.resultIsUninstall = uninstall;
-    Navigate(hwnd, ProgressPage(a, uninstall ? L"Taking Echo Addon Manager out..." : L"Installing Echo Addon Manager..."));
+    Navigate(hwnd, ProgressPage(a, uninstall ? L"Taking LS Addon Manager out..." : L"Installing LS Addon Manager..."));
     if (a.worker.joinable()) a.worker.join();
     a.worker = std::thread([&a, uninstall, removeAddons] {
         a.result = uninstall ? Uninstall(a.folder, removeAddons) : Install(a.folder, a.payloadDir);
@@ -477,7 +477,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     const std::wstring testClose = Flag(args, L"--test-close-ms");
     if (!testClose.empty()) a.testCloseMs = _wtoi(testClose.c_str());
     if (!testClose.empty() || Has(args, L"--no-remember"))
-        UseRegistryKeyForTest(L"Software\\EchoAddonManager\\SetupTest");   // tests must never touch the person's remembered folder
+        UseRegistryKeyForTest(L"Software\\LSAddonManager\\SetupTest");   // tests must never touch the person's remembered folder
 
     Out out;
     const std::wstring logPath = Flag(args, L"--log");
@@ -500,7 +500,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         if (!EmbeddedPayload(data, size)) {
             a.payloadError = "This setup file carries no files (it was built without them).";
         } else {
-            a.tempDir = JoinPath(tmp, L"EchoAddonManagerSetup-" + std::to_wstring(GetCurrentProcessId()));
+            a.tempDir = JoinPath(tmp, L"LSAddonManagerSetup-" + std::to_wstring(GetCurrentProcessId()));
             std::string err;
             if (UnpackTo(data, size, JoinPath(a.tempDir, L"files"), err)) a.payloadDir = JoinPath(a.tempDir, L"files");
             else a.payloadError = err;
@@ -518,9 +518,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     } else if (silent) {
         a.folder = Flag(args, L"--folder");
         code = RunSilent(a, args, out);
-    } else if (HANDLE once = CreateMutexW(nullptr, TRUE, (L"Local\\EchoAddonManagerSetup" + Flag(args, L"--instance-name")).c_str()); GetLastError() == ERROR_ALREADY_EXISTS) {
+    } else if (HANDLE once = CreateMutexW(nullptr, TRUE, (L"Local\\LSAddonManagerSetup" + Flag(args, L"--instance-name")).c_str()); GetLastError() == ERROR_ALREADY_EXISTS) {
         // A second window over the same folder could start a second install in the middle of the first: one Setup window at a time.
-        if (a.testCloseMs == 0) MessageBoxW(nullptr, L"Echo Addon Manager Setup is already open. Look for its window on the taskbar.", L"Echo Addon Manager Setup", MB_OK | MB_ICONINFORMATION);
+        if (a.testCloseMs == 0) MessageBoxW(nullptr, L"LS Addon Manager Setup is already open. Look for its window on the taskbar.", L"LS Addon Manager Setup", MB_OK | MB_ICONINFORMATION);
         code = 4;
         if (once) CloseHandle(once);
     } else {

@@ -78,7 +78,8 @@ bool AddonManager::Inspect(const fs::path& folder, AddonInfo& info) {
             LOG_INFO("AddonManager", "Carried the settings of '%s' over to '%s'", old.c_str(), info.id.c_str());
             m_settingsMoved = true;
         }
-    info.enabled = !info.manifest.wip && ConfigManager::Instance().IsAddonEnabled(info.id, true);   // a work in progress stays off
+    // a work in progress stays off; one never switched on or off yet follows its "enabled_by_default"
+    info.enabled = !info.manifest.wip && ConfigManager::Instance().IsAddonEnabled(info.id, info.manifest.enabledByDefault);
     info.security = AddonSecurity::VerifyDll(info.dllPath, info.id);
     return true;
 }

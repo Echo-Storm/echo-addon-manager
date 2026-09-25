@@ -19,7 +19,7 @@ void Open(const std::wstring& target) { ShellExecuteW(nullptr, L"open", target.c
 }
 
 std::wstring TipText(const std::wstring& hotkeyLabel) {
-    std::wstring tip = EAM_PRODUCT_NAME_W L": click to open or close";
+    std::wstring tip = EAM_PRODUCT_SHORT_W L": click to open or close";
     if (!hotkeyLabel.empty()) tip += L" (" + hotkeyLabel + L")";
     return tip;
 }

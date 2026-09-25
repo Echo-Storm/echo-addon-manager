@@ -52,8 +52,8 @@ struct Status {
     int64_t checkedAt = 0;         // when, as seconds since 1970
 };
 
-extern const wchar_t* const kLatestReleaseUrl;   // https://api.github.com/repos/Echo-Storm/echo-addon-manager/releases/latest
-extern const char* const kReleasesPage;           // https://github.com/Echo-Storm/echo-addon-manager/releases
+extern const wchar_t* const kLatestReleaseUrl;   // https://api.github.com/repos/Echo-Storm/ls-addon-manager/releases/latest
+extern const char* const kReleasesPage;           // https://github.com/Echo-Storm/ls-addon-manager/releases
 
 Status Check(const std::string& currentVersion, const std::wstring& url, unsigned timeoutMs = 10000);   // blocking
 

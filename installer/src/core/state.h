@@ -7,7 +7,7 @@ namespace setup {
 enum class DllKind {
     Missing,
     Original,      // Lossless Scaling's own (product "Lossless Scaling")
-    Ours,          // Echo Addon Manager's (product "Echo Addon Manager")
+    Ours,          // ours (product "Addon Manager for Lossless Scaling", or "Echo Addon Manager" before 0.9.1)
     Unknown,       // something else
 };
 
@@ -47,7 +47,7 @@ bool LosslessScalingRunning(const std::wstring& dir);   // a process named Lossl
 // What to offer, in words: the headline, the one action that fits, and whether it can be done now.
 enum class Action { None, Install, Update, Repair, Reinstall };
 struct Advice {
-    std::string headline;         // "Echo Addon Manager is not installed."
+    std::string headline;         // "LS Addon Manager is not installed."
     std::string detail;           // a sentence more, or empty
     Action action = Action::None;
     std::string actionLabel;      // "Install", "Update to 0.5.0", ...

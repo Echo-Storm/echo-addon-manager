@@ -5,7 +5,7 @@ namespace eam {
 namespace window {
 
 std::string StatusCounts(int total, int on) {
-    return std::string(EAM_PRODUCT_NAME " " EAM_VERSION_STRING "   |   ") + std::to_string(total) + (total == 1 ? " addon, " : " addons, ") +
+    return std::string(EAM_PRODUCT_SHORT " " EAM_VERSION_STRING "   |   ") + std::to_string(total) + (total == 1 ? " addon, " : " addons, ") +
            std::to_string(on) + " on";
 }
 

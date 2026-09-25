@@ -1,6 +1,6 @@
 # Tools
 
-Scripts to build, test, look at and package Echo Addon Manager. They find the repository from their own location, so run them from anywhere.
+Scripts to build, test, look at and package LS Addon Manager. They find the repository from their own location, so run them from anywhere.
 Where a script needs your Lossless Scaling folder it takes `-LsDir` (or reads the `LS_DIR` environment variable); the default is the usual Steam path.
 
 **Rules the tools follow**

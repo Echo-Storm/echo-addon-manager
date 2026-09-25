@@ -5,7 +5,7 @@ Short answers to the things people ask most. The [README](../README.md) has the 
 ## Before you install
 
 **What does it actually do to my Lossless Scaling?**
-Lossless Scaling loads a file called `Lossless.dll`. Echo Addon Manager takes that name; Lossless Scaling's own file is kept as `Lossless_original.dll`, and the manager passes everything on to it. Nothing in Lossless Scaling is patched
+Lossless Scaling loads a file called `Lossless.dll`. LS Addon Manager takes that name; Lossless Scaling's own file is kept as `Lossless_original.dll`, and the manager passes everything on to it. Nothing in Lossless Scaling is patched
 on disk, and uninstalling puts its own file back.
 
 **Does it touch my game?**
@@ -42,7 +42,7 @@ Lossless Scaling put its own `Lossless.dll` back. Run Setup: it offers *Repair*,
 Yes. *Uninstall* in Setup puts Lossless Scaling's own file back (your addons and settings stay, or go to the backups folder if you choose that). Everything Setup replaces is copied to `backups\` inside the Lossless Scaling folder first.
 
 **Can I run Setup from a script?**
-Yes: `EchoAddonManagerSetup.exe --silent install --folder "<folder>"` (or `uninstall`, `status`), with `--log <file>` to get the messages. The exit code is 0 when it worked.
+Yes: `LSAddonManagerSetup.exe --silent install --folder "<folder>"` (or `uninstall`, `status`), with `--log <file>` to get the messages. The exit code is 0 when it worked.
 
 ## Using the manager
 
@@ -74,4 +74,4 @@ Yes, please: see [model-compatibility.md](model-compatibility.md).
 
 ## Reporting a problem
 
-Open an issue at <https://github.com/Echo-Storm/echo-addon-manager/issues>. Attach the **diagnostics file** (*Settings > Create a diagnostics file*): a zip of your logs and settings that is only made on your PC and uploaded nowhere. Say what you did, what you expected, what happened, your Windows version, graphics card and Lossless Scaling version.
+Open an issue at <https://github.com/Echo-Storm/ls-addon-manager/issues>. Attach the **diagnostics file** (*Settings > Create a diagnostics file*): a zip of your logs and settings that is only made on your PC and uploaded nowhere. Say what you did, what you expected, what happened, your Windows version, graphics card and Lossless Scaling version.

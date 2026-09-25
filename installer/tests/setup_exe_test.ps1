@@ -1,4 +1,4 @@
-# End-to-end test of EchoAddonManagerSetup.exe on fake Lossless Scaling folders in %TEMP% (the real install is never touched):
+# End-to-end test of LSAddonManagerSetup.exe on fake Lossless Scaling folders in %TEMP% (the real install is never touched):
 #   * the silent mode: status, install, install again, uninstall, and the refusals (not a Lossless Scaling folder, no folder, Lossless Scaling running)
 #   * that settings and other addons survive, and that the files come out byte for byte as they went in
 #   * the wizard window: it opens (on a folder, and with none given), and closes itself, without changing anything
@@ -7,11 +7,11 @@
 # -NoWindow skips the checks that open the wizard window (a machine with no desktop, such as a build server, cannot show one).
 param([Parameter(Mandatory = $true)][string]$Root, [switch]$NoWindow)
 $ErrorActionPreference = 'Stop'
-$setup = "$Root\installer\build\Release\EchoAddonManagerSetup.exe"
+$setup = "$Root\installer\build\Release\LSAddonManagerSetup.exe"
 $fakes = "$Root\installer\build\Release"
 $ours = "$Root\manager\build\Release\Lossless.dll"
 $fail = 0
-$rememberedBefore = (Get-ItemProperty 'HKCU:\Software\EchoAddonManager' -ErrorAction SilentlyContinue).LastFolder
+$rememberedBefore = (Get-ItemProperty 'HKCU:\Software\LSAddonManager' -ErrorAction SilentlyContinue).LastFolder
 function Check($what, $ok, $detail = '') {
     if ($ok) { Write-Host "  PASS  $what" } else { Write-Host "  FAIL  $what  ($detail)"; $script:fail++ }
 }
@@ -138,8 +138,8 @@ Check 'the window left no write-test file behind' (-not (Get-ChildItem $ls3 -For
 
 }   # end of the window checks
 
-$mine = (Get-ItemProperty 'HKCU:\Software\EchoAddonManager' -ErrorAction SilentlyContinue).LastFolder
+$mine = (Get-ItemProperty 'HKCU:\Software\LSAddonManager' -ErrorAction SilentlyContinue).LastFolder
 Check 'the person''s remembered folder was not touched by any of it' (-not $mine -or $mine -eq $rememberedBefore) "now: $mine"
-Remove-Item 'HKCU:\Software\EchoAddonManager\SetupTest' -Recurse -ErrorAction SilentlyContinue
+Remove-Item 'HKCU:\Software\LSAddonManager\SetupTest' -Recurse -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 if ($fail) { Write-Host "SETUP EXE TEST FAILED ($fail failed)"; exit 1 } else { Write-Host 'SETUP EXE TEST PASSED (0 failed)' }

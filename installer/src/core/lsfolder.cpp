@@ -37,7 +37,7 @@ std::vector<std::wstring> ParseSteamLibraries(const std::string& vdfText) {
 
 namespace {
 
-std::wstring g_registryKey = L"Software\\EchoAddonManager";
+std::wstring g_registryKey = L"Software\\LSAddonManager";
 
 std::wstring RegistryString(HKEY root, const wchar_t* subkey, const wchar_t* value) {
     HKEY key = nullptr;
@@ -149,8 +149,13 @@ void RememberFolder(const std::wstring& dir) {
     RegCloseKey(key);
 }
 
-std::wstring RememberedFolder() { return RegistryString(HKEY_CURRENT_USER, g_registryKey.c_str(), L"LastFolder"); }
+std::wstring RememberedFolder() {
+    std::wstring folder = RegistryString(HKEY_CURRENT_USER, g_registryKey.c_str(), L"LastFolder");
+    if (folder.empty() && g_registryKey == L"Software\\LSAddonManager")   // remembered before 0.9.1, under the old name
+        folder = RegistryString(HKEY_CURRENT_USER, L"Software\\EchoAddonManager", L"LastFolder");
+    return folder;
+}
 
-void UseRegistryKeyForTest(const wchar_t* subkey) { g_registryKey = subkey ? subkey : L"Software\\EchoAddonManager"; }
+void UseRegistryKeyForTest(const wchar_t* subkey) { g_registryKey = subkey ? subkey : L"Software\\LSAddonManager"; }
 
 } // namespace setup

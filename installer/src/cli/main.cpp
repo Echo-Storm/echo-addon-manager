@@ -51,7 +51,7 @@ int wmain(int argc, wchar_t** argv) {
         const State s = Inspect(dir);
         const PayloadInfo p = payload.empty() ? PayloadInfo() : CheckPayload(payload);
         const Advice a = Advise(s, p.version);
-        printf("folder:     %s\nsituation:  %s\nLossless Scaling: %s   Echo Addon Manager: %s   running: %s\n%s\n%s\n", Narrow(dir).c_str(), SituationName(s.situation),
+        printf("folder:     %s\nsituation:  %s\nLossless Scaling: %s   LS Addon Manager: %s   running: %s\n%s\n%s\n", Narrow(dir).c_str(), SituationName(s.situation),
                s.lsVersion.empty() ? "?" : s.lsVersion.c_str(), s.installedVersion.empty() ? "-" : s.installedVersion.c_str(), s.running ? "yes" : "no", a.headline.c_str(), a.detail.c_str());
         if (a.action != Action::None) printf("offer: %s%s\n", a.actionLabel.c_str(), a.blocked ? ("  (blocked: " + a.blockedReason + ")").c_str() : "");
         return 0;

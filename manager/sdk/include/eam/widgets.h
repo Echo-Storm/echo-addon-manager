@@ -1,5 +1,5 @@
 #pragma once
-// Shared look for Echo Addon Manager and its addons: the dark neutral + green scheme used by TorBox Manager and Echo Audio
+// Shared look for LS Addon Manager and its addons: the dark neutral + green scheme used by TorBox Manager and Echo Audio
 // Converter (bg #181818, panel #1f1f1f, accent #7cb342), plus a slider and a section label that match it.
 //
 // Header only and ABI-free: it just calls ImGui, so an addon can include it and get the same widgets as the manager

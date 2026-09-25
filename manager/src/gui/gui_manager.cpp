@@ -36,7 +36,7 @@ namespace eam {
 
 namespace {
 
-constexpr const wchar_t* kWindowClass = L"EchoAddonManagerClass";
+constexpr const wchar_t* kWindowClass = L"LSAddonManagerClass";
 constexpr UINT_PTR kTrayTimer = 0x4C52;     // the tray icon could not be added (Explorer busy or just restarted): try again shortly
 constexpr UINT kTrayRetryMs = 2000;
 constexpr int kTrayTries = 30;

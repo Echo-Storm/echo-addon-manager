@@ -57,7 +57,7 @@ void SelfTestGuarded() {   // no objects here: __try cannot unwind them
 std::wstring AskForModelFile() {
     wchar_t file[MAX_PATH * 2] = {};
     OPENFILENAMEW dialog{}; dialog.lStructSize = sizeof dialog;
-    dialog.hwndOwner = FindWindowW(L"EchoAddonManagerClass", nullptr);
+    dialog.hwndOwner = FindWindowW(L"LSAddonManagerClass", nullptr);
     dialog.lpstrFilter = L"DLL files (*.dll)\0*.dll\0All files\0*.*\0";
     dialog.lpstrFile = file; dialog.nMaxFile = MAX_PATH * 2;
     dialog.lpstrTitle = L"Pick your copy of nvngx_dlssnr.dll";

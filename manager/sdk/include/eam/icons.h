@@ -1,5 +1,5 @@
 #pragma once
-// Vector icons for Echo Addon Manager and its addons: SVG path data drawn straight into ImGui's draw list, so they are crisp at any
+// Vector icons for LS Addon Manager and its addons: SVG path data drawn straight into ImGui's draw list, so they are crisp at any
 // display scale, take the colour of the surrounding UI, need no image files or textures, and work inside an addon (which has no
 // access to the host's textures).
 //

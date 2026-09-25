@@ -15,11 +15,12 @@ DllInfo InspectDll(const std::wstring& path) {
     info.size = size;
     const VersionResource v = ReadVersionResource(path);
     info.version = v.fileVersion;
-    if (v.ok && v.product == "Echo Addon Manager") info.kind = DllKind::Ours;
+    if (v.ok && (v.product == "Addon Manager for Lossless Scaling" || v.product == "Echo Addon Manager")) info.kind = DllKind::Ours;   // the name since 0.9.1, and before
     else if (v.ok && v.product == "Lossless Scaling") info.kind = DllKind::Original;
     else info.kind = DllKind::Unknown;
     // Releases up to 0.4.1 carry no version resource. They (and the proxy this project started from) do carry the name of their own log file, which
-    // Lossless Scaling's DLL does not, so an unrecognised DLL with one of those names in it is an earlier Echo Addon Manager.
+    // Lossless Scaling's DLL does not, so an unrecognised DLL with one of those names in it is an earlier one of ours (Echo Addon Manager, as it
+    // was called then, or the proxy it began as).
     if (info.kind == DllKind::Unknown && (FileContainsText(path, "EchoAddonManager.log") || FileContainsText(path, "LosslessProxy.log"))) {
         info.kind = DllKind::Ours;
         info.legacy = true;
@@ -116,7 +117,7 @@ Advice Advise(const State& s, const std::string& payloadVersion) {
         a.blockedReason = a.headline + " " + a.detail;   // what is wrong, then what to do
         return a;
     case Situation::NotInstalled:
-        a.headline = "Echo Addon Manager is not installed here (" + ls + " found).";
+        a.headline = "LS Addon Manager is not installed here (" + ls + " found).";
         a.action = Action::Install;
         a.actionLabel = "Install";
         break;
@@ -124,43 +125,43 @@ Advice Advise(const State& s, const std::string& payloadVersion) {
         const int cmp = payloadVersion.empty() ? 0 : CompareVersions(s.installedVersion, payloadVersion);
         a.canUninstall = true;
         if (cmp < 0) {
-            a.headline = (s.installedVersion.empty() ? std::string("An earlier Echo Addon Manager is installed.") : "Echo Addon Manager " + s.installedVersion + " is installed.") + " " + payloadVersion + " is available.";
+            a.headline = (s.installedVersion.empty() ? std::string("An earlier LS Addon Manager is installed.") : "LS Addon Manager " + s.installedVersion + " is installed.") + " " + payloadVersion + " is available.";
             a.action = Action::Update;
             a.actionLabel = "Update to " + payloadVersion;
         } else if (cmp == 0) {
-            a.headline = (s.installedVersion.empty() ? std::string("An earlier Echo Addon Manager") : "Echo Addon Manager " + s.installedVersion) + " is installed" + (s.installedVersion.empty() ? "." : " and up to date.");
+            a.headline = (s.installedVersion.empty() ? std::string("An earlier LS Addon Manager") : "LS Addon Manager " + s.installedVersion) + " is installed" + (s.installedVersion.empty() ? "." : " and up to date.");
             a.detail = "You can reinstall it to put its files back as they came.";
             a.action = Action::Reinstall;
             a.actionLabel = "Reinstall";
         } else {
-            a.headline = "Echo Addon Manager " + s.installedVersion + " is installed, which is newer than this installer (" + payloadVersion + ").";
+            a.headline = "LS Addon Manager " + s.installedVersion + " is installed, which is newer than this installer (" + payloadVersion + ").";
             a.detail = "Nothing needs doing.";
             a.action = Action::None;
         }
         break;
     }
     case Situation::AfterLsUpdate:
-        a.headline = "Lossless Scaling was updated and put its own files back over Echo Addon Manager.";
-        a.detail = "Repair keeps the new Lossless Scaling files and puts Echo Addon Manager in front of them again.";
+        a.headline = "Lossless Scaling was updated and put its own files back over LS Addon Manager.";
+        a.detail = "Repair keeps the new Lossless Scaling files and puts LS Addon Manager in front of them again.";
         a.action = Action::Repair;
         a.actionLabel = "Repair";
         a.canUninstall = true;
         break;
     case Situation::NoOriginal:
-        a.headline = "Echo Addon Manager is here, but Lossless_original.dll is missing, so Lossless Scaling cannot start.";
+        a.headline = "LS Addon Manager is here, but Lossless_original.dll is missing, so Lossless Scaling cannot start.";
         a.detail = "Only Lossless Scaling's own file can fix that: verify its files in Steam or reinstall it, then run this again.";
         a.blocked = true;
         a.blockedReason = a.headline + " " + a.detail;   // what is wrong, then what to do
         return a;
     case Situation::BothOurs:
-        a.headline = "Both Lossless.dll and Lossless_original.dll here are Echo Addon Manager's.";
+        a.headline = "Both Lossless.dll and Lossless_original.dll here are LS Addon Manager's.";
         a.detail = "Lossless Scaling's own file is not in this folder. Verify its files in Steam or reinstall it, then run this again.";
         a.blocked = true;
         a.blockedReason = a.headline + " " + a.detail;   // what is wrong, then what to do
         return a;
     case Situation::Unrecognised:
         a.headline = "The Lossless.dll in this folder is not one this installer knows.";
-        a.detail = "It is neither Lossless Scaling's nor Echo Addon Manager's, so nothing was changed.";
+        a.detail = "It is neither Lossless Scaling's nor LS Addon Manager's, so nothing was changed.";
         a.blocked = true;
         a.blockedReason = a.headline + " " + a.detail;   // what is wrong, then what to do
         return a;

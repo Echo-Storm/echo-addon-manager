@@ -29,6 +29,7 @@ struct AddonManifest {
     std::vector<std::string> renamedFrom;    // folder names this addon used to have: its settings are carried over, and those folders are hidden
     std::vector<std::string> conflicts;      // ids of addons that cannot run beside this one: turning either on turns the other off
     bool wip = false;                        // work in progress: listed, but it cannot be switched on and is never loaded
+    bool enabledByDefault = true;            // false: a newly installed addon stays off until the person switches it on
     std::vector<std::string> tags;
     bool parsed = false;                     // addon.json was found and was valid
 };

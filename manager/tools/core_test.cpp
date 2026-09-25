@@ -818,6 +818,9 @@ int main(int argc, char** argv) {
             AddonManifest m; ReadManifest(wipJson, m);
             AddonManifest plain; WriteFile(wipJson, "{ \"name\": \"W\" }"); ReadManifest(wipJson, plain);
             Check("the wip key is read, and is off when absent", m.wip && !plain.wip);
+            WriteFile(wipJson, "{ \"name\": \"W\", \"enabled_by_default\": false }");
+            AddonManifest off; ReadManifest(wipJson, off);
+            Check("enabled_by_default is read, and is true when absent", !off.enabledByDefault && plain.enabledByDefault);
             fs::remove(wipJson);
         }
         Find(mgr, "beta")->manifest.wip = true;

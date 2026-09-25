@@ -16,8 +16,8 @@
 namespace eam {
 namespace update {
 
-const wchar_t* const kLatestReleaseUrl = L"https://api.github.com/repos/Echo-Storm/echo-addon-manager/releases/latest";
-const char* const kReleasesPage = "https://github.com/Echo-Storm/echo-addon-manager/releases";
+const wchar_t* const kLatestReleaseUrl = L"https://api.github.com/repos/Echo-Storm/ls-addon-manager/releases/latest";
+const char* const kReleasesPage = "https://github.com/Echo-Storm/ls-addon-manager/releases";
 
 // ---------------------------------------------------------------------------------------------------------------------------------- versions
 
@@ -108,7 +108,7 @@ struct Handle {
 };
 
 std::wstring UserAgent() {
-    std::wstring ua = L"EchoAddonManager/";
+    std::wstring ua = L"LSAddonManager/";
     for (const char* c = EAM_VERSION_STRING; *c; ++c) ua += static_cast<wchar_t>(*c);
     return ua + L" (update check)";
 }

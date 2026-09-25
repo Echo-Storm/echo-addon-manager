@@ -38,7 +38,7 @@ static void Check(const char* what, bool ok, const std::string& detail = "") {
     if (!ok) ++g_failed;
 }
 
-static const wchar_t* kClass = L"EchoAddonManagerClass";
+static const wchar_t* kClass = L"LSAddonManagerClass";
 static constexpr UINT kHotkeyMsgId = 0x4C50;   // the id the window registers its hotkey under
 
 static bool TrayAdded() { return eam::window::tray::Added(); }
@@ -100,14 +100,14 @@ static void PureChecks() {
 
 
     const std::string base = StatusCounts(3, 1);
-    Check("status: counts", base.find("   |   3 addons, 1 on") != std::string::npos && base.rfind(EAM_PRODUCT_NAME " " EAM_VERSION_STRING, 0) == 0, base);
+    Check("status: counts", base.find("   |   3 addons, 1 on") != std::string::npos && base.rfind(EAM_PRODUCT_SHORT " " EAM_VERSION_STRING, 0) == 0, base);
     Check("status: one addon is singular", StatusCounts(1, 0).find("   |   1 addon, 0 on") != std::string::npos);
     Check("status: none is plural", StatusCounts(0, 0).find("   |   0 addons, 0 on") != std::string::npos);
     Check("status: a live status is added after the counts", WithLiveStatus("A", "Neural Rendering", "12 ms") == "A   |   Neural Rendering: 12 ms" && WithLiveStatus("A", "x", "") == "A");
 
     Check("status: an update is added when there is one", WithUpdate("A", "0.5.0") == "A   |   Update available: 0.5.0" && WithUpdate("A", "") == "A");
     const std::wstring tip = tray::TipText(L"");
-    Check("tray tip: the product name and what a click does", tip == std::wstring(EAM_PRODUCT_NAME_W) + L": click to open or close");
+    Check("tray tip: the product name and what a click does", tip == std::wstring(EAM_PRODUCT_SHORT_W) + L": click to open or close");
     Check("tray tip: the hotkey in brackets when there is one", tray::TipText(L"Ctrl+Shift+F12") == tip + L" (Ctrl+Shift+F12)");
 }
 #endif

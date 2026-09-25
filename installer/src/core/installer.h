@@ -1,5 +1,5 @@
 #pragma once
-// Installing Echo Addon Manager into a Lossless Scaling folder, and taking it out again.
+// Installing LS Addon Manager into a Lossless Scaling folder, and taking it out again.
 //
 // Every change is journalled. If anything fails part-way, the journal is played backwards and the folder is put back as it was; a folder that was
 // left as it was is reported as such. Files that are replaced are copied to <Lossless Scaling>\backups\installer-<time>\ first, and nothing is deleted:

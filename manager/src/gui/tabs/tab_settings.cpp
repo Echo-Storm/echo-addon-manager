@@ -102,7 +102,7 @@ void RenderTabSettings(AddonManager* manager) {
     if (eam::ui::Button("Save settings to a file", eam::ui::icons::kSave, eam::ui::ButtonKind::Primary)) {
         std::wstring path;
         SYSTEMTIME t; GetLocalTime(&t);
-        wchar_t name[64]; swprintf(name, 64, L"EchoAddonManager-settings-%04d%02d%02d.json", t.wYear, t.wMonth, t.wDay);
+        wchar_t name[64]; swprintf(name, 64, L"LSAddonManager-settings-%04d%02d%02d.json", t.wYear, t.wMonth, t.wDay);
         if (widgets::PickSaveFile(L"Save settings", name, L"Settings backup", L"*.json", path)) {
             std::ofstream out(fs::path(path), std::ios::binary);
             out << MakeSettingsBackupText(config.Snapshot(), EAM_VERSION_STRING);
@@ -238,7 +238,7 @@ void RenderTabSettings(AddonManager* manager) {
         const char* logItems[] = { "Trace", "Debug", "Info", "Warn", "Error" };
         ImGui::SetNextItemWidth(S(320));
         if (ImGui::Combo("Log detail", &logLevel, logItems, 5)) { config.GlobalSet(nullptr, "log_level", logLevel); config.Save(); Logger::Instance().SetMinLevel(static_cast<LogLevel>(logLevel)); }
-        widgets::Tip("Messages below this level are dropped before they are recorded, in the Logs tab and in EchoAddonManager.log. Info is a good default; Debug and Trace are for tracking down a problem.");
+        widgets::Tip("Messages below this level are dropped before they are recorded, in the Logs tab and in LSAddonManager.log. Info is a good default; Debug and Trace are for tracking down a problem.");
     }
     if (eam::ui::Button("Create a diagnostics file", eam::ui::icons::kPackage, eam::ui::ButtonKind::Primary)) {
         const DiagResult d = CreateDiagnosticsZip(fs::path(ExeDir()), BuildDiagnosticsSummary(manager), fs::path(DesktopDir()));

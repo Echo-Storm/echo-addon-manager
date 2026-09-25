@@ -18,12 +18,12 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName", "Echo Addon Manager project"
-            VALUE "FileDescription", "Echo Addon Manager Setup"
+            VALUE "CompanyName", "Echo-Storm"
+            VALUE "FileDescription", "LS Addon Manager Setup"
             VALUE "FileVersion", "@SETUP_VERSION@"
-            VALUE "InternalName", "EchoAddonManagerSetup"
-            VALUE "OriginalFilename", "EchoAddonManagerSetup.exe"
-            VALUE "ProductName", "Echo Addon Manager Setup"
+            VALUE "InternalName", "LSAddonManagerSetup"
+            VALUE "OriginalFilename", "LSAddonManagerSetup.exe"
+            VALUE "ProductName", "LS Addon Manager Setup"
             VALUE "ProductVersion", "@SETUP_VERSION@"
             VALUE "LegalCopyright", "MIT licence"
         END

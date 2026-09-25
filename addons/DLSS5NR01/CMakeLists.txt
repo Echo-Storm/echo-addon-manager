@@ -12,7 +12,7 @@ endif()
 
 # ---- third party (fetched at configure time) ----
 include(FetchContent)
-# ImGui docking branch. Must match the layout compiled into the installed Echo Addon Manager (Lossless.dll).
+# ImGui docking branch. Must match the layout compiled into the installed LS Addon Manager (Lossless.dll).
 # Re-pinned 2026-09-10 to the commit our own from-source manager build resolved docking HEAD to.
 FetchContent_Declare(imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git

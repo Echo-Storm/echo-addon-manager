@@ -184,7 +184,7 @@ void ChooseFolder() {
                 dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
                 dialog->SetTitle(L"Where screenshots go");
                 IShellItem* item = nullptr;
-                if (SUCCEEDED(dialog->Show(FindWindowW(L"EchoAddonManagerClass", nullptr))) && SUCCEEDED(dialog->GetResult(&item))) {
+                if (SUCCEEDED(dialog->Show(FindWindowW(L"LSAddonManagerClass", nullptr))) && SUCCEEDED(dialog->GetResult(&item))) {
                     PWSTR path = nullptr;
                     if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
                         Config c; std::vector<Look> looks;

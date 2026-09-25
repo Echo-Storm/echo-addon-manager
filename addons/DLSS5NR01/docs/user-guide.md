@@ -22,7 +22,7 @@ Scaling is about to show.
 
 ## Requirements
 
-- Lossless Scaling 3.x and a working Echo Addon Manager install (it opens, other addons
+- Lossless Scaling 3.x and a working LS Addon Manager install (it opens, other addons
   load).
 - An NVIDIA RTX GPU for LSFG. On a dual-GPU rig that is the display card; the game GPU can be
   anything. RTX 30 was the development hardware; RTX 40/50 should be faster but were not tested.
@@ -32,12 +32,12 @@ Scaling is about to show.
 
 ## Install
 
-1. Unzip the release and run `EchoAddonManagerSetup.exe`: it installs the manager and this addon into your Lossless Scaling folder, with backups. (By hand: copy `addons\DLSS5NR01` from the zip
+1. Unzip the release and run `LSAddonManagerSetup.exe`: it installs the manager and this addon into your Lossless Scaling folder, with backups. (By hand: copy `addons\DLSS5NR01` from the zip
    into the Lossless Scaling folder, so the folder holds `DLSS5NR01.dll`, `nvngx.dll_dlss5nr01.dll`, `nr_selftest.exe` and `addon.json`.) At the end Setup can also copy your own
    `nvngx_dlssnr.dll` into the folder for you.
 2. Put `nvngx_dlssnr.dll` next to `LosslessScaling.exe`. If you keep it elsewhere, set its full
    path under *Advanced > Snippet path* later.
-3. Start Lossless Scaling, open Echo Addon Manager and enable *Neural Render
+3. Start Lossless Scaling, open LS Addon Manager and enable *Neural Render
    (DLSS 5)*.
 
 To update, run Setup again and choose **Update** (or replace the two DLLs by hand while Lossless Scaling is closed). To uninstall the addon, delete its folder; Setup's **Uninstall**
@@ -71,7 +71,7 @@ not OK says what to do. Nothing is loaded or downloaded to check: it reads file 
   model runs, not that it looks right in every game, and it tests the model file the addon is set to use.
 
 This addon does not download the model file, and this project does not say where to get it.
-Settings live in Echo Addon Manager's `addons\config.json` under the key `DLSS5NR01`; delete
+Settings live in LS Addon Manager's `addons\config.json` under the key `DLSS5NR01`; delete
 that block to reset them. To keep or move all your settings, use *Save settings to a file* and *Load settings from a file* on the manager's Settings tab.
 
 ### Saved looks (load and save your settings)

@@ -12,7 +12,7 @@ The report has your graphics card, the NVIDIA driver, your Windows version, the 
 
 ## Add what you found
 
-Open an issue at <https://github.com/Echo-Storm/echo-addon-manager/issues> and paste the report, whether it passed or failed: a failure with its reason (`NOT_SUPPORTED`, `MODEL_INIT`, ...) is just as useful. Please do not attach the model file or a link to it.
+Open an issue at <https://github.com/Echo-Storm/ls-addon-manager/issues> and paste the report, whether it passed or failed: a failure with its reason (`NOT_SUPPORTED`, `MODEL_INIT`, ...) is just as useful. Please do not attach the model file or a link to it.
 
 ## What has been reported
 

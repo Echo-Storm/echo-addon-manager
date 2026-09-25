@@ -81,7 +81,7 @@ int main() {
         Check("the manager finds the sample addon", a != nullptr);
         if (!a) return 1;
         Check("its addon.json is read (name, version, author, tags)", a->manifest.parsed && a->manifest.name == "Sample Addon" && a->manifest.version == "1.0.0" &&
-              a->manifest.author == "Echo Addon Manager project" && a->manifest.tags.size() == 1 && a->manifest.tags[0] == "example");
+              a->manifest.author == "Echo-Storm" && a->manifest.tags.size() == 1 && a->manifest.tags[0] == "example");
         Check("it asks for API 1.0.0, which this manager provides", a->manifest.minHostVersion == "1.0.0" || a->manifest.minHostVersion.empty(), a->manifest.minHostVersion);
         mgr.LoadAddons();
         Check("it loads", a->IsLoaded(), a->errorMessage);

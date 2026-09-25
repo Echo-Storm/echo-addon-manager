@@ -1,10 +1,13 @@
 #pragma once
 
 // The name the user sees (tray, window title, status bar, About, file names). Change it here and everywhere follows.
-#define EAM_PRODUCT_NAME "Echo Addon Manager"
-#define EAM_PRODUCT_NAME_W L"Echo Addon Manager"
-#define EAM_PRODUCT_FILE "EchoAddonManager"   // used in file names (log, backups, diagnostics)
-#define EAM_PRODUCT_LOGFILE_W L"EchoAddonManager.log"
+#define EAM_PRODUCT_NAME "Addon Manager for Lossless Scaling"
+#define EAM_PRODUCT_NAME_W L"Addon Manager for Lossless Scaling"
+#define EAM_PRODUCT_SHORT "LS Addon Manager"          // where space is tight (the status bar, the tray) and in running text
+#define EAM_PRODUCT_SHORT_W L"LS Addon Manager"
+// Called Echo Addon Manager up to 0.8.0; the author stays Echo-Storm.
+#define EAM_PRODUCT_FILE "LSAddonManager"   // used in file names (log, backups, diagnostics)
+#define EAM_PRODUCT_LOGFILE_W L"LSAddonManager.log"
 
 // The release the user installs. Free-form text: "0.1.0", "0.2.0-beta.1".
 #define EAM_VERSION_STRING "0.9.1"

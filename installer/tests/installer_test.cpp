@@ -83,14 +83,14 @@ int wmain(int argc, wchar_t** argv) {
     g_root = fs::temp_directory_path() / (L"setup_test_" + std::to_wstring(GetCurrentProcessId()));
     { std::error_code fresh; fs::remove_all(g_root, fresh); }
     fs::create_directories(g_root);
-    UseRegistryKeyForTest(L"Software\\EchoAddonManager_SetupTest");
+    UseRegistryKeyForTest(L"Software\\LSAddonManager_SetupTest");
     if (!fs::exists(g_ours) || !fs::exists(g_exeDir / L"fake_original.dll")) { printf("FAIL  the manager's Lossless.dll or the fake DLLs are not where the test expects them\n"); return 2; }
 
     printf("== reading files without loading them\n");
     {
         const VersionResource orig = ReadVersionResource((g_exeDir / L"fake_original.dll").wstring()), mine = ReadVersionResource(g_ours.wstring());
         Check("a stand-in for Lossless Scaling's DLL reads as Lossless Scaling 3.2.2.0", orig.ok && orig.product == "Lossless Scaling" && orig.fileVersion == "3.2.2.0" && orig.company == "THS");
-        Check("Echo Addon Manager's real Lossless.dll carries its version resource", mine.ok && mine.product == "Echo Addon Manager", mine.product);
+        Check("the manager's real Lossless.dll carries its version resource", mine.ok && mine.product == "Addon Manager for Lossless Scaling", mine.product);
         Check("...and its version is the release version, EAM_VERSION_STRING", mine.fileVersion == EAM_VERSION_STRING, mine.fileVersion + " vs " + EAM_VERSION_STRING);
         Write(g_root / L"plain.txt", "no resource here");
         Check("a file with no version resource reads as none", !ReadVersionResource((g_root / L"plain.txt").wstring()).ok && !ReadVersionResource(L"C:\\no\\such.dll").ok);
@@ -219,7 +219,7 @@ int wmain(int argc, wchar_t** argv) {
         Check("...and still leaves the person's settings and the original alone", UntouchedByInstall(ls) && Hash(ls / L"Lossless_original.dll") == originalHash);
     }
 
-    printf("== an older Echo Addon Manager is updated\n");
+    printf("== an older install (0.1.0, when it was called Echo Addon Manager) is updated\n");
     {
         const fs::path ls = MakeLs(L"old_install");
         const std::string originalHash = Hash(ls / L"Lossless.dll");
@@ -432,7 +432,7 @@ int wmain(int argc, wchar_t** argv) {
               Has(Read(fs::path(updates[0].backupDir) / L"addons" / L"DLSS5NR01" / L"addon.json"), "\"A\"") && Has(Read(fs::path(updates[1].backupDir) / L"addons" / L"DLSS5NR01" / L"addon.json"), "\"B\""));
     }
 
-    RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\EchoAddonManager_SetupTest");
+    RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\LSAddonManager_SetupTest");
     std::error_code ec;
     fs::remove_all(g_root, ec);
     printf("\n%s (%d failed)\n", g_failed ? "SETUP TEST FAILED" : "SETUP TEST PASSED", g_failed);

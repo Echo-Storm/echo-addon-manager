@@ -57,7 +57,7 @@ function BlobSha1($path) {
     $sha1 = [Security.Cryptography.SHA1]::Create()
     return (($sha1.ComputeHash([byte[]]($head + $bytes)) | ForEach-Object { $_.ToString('x2') }) -join '')
 }
-$ua = @{ 'User-Agent' = 'echo-addon-manager' }
+$ua = @{ 'User-Agent' = 'ls-addon-manager' }
 
 if ($Latest) {
     $head = Invoke-RestMethod -Uri 'https://api.github.com/repos/NVIDIA/DLSS/commits/main' -Headers $ua

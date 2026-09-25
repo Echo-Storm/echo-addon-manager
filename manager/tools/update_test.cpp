@@ -60,7 +60,7 @@ public:
         if (m_listen != INVALID_SOCKET) { closesocket(m_listen); m_listen = INVALID_SOCKET; }
         if (m_thread.joinable()) m_thread.join();
     }
-    std::wstring Url(const char* path = "/repos/Echo-Storm/echo-addon-manager/releases/latest") const {
+    std::wstring Url(const char* path = "/repos/Echo-Storm/ls-addon-manager/releases/latest") const {
         return L"http://127.0.0.1:" + std::to_wstring(m_port) + std::wstring(path, path + strlen(path));
     }
     std::string LastRequest() { std::lock_guard<std::mutex> lk(m_mu); return m_last; }
@@ -107,9 +107,9 @@ private:
 
 static std::string Answer(const char* tag, bool prerelease = false, bool draft = false) {
     // the shape of GitHub's answer, with the extra fields it really sends (and a hostile address that must be ignored)
-    return std::string("{\"url\":\"https://api.github.com/repos/Echo-Storm/echo-addon-manager/releases/1\",\"html_url\":\"https://evil.example/download\",\"id\":1,\"tag_name\":\"") + tag +
-           "\",\"name\":\"Echo Addon Manager\",\"draft\":" + (draft ? "true" : "false") + ",\"prerelease\":" + (prerelease ? "true" : "false") +
-           ",\"published_at\":\"2026-09-21T20:35:49Z\",\"assets\":[{\"name\":\"EchoAddonManager-x64.zip\",\"size\":1424054}],\"body\":\"notes\"}";
+    return std::string("{\"url\":\"https://api.github.com/repos/Echo-Storm/ls-addon-manager/releases/1\",\"html_url\":\"https://evil.example/download\",\"id\":1,\"tag_name\":\"") + tag +
+           "\",\"name\":\"LS Addon Manager\",\"draft\":" + (draft ? "true" : "false") + ",\"prerelease\":" + (prerelease ? "true" : "false") +
+           ",\"published_at\":\"2026-09-21T20:35:49Z\",\"assets\":[{\"name\":\"LSAddonManager-x64.zip\",\"size\":1424054}],\"body\":\"notes\"}";
 }
 
 static bool WaitNotChecking(int ms) {
@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
         Status st = Check(me, s.Url());
         Check("a newer release: Available, with this project's page", st.state == State::Available && st.latest == "99.0.0" && st.url == std::string(kReleasesPage) + "/tag/v99.0.0", DescribeStatus(st));
         const std::string req = s.LastRequest();
-        Check("the request names the program and its version", Has(req, std::string("User-Agent: EchoAddonManager/" + me).c_str()), req.substr(0, 120));
+        Check("the request names the program and its version", Has(req, std::string("User-Agent: LSAddonManager/" + me).c_str()), req.substr(0, 120));
         Check("...asks for GitHub's JSON and sends nothing else about the person", Has(req, "Accept: application/vnd.github+json") && !Has(req, "Cookie") && !Has(req, "Authorization"));
         st = Check(me, s.Url());
         Check("the same release: UpToDate", st.state == State::UpToDate && st.latest == me, DescribeStatus(st));

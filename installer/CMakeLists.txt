@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(EchoAddonManagerSetup CXX RC)
+project(LSAddonManagerSetup CXX RC)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,7 +31,7 @@ function(add_fake name product company version csv)
 endfunction()
 add_fake(fake_original     "Lossless Scaling"   "THS"                        "3.2.2.0" "3,2,2,0")
 add_fake(fake_original_new "Lossless Scaling"   "THS"                        "3.2.3.0" "3,2,3,0")
-add_fake(fake_ours_old     "Echo Addon Manager" "Echo Addon Manager project" "0.1.0"   "0,1,0,0")
+add_fake(fake_ours_old     "Echo Addon Manager" "Echo Addon Manager project" "0.1.0"   "0,1,0,0")   # the name before 0.9.1
 add_fake(fake_other        "Something Else"     "Nobody"                     "1.0.0.0" "1,0,0,0")
 
 # Offline test of the core against fake Lossless Scaling folders in %TEMP%: cmake --build . --config Release --target setup_test
@@ -45,7 +45,7 @@ target_link_libraries(setup_payload_test PRIVATE setup_core)
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
 # The Setup exe: a wizard (Windows' TaskDialog) over the core, with a silent mode. The files it installs are a resource of the exe:
-#   pack_payload <folder like the release zip> payload.bin, then configure with -DSETUP_PAYLOAD=<payload.bin> and build EchoAddonManagerSetup.
+#   pack_payload <folder like the release zip> payload.bin, then configure with -DSETUP_PAYLOAD=<payload.bin> and build LSAddonManagerSetup.
 # Without SETUP_PAYLOAD the exe carries nothing (it says so); --payload <folder> then supplies the files (tests, development).
 add_executable(pack_payload tools/pack_payload.cpp)
 target_link_libraries(pack_payload PRIVATE setup_core)
@@ -63,8 +63,8 @@ else()
     set(SETUP_PAYLOAD_RC "")
 endif()
 configure_file(src/gui/setup.rc.in ${CMAKE_CURRENT_BINARY_DIR}/setup.rc @ONLY)
-add_executable(EchoAddonManagerSetup WIN32 src/gui/main.cpp ${CMAKE_CURRENT_BINARY_DIR}/setup.rc)
-target_link_libraries(EchoAddonManagerSetup PRIVATE setup_core)
+add_executable(LSAddonManagerSetup WIN32 src/gui/main.cpp ${CMAKE_CURRENT_BINARY_DIR}/setup.rc)
+target_link_libraries(LSAddonManagerSetup PRIVATE setup_core)
 if(SETUP_PAYLOAD)
     set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/setup.rc PROPERTIES OBJECT_DEPENDS "${SETUP_PAYLOAD}")
 endif()

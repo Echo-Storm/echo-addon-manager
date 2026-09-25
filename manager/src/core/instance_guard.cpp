@@ -16,7 +16,7 @@ std::wstring MutexName(const std::wstring& folder) {
     uint64_t h = 1469598103934665603ull;   // FNV-1a: a short, stable name (a mutex name cannot contain '\')
     for (wchar_t c : key) { h ^= static_cast<uint16_t>(c); h *= 1099511628211ull; }
     wchar_t name[64];
-    swprintf(name, 64, L"Local\\EchoAddonManager-%016llx", static_cast<unsigned long long>(h));
+    swprintf(name, 64, L"Local\\LSAddonManager-%016llx", static_cast<unsigned long long>(h));
     return name;
 }
 

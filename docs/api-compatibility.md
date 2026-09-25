@@ -1,6 +1,6 @@
 # The addon API: what stays stable
 
-If you write an addon for Echo Addon Manager, this page says what you can rely on. It is the promise for **API 1.x**; the guide to writing an addon is [addon-authors.md](addon-authors.md).
+If you write an addon for LS Addon Manager, this page says what you can rely on. It is the promise for **API 1.x**; the guide to writing an addon is [addon-authors.md](addon-authors.md).
 
 Status: the addon API is **1.2.0** (1.0.0 from the first release; 1.1 added `GetDispatchingContext`, 1.2 `CreateImage` and `ReleaseImage`). Until the manager itself reaches 1.0, a serious mistake in the API may still be fixed at the cost of a break, and if that ever
 happens it will be the first thing in the changelog. From manager 1.0 on, everything below is binding.

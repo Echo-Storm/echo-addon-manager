@@ -181,7 +181,7 @@ int main() {
     // ---- diagnostics bundle
     {
         const fs::path ls = base / "LS", out = base / "diag-out";
-        Touch(ls / "logs" / "EchoAddonManager.log", "proxy log line\n");
+        Touch(ls / "logs" / "LSAddonManager.log", "proxy log line\n");
         Touch(ls / "logs" / "DLSS5NR01.log", "nr log line\n");
         Touch(ls / "addons" / "config.json", "{\"addons\":{}}");
         Touch(ls / "addons" / "DLSS5NR01" / "nvngx.log", "ngx log\n");
@@ -198,7 +198,7 @@ int main() {
             if (CreateProcessW(nullptr, c3.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si3, &pi3)) { WaitForSingleObject(pi3.hProcess, 30000); CloseHandle(pi3.hProcess); CloseHandle(pi3.hThread); }
             std::ifstream in(lst); std::string line; std::string all; while (std::getline(in, line)) all += line + "\n";
             Check("diagnostics: the zip holds the summary, the settings and the logs", all.find("info.txt") != std::string::npos && all.find("config.json") != std::string::npos &&
-                  all.find("EchoAddonManager.log") != std::string::npos && all.find("DLSS5NR01.log") != std::string::npos && all.find("nvngx.log") != std::string::npos);
+                  all.find("LSAddonManager.log") != std::string::npos && all.find("DLSS5NR01.log") != std::string::npos && all.find("nvngx.log") != std::string::npos);
         }
         Check("diagnostics: the temporary staging folder is gone", true);
         int leftovers = 0; { wchar_t tp[MAX_PATH]; GetTempPathW(MAX_PATH, tp); for (const auto& e : fs::directory_iterator(tp)) if (e.path().filename().wstring().rfind(L"eam-diag-", 0) == 0) ++leftovers; }

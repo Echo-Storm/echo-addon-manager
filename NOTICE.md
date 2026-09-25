@@ -1,6 +1,6 @@
 # Notice and credits
 
-Echo Addon Manager began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta** (MIT, 2025).
+Addon Manager for Lossless Scaling (called Echo Addon Manager up to 0.8.0) began as [LosslessProxy](https://github.com/FrankBarretta/LosslessProxy) by **FrankBarretta** (MIT, 2025).
 That project's proxy DLL and its DirectX 11 and shader hooks, and the ReShade and Windowed features (they began as addons), are the foundation of this one, and
 we are grateful for them. At the start of this repository about half of the manager's source lines were still that code (48% by
 `git blame`, before the history was started fresh); after the addon handling, safety checks, settings file, event system, host interface and
@@ -27,7 +27,7 @@ new. The original copyright and licence are in [LICENSE](LICENSE), which must st
 | [MinHook](https://github.com/TsudaKageyu/minhook) | BSD-2-Clause | fetched by CMake for the manager (its code hooks and the Windowed feature) |
 | Icon shapes | drawn in the manner of the [Lucide](https://lucide.dev) set (ISC) | `manager/sdk/include/eam/icons.h` |
 | [AMD FidelityFX API headers](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) (SDK v1.1.4, FSR 3.1.4), unchanged | MIT (AMD) | `addons/DLSS5NR01/third_party/ffx`, compiled into the upscaler addons |
-| AMD's FidelityFX runtime (`amd_fidelityfx_dx12.dll`, the SDK v1.1.4 prebuilt, signed by AMD), unmodified | MIT (AMD) | fetched by `tools/fetch_ffx_sdk.ps1` (pinned SHA-256, AMD's signature checked); ships in `addons/FSR3UPSC/fsr/` with `AMD-FidelityFX-LICENSE.txt` when the FSR 3 Upscaler is packaged (work in progress) |
+| AMD's FidelityFX runtime (`amd_fidelityfx_dx12.dll`, the SDK v1.1.4 prebuilt, signed by AMD), unmodified | MIT (AMD) | fetched by `tools/fetch_ffx_sdk.ps1` (pinned SHA-256, AMD's signature checked); ships in `addons/FSR3UPSC/fsr/` with `AMD-FidelityFX-LICENSE.txt`, with the FSR 3 Upscaler (in the release as a preview since 0.9.1) |
 
 ## NVIDIA software in the release (not MIT)
 
@@ -38,7 +38,7 @@ project is not affiliated with or endorsed by NVIDIA. Parts of NVIDIA's DLSS SDK
 | What | Where in the release | Terms |
 |------|----------------------|-------|
 | NVIDIA's NGX SDK library (`nvsdk_ngx_s.lib`), as object code | linked into `addons/DLSS5NR01/DLSS5NR01.dll` and `nr_selftest.exe` | NVIDIA RTX SDKs licence |
-| NVIDIA's DLSS runtime (`nvngx_dlss.dll` 310.9.1), unmodified | `addons/DLSS4DLAA/dlss/nvngx_dlss.dll`, with the DLSS 4 Upscaler when it is packaged (it is work in progress and not in the release zip) | NVIDIA RTX SDKs licence |
+| NVIDIA's DLSS runtime (`nvngx_dlss.dll` 310.9.1), unmodified | `addons/DLSS4DLAA/dlss/nvngx_dlss.dll`, with the DLSS 4 Upscaler (in the release as a preview since 0.9.1) | NVIDIA RTX SDKs licence |
 | NVIDIA's licence text | `NVIDIA-LICENSE.txt` in each of those addon folders | |
 
 These are NVIDIA's, under NVIDIA's own licence, which comes with them. This project's MIT licence does not cover them and does not make them

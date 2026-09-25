@@ -1,4 +1,4 @@
-// DLSS5NR01: DLSS 5 Neural Rendering, an Echo Addon Manager addon. It runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures
+// DLSS5NR01: DLSS 5 Neural Rendering, an LS Addon Manager addon. It runs NVIDIA's DLSS 5 neural model on the frames Lossless Scaling captures
 // and adds the result to every frame it presents, on the graphics card Lossless Scaling uses, without ever making Lossless Scaling wait.
 //
 // The parts: runtime.cpp (the frame path), panel.cpp (the settings panel), tasks.cpp (the jobs beside the window), settings.cpp (the
@@ -118,7 +118,7 @@ void Start(IHost* host, ImGuiContext* ctx, void* allocFunc, void* freeFunc, void
     // in place at the first tapped frame. No device is taken from the host here: the newest one it has seen may be gone already (Lossless
     // Scaling makes and drops devices as it starts and stops scaling); devices are only touched in the events or from a live pass.
     if (host->GetHostVersion() >= 0x010100) host->SetPreDispatchCallback(OnPass, nullptr);
-    else SwitchOff("needs Echo Addon Manager with addon API 1.1 or newer (for its dispatch callback)");
+    else SwitchOff("needs LS Addon Manager with addon API 1.1 or newer (for its dispatch callback)");
 }
 
 int OnStartFault(EXCEPTION_POINTERS* e) {

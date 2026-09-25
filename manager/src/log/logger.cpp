@@ -136,7 +136,7 @@ void Logger::LogV(LogLevel level, const char* source, const char* fmt, va_list a
 
     if (IsDebuggerPresent()) {
         char dbgBuf[2200];
-        snprintf(dbgBuf, sizeof(dbgBuf), "[EchoAddonManager][%s][%s] %s\n", LevelToString(level), src, buffer);
+        snprintf(dbgBuf, sizeof(dbgBuf), "[LSAddonManager][%s][%s] %s\n", LevelToString(level), src, buffer);
         OutputDebugStringA(dbgBuf);
     }
 }

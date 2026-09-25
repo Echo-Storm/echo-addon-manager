@@ -62,6 +62,11 @@ in the list stays on. Supported from manager 0.8.0; an older manager ignores the
 `wip` (optional, `true` or `false`) marks an addon as work in progress: the manager lists it with a WIP label, greys out its switch and never
 loads it. Supported from manager 0.8.0.
 
+`enabled_by_default` (optional, `true` when absent) says whether a newly installed addon starts switched on. With `false` it arrives off, and
+the person switches it on in the addon list; once switched on or off, their choice is kept. For an addon that changes something everybody
+would notice, such as the upscalers, which take over Lossless Scaling's NIS scaler. Supported from manager 0.9.1; an older manager ignores
+the key (the addon starts on).
+
 ## Exports
 
 | Export | Signature | |
@@ -80,7 +85,7 @@ Capabilities: `EAM_CAP_HAS_SETTINGS`, `EAM_CAP_REQUIRES_RESTART` (enabling or di
 
 | Call | |
 |------|---|
-| `Log(level, message)` | thread-safe; shows in the Logs tab and `logs\EchoAddonManager.log` |
+| `Log(level, message)` | thread-safe; shows in the Logs tab and `logs\LSAddonManager.log` |
 | `GetConfig(addonId, key, default)`, `SetConfig(...)`, `SaveConfig()` | your settings, stored in `addons\config.json` under your id |
 | `GetHostVersion()` | the addon API version, `(major << 16) \| (minor << 8) \| patch` |
 | `SubscribeEvent`, `UnsubscribeEvent`, `PublishEvent` | the event bus (events in `events.h`) |

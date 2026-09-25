@@ -131,7 +131,7 @@ void ClickAndRepress(bool turningOn) {
 bool IsManagerWindow(HWND hwnd) {
     wchar_t cls[64] = {};
     GetClassNameW(hwnd, cls, 64);
-    return wcscmp(cls, L"EchoAddonManagerClass") == 0;
+    return wcscmp(cls, L"LSAddonManagerClass") == 0;
 }
 
 void ProcessOwnWindows() {

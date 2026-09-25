@@ -47,7 +47,7 @@ DiagResult CreateDiagnosticsZip(const fs::path& lsDir, const std::string& summar
     wchar_t stamp[32]; swprintf(stamp, 32, L"%04d%02d%02d-%02d%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     wchar_t tmp[MAX_PATH]; GetTempPathW(MAX_PATH, tmp);
     const fs::path stage = fs::path(tmp) / (L"eam-diag-" + std::wstring(stamp) + L"-" + std::to_wstring(GetTickCount64()));
-    const fs::path bundle = stage / L"EchoAddonManager-diagnostics";
+    const fs::path bundle = stage / L"LSAddonManager-diagnostics";
     fs::create_directories(bundle, ec);
     if (ec) { r.message = "Could not create a temporary folder: " + ec.message(); return r; }
 
@@ -71,10 +71,10 @@ DiagResult CreateDiagnosticsZip(const fs::path& lsDir, const std::string& summar
     }
 
     fs::create_directories(outDir, ec);
-    r.zip = outDir / (L"EchoAddonManager-diagnostics-" + std::wstring(stamp) + L".zip");
+    r.zip = outDir / (L"LSAddonManager-diagnostics-" + std::wstring(stamp) + L".zip");
     wchar_t sysDir[MAX_PATH] = {};
     GetSystemDirectoryW(sysDir, MAX_PATH);
-    const std::wstring cmd = L"\"" + std::wstring(sysDir) + L"\\tar.exe\" -a -cf \"" + r.zip.wstring() + L"\" -C \"" + stage.wstring() + L"\" EchoAddonManager-diagnostics";
+    const std::wstring cmd = L"\"" + std::wstring(sysDir) + L"\\tar.exe\" -a -cf \"" + r.zip.wstring() + L"\" -C \"" + stage.wstring() + L"\" LSAddonManager-diagnostics";
     const bool ok = RunHidden(cmd, 60000) && fs::exists(r.zip, ec);
     fs::remove_all(stage, ec);   // our own temporary staging folder
     if (!ok) { r.message = "Could not create the zip (Windows' tar.exe failed)."; r.zip.clear(); return r; }

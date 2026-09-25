@@ -1,10 +1,17 @@
 # Changelog
 
-## 0.9.1 (2026-09-24): the upscalers
+## 0.9.1 (2026-09-24): the upscalers, and a new name
+
+**Echo Addon Manager is now Addon Manager for Lossless Scaling** (LS Addon Manager for short; the author is still Echo-Storm), and the
+repository is now `Echo-Storm/ls-addon-manager` (GitHub forwards the old address). The window, tray, installer (`LSAddonManagerSetup.exe`),
+release zip and log (`logs\LSAddonManager.log`) carry the new name. Nothing to do when updating: Setup recognises an install made under
+the old name and offers Update as before, the folder it remembered is still found, and settings, looks and backups carry over. The old
+`EchoAddonManager.log` stays in the logs folder until you delete it.
 
 The manager and the addons now show 0.9.1. Two new addons take the place of Lossless Scaling's NIS scaler with a temporal upscaler, fed with
-motion measured from the frames themselves, so they work in any game Lossless Scaling can scale, with frame generation on or off. Both are
-**work in progress**: they can be switched on, and the release package leaves them out for now (`tools\package.ps1 -IncludeWip` puts them in).
+motion measured from the frames themselves, so they work in any game Lossless Scaling can scale, with frame generation on or off. Both are a
+**preview** (work in progress, tried in World of Warcraft: Forever only): they are in the download but arrive switched off; switch one on in
+the addon list. The guide is [addons/DLSS5NR01/docs/upscalers.md](addons/DLSS5NR01/docs/upscalers.md).
 
 - **DLSS 4 Upscaler** (`DLSS4DLAA`, NVIDIA RTX cards): NVIDIA DLSS Super Resolution in place of the NIS pass. It grew out of 0.8.0's DLSS 4
   DLAA addon, which ran on the captured frame and changed nothing visible; doing the upscaling itself is what DLSS is made for.
@@ -51,6 +58,10 @@ mask) instead of smearing its history. A still picture measures exactly still.
 - A NIS pass at 1:1 is taken too (DLAA, or FSR's native anti-aliasing).
 - The motion estimate was made about 40% cheaper at 4K: the search compares a checkerboard half of each 8x8 and skips the search around a
   guess that already matches exactly, and every pixel tries a vector only once.
+
+**The manager**
+- A new `addon.json` key, `enabled_by_default` (`true` when absent): with `false`, a newly installed addon arrives switched off until the
+  person switches it on (docs/addon-authors.md). The upscalers use it, so an update does not hand anyone's NIS scaling to a preview.
 
 **Found in the 0.9.1 sweep and fixed**
 - The upscalers kept Neural Rendering's split-view, next-look and screenshot hotkeys, which do nothing there, and *next look* could apply a

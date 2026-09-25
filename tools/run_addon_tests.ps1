@@ -47,7 +47,7 @@ $suites = [ordered]@{
                    Runs = @(@('installer core (fake Lossless Scaling folders)', "$root\installer\build\Release\setup_test.exe", @()),
                             @('installer file bundle', "$root\installer\build\Release\setup_payload_test.exe", @())) }
     setupexe  = @{ When = '^installer/src/|^installer/tests/setup_exe_test|^installer/CMakeLists|^tools/package';
-                   Build = @('installer', 'setup_core', 'setup_cli', 'pack_payload', 'EchoAddonManagerSetup');
+                   Build = @('installer', 'setup_core', 'setup_cli', 'pack_payload', 'LSAddonManagerSetup');
                    Script = "$root\installer\tests\setup_exe_test.ps1" }
     nr        = @{ When = '^addons/DLSS5NR01/(src|tools|CMakeLists)|^manager/sdk/|^tools/run_hosttest_matrix';
                    Build = @('nr', 'nr_reqtest', 'nr_taptest', 'nr_settingstest', 'nr_autotest', 'DLSS5NR01', 'DLSS4DLAA', 'FSR3UPSC', 'nr_hosttest', 'nr_selftest');

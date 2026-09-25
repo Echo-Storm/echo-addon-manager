@@ -9,7 +9,7 @@
 > **Tested with World of Warcraft: Forever.** This project was developed and tested against **World of Warcraft: Forever** (the beta; it runs as `WowB.exe`), on Lossless Scaling 3.2.2.0, Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested. DLSS 5 Neural Rendering in particular has only been
 > tried in World of Warcraft: Forever.
 
-An addon for Echo Addon Manager, the addon manager for Lossless Scaling, that runs NVIDIA DLSS 5
+An addon for LS Addon Manager, the addon manager for Lossless Scaling, that runs NVIDIA DLSS 5
 Neural Rendering (DLSSNR) on the frames Lossless Scaling captures and applies the result to every
 frame Lossless Scaling presents, real and generated. Nothing is injected into the game. No ReShade.
 Lossless Scaling never waits for the model.
@@ -32,7 +32,7 @@ Documentation: [User guide](docs/user-guide.md) · [Architecture](docs/architect
 
 ## What you need
 
-- Lossless Scaling 3.x with Echo Addon Manager installed and working.
+- Lossless Scaling 3.x with LS Addon Manager installed and working.
 - An NVIDIA RTX GPU running LSFG. RTX 30 was the development hardware (Ampere runs the model in
   FP16, so it is the slow case). RTX 20 should behave the same. RTX 40/50 are expected to be
   considerably faster but were not tested by the author.
@@ -42,7 +42,7 @@ Documentation: [User guide](docs/user-guide.md) · [Architecture](docs/architect
 
 ## Install
 
-1. Download the latest release zip and run `EchoAddonManagerSetup.exe` from it: it installs the manager and this addon, with backups. Or do it by hand: extract the zip and copy the
+1. Download the latest release zip and run `LSAddonManagerSetup.exe` from it: it installs the manager and this addon, with backups. Or do it by hand: extract the zip and copy the
    `addons\DLSS5NR01` folder into your Lossless Scaling folder so you have:
    ```
    <Lossless Scaling>\addons\DLSS5NR01\DLSS5NR01.dll
@@ -52,7 +52,7 @@ Documentation: [User guide](docs/user-guide.md) · [Architecture](docs/architect
    ```
 2. Put your own copy of `nvngx_dlssnr.dll` in the Lossless Scaling folder (next to `LosslessScaling.exe`), or open the addon's panel and press
    *Browse for the model file...* to copy it there. Then press *Test compatibility*.
-3. Start Lossless Scaling, open Echo Addon Manager, enable *DLSS 5 Neural Rendering*
+3. Start Lossless Scaling, open LS Addon Manager, enable *DLSS 5 Neural Rendering*
    and open its settings.
 4. Start scaling a game. The status line goes from *waiting for LSFG dispatches* to *engine:
    loading model...* to *running*. The first model load takes a few seconds.
@@ -112,7 +112,7 @@ not lost; none of them is promised.
   FSR 3.1 in place of Lossless Scaling's NIS scaler, with motion measured from the frames. See [docs/upscalers.md](docs/upscalers.md).
   (They began as DLSS 4 DLAA on the captured frame, which changed nothing visible; [research](../../docs/dlss-4.5-research.md).)
 - One distribution with one look for the three addons (Neural Rendering, ReShade input passthrough, Windowed mode): done inside
-  Echo Addon Manager.
+  LS Addon Manager.
 
 ## Building
 
@@ -124,7 +124,7 @@ and the measurement harness are in [docs/building.md](docs/building.md).
 
 ## License and credits
 
-MIT (see `LICENSE`). Third parties: the addon SDK headers of Echo Addon Manager (MIT, `../../manager/sdk`),
+MIT (see `LICENSE`). Third parties: the addon SDK headers of LS Addon Manager (MIT, `../../manager/sdk`),
 Dear ImGui (MIT), and AMD's FidelityFX API headers (MIT, `third_party/ffx`, used by the FSR 3 Upscaler). The NVIDIA DLSS SDK and the
 DLSSNR snippet are NVIDIA's and are not part of this repository.
 
