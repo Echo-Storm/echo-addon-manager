@@ -153,6 +153,7 @@ void LogProgress(const NrStats& st) {
 
 void OnPresent(IDXGISwapChain* sc);
 void Compose(IDXGISwapChain* sc);
+void ScalerPresentGuarded(IDXGISwapChain* sc);
 
 // The engine runs on the card Lossless Scaling's frames come from. Lossless Scaling makes devices on every card and may run a pass on more than
 // one for a moment, so it moves only after frames have kept coming from another card for a while.
@@ -436,6 +437,7 @@ void OnPresent(IDXGISwapChain* sc) {
     }
     if (g_off || g_engineStarting || !sc) return;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); if (!g_config.enabled) return; }
+    if (kDlaaAddon) { ScalerPresentGuarded(sc); return; }   // the upscaler: DLSS's picture over NIS's (Handoff::AtPresent)
     if (!OwnsFrames()) return;
     std::lock_guard<std::mutex> lock(g_frameMutex);
     PresentGuarded(sc);
@@ -568,7 +570,8 @@ void OnDeviceEvent(uint32_t id, const void*, uint32_t, void*) {
 // replaced when DLSS is ready, and runs as usual until then, when DLSS fails, or while the Before / after hotkey shows the original.
 //
 // NVIDIA's DLSS code runs only on the engine's own D3D12 device (started on a thread of its own: it touches no other device). Lossless
-// Scaling's D3D11 device and context are used only here, on its render thread, and only for copies, one fence signal and one GPU-side wait.
+// Scaling's D3D11 device and context are used only here, on its render thread, and only for copies and one fence signal (by default nothing
+// waits: the picture shown is the newest DLSS has finished, the frame before's).
 // (DLSS run on Lossless Scaling's D3D11 device itself crashed it three times, 2026-09-24.)
 
 namespace {
@@ -642,14 +645,19 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
                 g_link.Shutdown();
                 g_linkDevice = g_link.Init(dev, ctx, &g_sr, [](const char* m) { Log("%s", m); }) ? dev : nullptr;
             }
+            int handoffMode; { std::lock_guard<std::mutex> settings(g_settingsMutex); handoffMode = g_config.scalerHandoff; }
+            if (handoffMode == static_cast<int>(ScalerLink::Handoff::AtPresent) && !PresentHook::Installed() &&
+                !PresentHook::Install(dev, OnPresent, [](const char* m) { Log("%s", m); }))
+                Log("DLSS upscaler: could not hook Present; the picture cannot go over NIS's there");
             if (g_linkDevice == dev && g_compare.load() != 2) {   // "original only" lets NIS run, for comparing
-                NrParams p; unsigned preset;
-                { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; }
+                NrParams p; unsigned preset; int handoff;
+                { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; handoff = g_config.scalerHandoff; }
                 uint32_t fw = 0, fh = 0;
                 ID3D11Resource* flow = p.useFlow ? g_tap.NewestFlow(fw, fh) : nullptr;
                 const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;
                 t_ownWork = true;
-                replaced = g_link.Upscale(pass, flow, fw, fh, p.flowUnit, fraction, preset, p.sharpen, g_resetRequested.exchange(false));
+                replaced = g_link.Upscale(pass, flow, fw, fh, p.flowUnit, fraction, preset, p.sharpen, g_resetRequested.exchange(false),
+                                          static_cast<ScalerLink::Handoff>(handoff));
                 t_ownWork = false;
                 if (flow) flow->Release();
                 if (replaced) ++g_upscaled;
@@ -683,6 +691,13 @@ bool ScalerFault(unsigned code) {
 }
 bool ScalerGuarded(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {   // no objects here: __try cannot unwind them
     __try { return ScalerPass(ctx, x, y, z); } __except (ScalerFault(GetExceptionCode()) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) { t_ownWork = false; return false; }
+}
+void ScalerPresent(IDXGISwapChain* sc) {
+    std::lock_guard<std::mutex> lock(g_frameMutex);
+    if (g_linkDevice) g_link.PresentCopy(sc);
+}
+void ScalerPresentGuarded(IDXGISwapChain* sc) {   // no objects here: __try cannot unwind them
+    __try { ScalerPresent(sc); } __except (ScalerFault(GetExceptionCode()) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {}
 }
 } // namespace
 

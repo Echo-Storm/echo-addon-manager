@@ -22,6 +22,16 @@
   - It works beside DLSS 5 Neural Rendering (no longer "one addon at a time"); the addon list can switch it on again.
   - The test host has a fake NIS pass that paints its output magenta: DLSS replaces it with a real upscaled picture, on real and generated
     frames. The scaler and pair scenarios are in the everyday quick set.
+  - **Frame generation off works** (World of Warcraft: Forever, 1920x1080 window -> 3840x2160). It showed a black screen with Lossless Scaling
+    restarting its devices every few seconds. With frame generation off the NIS pass reads Lossless Scaling's capture directly: a keyed-mutex
+    texture shared from its capture device, and CopyResource from it gave all black, so DLSS upscaled black. The frame is now read by a small
+    compute pass through the NIS pass's own view of it (as NIS reads it), and the restarts stopped with the black frames.
+  - **Nothing waits on DLSS any more.** The picture shown is the newest DLSS has finished (the frame before's), so Lossless Scaling's queue
+    no longer waits on the engine's; if the engine is still busy, the last picture repeats. `scalerHandoff` in the addon's config keeps the
+    test variants: 1 the GPU wait, 2 DLSS runs but NIS stays, 3 NIS runs and DLSS's picture is pasted at Present (this one also covers
+    Lossless Scaling's cursor and FPS counter, drawn after NIS).
+  - The log says once per device what the NIS pass reads and writes (with frame generation off, its output is the swap chain's back buffer)
+    and how bright the frame DLSS gets and the picture it makes are, so a black picture shows in the log.
 
 ## 0.8.0 (2026-09-24): the interface pass
 
