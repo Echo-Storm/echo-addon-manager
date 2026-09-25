@@ -330,7 +330,7 @@ SCENARIOS = [
 # The everyday set (--quick): the frame reaching the model with its own motion, the older timing, an exit with no AddonShutdown, the DLSS 4
 # Upscaler in place of NIS, and the two addons loaded together. The
 # rest (looks, HUD, grain, smoothing, the self-test, the upscaler with preset M, the panel shot) run with no option, before a release.
-QUICK = {'base', 'flow_previous', 'exit_abrupt', 'scaler', 'pair'}
+QUICK = {'base', 'flow_previous', 'exit_abrupt', 'scaler', 'fsr_scaler', 'pair'}
 
 
 def selftest_exe_checks(nr_dir, snippet):

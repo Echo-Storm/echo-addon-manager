@@ -235,7 +235,7 @@ void DrawPanel() {
     Tip("The model blends each frame with the ones before it. Press this after a scene cut, or if a ghost or smear seems stuck on screen.");
     ImGui::SameLine();
     if (ImGui::SmallButton("Restore defaults")) {
-        const float was = c.p.workingScale; const NrParams keep = c.p; c.p = NrParams(); c.p.hudCount = keep.hudCount; memcpy(c.p.hud, keep.hud, sizeof c.p.hud); c.p.hudFeather = keep.hudFeather; c.lsFirst = true; changed = true; if (c.p.workingScale != was) createChanged = true;
+        const float was = c.p.workingScale; const NrParams keep = c.p; c.p = ProductDefaults(); c.p.hudCount = keep.hudCount; memcpy(c.p.hud, keep.hud, sizeof c.p.hud); c.p.hudFeather = keep.hudFeather; c.lsFirst = true; changed = true; if (c.p.workingScale != was) createChanged = true;
     }
     Tip("Put the look and quality sliders back to this addon's defaults. Your presets, hotkeys and the advanced settings are not touched.");
     {   // the other addon of the pair
@@ -436,7 +436,25 @@ void DrawPanel() {
         }
         Note("Areas are saved with the look, so each game can have its own layout.");
     }
-    if (eam::ui::SectionHeader("Compare and hotkeys")) {
+    if (kScalerAddon && eam::ui::SectionHeader("Compare and hotkeys")) {   // the upscalers: the upscaled picture or NIS's, and the sharpening
+        int cm = g_compare.load() == 2 ? 1 : 0; const char* cms[] = { "Upscaled", "Lossless Scaling's NIS (before)" };
+        if (ImGui::Combo("Compare view", &cm, cms, 2)) g_compare = cm == 1 ? 2 : 0;
+        Tip("Upscaled = normal. Lossless Scaling's NIS = as if the addon were off, to compare (the upscaler stays loaded, so switching back is instant). Not saved.");
+        changed |= ImGui::Checkbox("Hotkeys: Ctrl+Shift + key (work while the game has focus and the upscaler runs)", &c.hotkeys);
+        Tip("Switch between the upscaler and NIS, and change the sharpening, from inside the game. The Ctrl+Shift pair keeps them away from the game's own key bindings.");
+        auto fkey = [&](const char* label, int* vk) {
+            int idx = *vk - VK_F1; if (idx < 0 || idx > 11) idx = 5;
+            const char* names[] = { "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12" };
+            const ImGuiStyle& st = ImGui::GetStyle();
+            ImGui::SetNextItemWidth(ImGui::CalcTextSize("F12").x + st.FramePadding.x * 2.0f + ImGui::GetFrameHeight() + st.ItemInnerSpacing.x);
+            if (ImGui::Combo(label, &idx, names, 12)) { *vk = VK_F1 + idx; changed = true; }
+        };
+        fkey("Before / after", &c.keyAB); fkey("Sharpen -", &c.keySharpDn); fkey("Sharpen +", &c.keySharpUp);
+        auto fname = [](int vk) { static char b[4][8]; static int n = 0; char* o = b[n++ & 3]; snprintf(o, 8, "F%d", vk - VK_F1 + 1); return (const char*)o; };
+        Note("Now: Ctrl+Shift+%s before/after  |  %s / %s sharpen - / +  (%s)", fname(c.keyAB), fname(c.keySharpDn), fname(c.keySharpUp),
+             c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
+    }
+    if (!kScalerAddon && eam::ui::SectionHeader("Compare and hotkeys")) {
         int cm = g_compare; const char* cms[] = { "Enhanced", "Split: left original | right enhanced", "Original only (before)" };
         if (ImGui::Combo("Compare view", &cm, cms, 3)) g_compare = cm;
         Tip("Enhanced = normal. Split = left of the line is the original, right is enhanced. Original only = as if the addon were off (it saves the compose work but the model keeps running). Display only; not saved.");

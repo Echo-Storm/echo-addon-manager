@@ -1,4 +1,5 @@
 #include "addon/settings.h"
+#include "addon/product.h"
 #include <eam/addon_sdk.h>
 #include <algorithm>
 #include <cfloat>
@@ -129,6 +130,12 @@ std::string CleanName(std::string name) {
     return name;
 }
 
+NrParams ProductDefaults() {
+    NrParams p;
+    if (kScalerAddon) p.sharpen = 0.3f;   // the upscalers stand in for NIS, which sharpens: without it DLSS or FSR looks softer next to NIS
+    return p;
+}
+
 Loaded LoadSettings(IHost* host, const char* id) {
     auto text = [&](const std::string& key, const char* dflt = "") { return std::string(host ? host->GetConfig(id, key.c_str(), dflt) : dflt); };
     auto number = [&](const char* key, double dflt) { const std::string s = text(key); return s.empty() ? dflt : atof(s.c_str()); };
@@ -137,7 +144,7 @@ Loaded LoadSettings(IHost* host, const char* id) {
 
     Loaded out;
     Config& c = out.config;
-    const NrParams defaults;
+    const NrParams defaults = ProductDefaults();
     for (const FloatSetting& s : kFloats) c.p.*s.field = Limit(static_cast<float>(number(s.key, defaults.*s.field)), s);
     for (const UIntSetting& s : kUInts) c.p.*s.field = Limit(static_cast<long long>(number(s.key, defaults.*s.field)), s);
     c.p.useFlow = flag("useFlow", true);

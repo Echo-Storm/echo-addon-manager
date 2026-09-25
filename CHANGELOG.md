@@ -52,13 +52,25 @@ mask) instead of smearing its history. A still picture measures exactly still.
 - The motion estimate was made about 40% cheaper at 4K: the search compares a checkerboard half of each 8x8 and skips the search around a
   guess that already matches exactly, and every pixel tries a vector only once.
 
+**Found in the 0.9.1 sweep and fixed**
+- The upscalers kept Neural Rendering's split-view, next-look and screenshot hotkeys, which do nothing there, and *next look* could apply a
+  look saved for Neural Rendering, overwriting the upscaler's sharpening. In the upscalers only Before / after and the sharpening keys act
+  now, and their Compare and hotkeys section shows just those (upscaled or NIS).
+- A *Reset history* asked for while the upscaler's engine was still busy with the frame before was dropped; it now goes with the next frame.
+- A fresh upscaler started with sharpening off (Neural Rendering's default), so it looked softer next to NIS, which sharpens: the upscalers
+  start at 0.3 (also after *Restore defaults*).
+- The FSR 3 Upscaler's status line, starting message and Performance-tab metric said "DLSS"; they name the upscaler now (`fsr_ms`).
+- The master switch's tip in Neural Rendering and the upscalers still said the two exclude each other; `package.ps1` named NVIDIA's fetch
+  script when AMD's runtime was missing.
+
 **Tools and tests**
 - `tools/fetch_ffx_sdk.ps1` fetches AMD's runtime from AMD's repository, pinned to FidelityFX SDK v1.1.4 and checked against a SHA-256 and
   AMD's Authenticode signature; the FidelityFX API headers (MIT) are in `addons/DLSS5NR01/third_party/ffx`. NOTICE.md lists AMD's code.
 - `tools/deploy.ps1 -What fsr` deploys the FSR 3 Upscaler; `package.ps1` knows it (as work in progress); the addon test run builds it.
 - The test host has a fake NIS pass (it paints its output magenta, which the upscaler must replace), frame generation off (a BGRA8 frame, no
   flow), any frame size and scale (`nisW`, `nisH`, `nisScale`, for 4K and 1:1), and a sliding aliased picture (`nismove=1`) measured against
-  the ideal picture. The matrix runs both upscalers on still and moving pictures, with and without motion, and DLAA at 4K.
+  the ideal picture. The matrix runs both upscalers on still and moving pictures, with and without motion, and DLAA at 4K; the everyday
+  quick set now includes the FSR 3 Upscaler.
 
 ## 0.8.0 (2026-09-24): the interface pass
 

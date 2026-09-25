@@ -124,7 +124,7 @@ bool ScalerLink::Fit(Shared& t, uint32_t w, uint32_t h, DXGI_FORMAT fmt, bool en
 
 bool ScalerLink::Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, SrEngine* engine, LogFn log) {
     m_log = std::move(log); m_engine = engine; m_ctx = ctx; m_frame = 0; m_holds[0] = m_holds[1] = 0; m_described = false;
-    m_atPresent = m_copiedAtPresent = 0; m_probeState = 0;
+    m_atPresent = m_copiedAtPresent = 0; m_probeState = 0; m_pendingReset = false;
     if (FAILED(dev->QueryInterface(IID_PPV_ARGS(&m_dev))) || FAILED(ctx->QueryInterface(IID_PPV_ARGS(&m_ctx4)))) {
         Log("%s upscaler: Lossless Scaling's device has no shared fences (D3D11.4 is needed)", kUpscalerName); Shutdown(); return false;
     }
@@ -212,6 +212,7 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     // The engine is idle once it has finished the newest frame: only then may the shared frame and flow be refilled. With Wait, Lossless
     // Scaling's own queue waited for that already, so it counts as idle.
     const bool idle = m_handoff == Handoff::Wait || m_done.d3d11->GetCompletedValue() >= m_frame;
+    m_pendingReset = m_pendingReset || reset;   // not lost when the engine is busy and this frame is not handed over
     const SavedBindings saved(m_ctx);
     if (idle) {
         ID3D11Texture2D* flowTex = nullptr;
@@ -229,8 +230,9 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
         m_ctx->Flush();   // the engine's queue waits for this signal: hand it to the GPU now
         Shared& target = m_out[n % 2];
         if (m_engine->Run(m_in.d3d12, pass.inW, pass.inH, inFmt, target.d3d12, pass.outW, pass.outH, outFmt, flowTex ? m_flow.d3d12 : nullptr, m_flow.w, m_flow.h,
-                          flowUnit, motionFraction, estimate, preset, sharpen, reset, m_copied.d3d12, n, m_done.d3d12, n)) {
+                          flowUnit, motionFraction, estimate, preset, sharpen, m_pendingReset, m_copied.d3d12, n, m_done.d3d12, n)) {
             m_holds[n % 2] = n;
+            m_pendingReset = false;
         } else {
             m_holds[n % 2] = 0;
             m_ctx4->Signal(m_done.d3d11, n);   // nothing was queued for this frame: mark it finished so the next one is not held back

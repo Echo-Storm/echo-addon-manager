@@ -34,9 +34,9 @@ multisampling (MSAA 4x/8x) costs a lot and adds little here; keep the game's own
 
 - **DLSS model** (DLSS 4 Upscaler only): *NVIDIA's default (K)* or *M (DLSS 4.5)*. M is heavier (about twice K's cost) and differs in how it
   treats fine detail; compare them in your game.
-- **Sharpening**: DLSS 4 has no sharpening of its own, so the DLSS addon sharpens its picture with the contrast-adaptive (CAS) formula; the FSR
-  addon uses AMD's own RCAS. NIS sharpens too (Lossless Scaling's Sharpness), so without it the upscaler can look softer next to NIS. 0.2 to
-  0.6 is the useful range.
+- **Sharpening** (0.3 to start with): DLSS 4 has no sharpening of its own, so the DLSS addon sharpens its picture with the contrast-adaptive
+  (CAS) formula; the FSR addon uses AMD's own RCAS. NIS sharpens too (Lossless Scaling's Sharpness), so without it the upscaler can look
+  softer next to NIS. 0.2 to 0.6 is the useful range. Ctrl+Shift+F8 / F9 lower and raise it in the game.
 - **Motion**: *Measured from the frames* (the default), *Lossless Scaling's frame generation* (its flow: coarser, a quarter of the game's size,
   and only with frame generation on), or *None* (the upscaler assumes nothing moves: sharp when still, smeared when the camera turns; there to
   compare).
@@ -67,6 +67,8 @@ The addon adds one frame of latency: the picture shown is the one the upscaler f
   softer or dimmer than with NIS (FSR 3 keeps it crisper than DLSS). A game with DLSS built in draws its HUD after upscaling. Keeping NIS for
   HUD areas is on the roadmap.
 - On a clean, low-detail game (World of Warcraft) the difference to NIS is small. Games with foliage, fine detail and busy motion show it more.
+- **A window of another shape than the screen** (a 4:3 game on a 16:9 screen): Lossless Scaling scales it into part of the screen, and the
+  upscalers leave that to NIS for now.
 
 ## When something is wrong
 
@@ -76,6 +78,7 @@ The addon writes `logs\DLSS4DLAA.log` or `logs\FSR3UPSC.log` in the Lossless Sca
 |--------------|---------------------|
 | The panel says it is waiting for the NIS pass | Lossless Scaling's Scaling Type is not NIS, or scaling has not started. |
 | No difference at all | At 1:1 (the game fills the screen) there is nothing to upscale; run the game in a smaller window. Check the panel says it upscales, and try the Before / after hotkey. |
+| The panel keeps waiting although NIS is chosen | The game window's shape differs from the screen's (a 4:3 game on a 16:9 screen, or a window dragged to an odd size): Lossless Scaling then scales into part of the screen, which the upscalers do not take yet, so NIS runs. Give the game a window of the screen's shape (2560x1440 on a 3840x2160 screen). |
 | A black picture | Should not happen since 0.9.1. The log's `probe:` lines say how bright the frame the upscaler got and the picture it made are: 0 of 255 means black. Please report it with the log. |
 | Smear when moving | Check Motion is *Measured from the frames*. The log's `motion estimator:` lines give the average motion found and how much of the picture was marked untrusted. |
 | "... could not run: ..." in the panel | The runtime is missing from the addon's `dlss` or `fsr` folder (reinstall the addon), or, for DLSS, the card is not an NVIDIA RTX card. NIS runs as usual meanwhile. |

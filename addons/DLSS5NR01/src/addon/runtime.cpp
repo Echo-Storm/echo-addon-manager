@@ -300,7 +300,10 @@ void ReadHotkeys() {
     const bool modifiers = on && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
     for (int i = 0; i < 6; ++i) {
         const bool down = modifiers && keys[i] > 0 && (GetAsyncKeyState(keys[i]) & 0x8000);
-        if (down && !wasDown[i]) {
+        // the upscalers have no split view, looks or screenshots: only before / after and the sharpening keys act there (a look could
+        // otherwise overwrite the upscaler's sharpening with one saved for Neural Rendering)
+        const bool applies = !kScalerAddon || i == 0 || i == 2 || i == 3;
+        if (down && !wasDown[i] && applies) {
             if (i == 0) { g_compare = g_compare == 2 ? 0 : 2; ShowMarker(g_compare == 2 ? 2 : 1); Log("hotkey: %s", g_compare == 2 ? "original only" : "enhanced"); }
             else if (i == 1) { g_compare = g_compare == 1 ? 0 : 1; ShowMarker(g_compare == 1 ? 3 : 1); Log("hotkey: %s", g_compare == 1 ? "split view" : "enhanced"); }
             else if (i == 5) { screenshot::Request(); Log("hotkey: screenshot"); }   // no corner square: it would be in the picture
@@ -609,14 +612,14 @@ std::atomic<uint32_t> g_scaleInW{ 0 }, g_scaleInH{ 0 }, g_scaleOutW{ 0 }, g_scal
 
 void StartEngineFor(const LUID& card) {   // the engine's own device only: safe on a thread of its own
     g_srStarting = true;
-    SetStatus("DLSS: starting...");
+    SetStatus(std::string(kUpscalerName) + ": starting...");
     std::thread([card] {
         LARGE_INTEGER f, a, b; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
         const bool ok = kFsrScaler ? g_sr.Init(card, g_addonDir, g_addonDir + L"\\fsr", [](const char* m) { Log("%s", m); }, SrEngine::Backend::Fsr)
                                    : g_sr.Init(card, g_addonDir, g_addonDir + L"\\dlss", [](const char* m) { Log("%s", m); });
         QueryPerformanceCounter(&b);
         Log("%s upscaler: engine %s in %.0f ms, on a thread of its own", kUpscalerName, ok ? "started" : "failed", (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart);
-        SetStatus(ok ? "DLSS ready" : g_sr.LastError());
+        SetStatus(ok ? std::string(kUpscalerName) + " ready" : g_sr.LastError());
         g_srStarting = false;
     }).detach();
 }
@@ -674,9 +677,9 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
         g_scalerStatusAt = now;
         char text[160];
         if (replaced) {
-            snprintf(text, sizeof text, "DLSS %ux%u -> %ux%u, %.1f ms", g_scaleInW.load(), g_scaleInH.load(), g_scaleOutW.load(), g_scaleOutH.load(), g_sr.GpuMs());
+            snprintf(text, sizeof text, "%s %ux%u -> %ux%u, %.1f ms", kUpscalerName, g_scaleInW.load(), g_scaleInH.load(), g_scaleOutW.load(), g_scaleOutH.load(), g_sr.GpuMs());
             g_host->SetStatus(kAddonId, text, 1);
-            if (g_host->GetHostVersion() >= 0x010000) g_host->PublishMetric(kAddonId, "dlss_ms", g_sr.GpuMs(), "ms");
+            if (g_host->GetHostVersion() >= 0x010000) g_host->PublishMetric(kAddonId, kFsrScaler ? "fsr_ms" : "dlss_ms", g_sr.GpuMs(), "ms");
             SetStatus(text);
         } else if (g_compare.load() == 2) g_host->SetStatus(kAddonId, "Showing Lossless Scaling's NIS (Before / after)", 0);
     }

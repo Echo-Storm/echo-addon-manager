@@ -73,6 +73,7 @@ private:
     uint64_t m_frame = 0;             // the newest frame handed to the engine
     uint64_t m_holds[2] = {};         // the frame whose finished picture each m_out holds (0: none)
     Handoff m_handoff = Handoff::Late;
+    bool m_pendingReset = false;      // a history reset asked for while the engine was busy: it goes with the next frame handed over
     uint64_t m_atPresent = 0;         // AtPresent: the frame whose picture PresentCopy puts in the back buffer (0: none)
     uint64_t m_copiedAtPresent = 0;
     // once per link: how bright the frame DLSS gets and the picture it makes are (a black picture shows here)
