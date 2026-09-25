@@ -38,12 +38,13 @@ void main(uint3 id : SV_DispatchThreadID) {
 )";
 struct MotionConstants { uint32_t w, h; float scale; uint32_t hasFlow; };
 
-// Contrast-adaptive sharpening of DLSS's picture (the AMD FidelityFX CAS formula, MIT; as Neural Rendering's compose uses it): the weight
-// shrinks where a channel is already near 0 or 1, so detail is sharpened without clipping.
+// Contrast-adaptive sharpening of the upscaler's picture (the AMD FidelityFX CAS formula, MIT; as Neural Rendering's compose uses it): the
+// weight shrinks where a channel is already near 0 or 1, so detail is sharpened without clipping. `gain` above 1 amplifies what it changed,
+// past CAS's own maximum (the upscalers' slider reaches 1.6 times it); the result stays within 0..1.
 const char* kSharpenHlsl = R"(
 Texture2D<float4> tIn : register(t0);
 RWTexture2D<float4> uOut : register(u0);
-cbuffer C : register(b0) { uint2 size; float amount; uint unused; };
+cbuffer C : register(b0) { uint2 size; float amount; float gain; };
 float3 Sharpen(float3 n, float3 w, float3 c, float3 e, float3 s, float a) {
     const float3 lo = min(min(min(w, c), min(e, n)), s);
     const float3 hi = max(max(max(w, c), max(e, n)), s);
@@ -56,11 +57,12 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (id.x >= size.x || id.y >= size.y) return;
     const int2 p = int2(id.xy), last = int2(size) - 1;
     const float4 c = tIn[p];
-    uOut[p] = float4(Sharpen(tIn[clamp(p + int2(0, -1), 0, last)].rgb, tIn[clamp(p + int2(-1, 0), 0, last)].rgb, c.rgb,
-                             tIn[clamp(p + int2(1, 0), 0, last)].rgb, tIn[clamp(p + int2(0, 1), 0, last)].rgb, saturate(amount)), c.a);
+    const float3 s = Sharpen(tIn[clamp(p + int2(0, -1), 0, last)].rgb, tIn[clamp(p + int2(-1, 0), 0, last)].rgb, c.rgb,
+                             tIn[clamp(p + int2(1, 0), 0, last)].rgb, tIn[clamp(p + int2(0, 1), 0, last)].rgb, saturate(amount));
+    uOut[p] = float4(saturate(c.rgb + (s - c.rgb) * gain), c.a);
 }
 )";
-struct SharpenConstants { uint32_t w, h; float amount; uint32_t unused; };
+struct SharpenConstants { uint32_t w, h; float amount, gain; };
 
 const char* ResultName(NVSDK_NGX_Result r) {
     switch (r) {
@@ -398,8 +400,9 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     const bool fsr = m_backend == Backend::Fsr;
     const bool fresh = !HasFeature() || inW != m_inW || inH != m_inH || outW != m_outW || outH != m_outH || (!fsr && preset != m_preset);
     if (!EnsureFeature(inW, inH, outW, outH, preset)) return skip();
-    // DLSS writes into a texture of ours and the sharpening pass from there into out; FSR sharpens by itself (its RCAS)
-    const bool sharpening = !fsr && sharpen > 0.001f && EnsureSharpenTarget(outW, outH, outFormat);
+    // Sharpening (strength 0..1.6, see kScalerSharpenScale): DLSS has none of its own, so the upscaler writes into a texture of ours and the
+    // sharpening pass goes from there into out. FSR sharpens by itself (its RCAS) up to 1; beyond that our pass adds the rest on top.
+    const bool sharpening = (fsr ? sharpen > 1.001f : sharpen > 0.001f) && EnsureSharpenTarget(outW, outH, outFormat);
     LARGE_INTEGER qpcNow, qpcFreq; QueryPerformanceCounter(&qpcNow); QueryPerformanceFrequency(&qpcFreq);
     const float frameMs = m_lastRunQpc ? std::clamp(static_cast<float>((qpcNow.QuadPart - m_lastRunQpc) * 1000.0 / qpcFreq.QuadPart), 1.0f, 100.0f) : 16.7f;
     m_lastRunQpc = qpcNow.QuadPart;
@@ -469,7 +472,7 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
         d.depth = ffxApiGetResourceDX12(m_depth, FFX_API_RESOURCE_STATE_COMPUTE_READ);
         d.motionVectors = ffxApiGetResourceDX12(m_motion, FFX_API_RESOURCE_STATE_COMPUTE_READ);
         d.reactive = ffxApiGetResourceDX12(estimating ? m_distrust : nullptr, FFX_API_RESOURCE_STATE_COMPUTE_READ);   // where the motion cannot be trusted
-        d.output = ffxApiGetResourceDX12(out, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
+        d.output = ffxApiGetResourceDX12(sharpening ? m_unsharpened : out, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
         d.jitterOffset = { 0.0f, 0.0f }; d.motionVectorScale = { 1.0f, 1.0f };   // vectors in the game's pixels
         d.renderSize = { inW, inH }; d.upscaleSize = { outW, outH };
         d.enableSharpening = sharpen > 0.001f; d.sharpness = std::clamp(sharpen, 0.0f, 1.0f);
@@ -509,7 +512,8 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
         D3D12_GPU_DESCRIPTOR_HANDLE gpuOut = gpu; gpuOut.ptr += 3 * m_descriptorSize;
         m_list->SetComputeRootDescriptorTable(0, gpuIn);
         m_list->SetComputeRootDescriptorTable(1, gpuOut);
-        const SharpenConstants sc{ outW, outH, sharpen, 0 };
+        // DLSS: CAS up to its maximum, amplified above it. FSR: RCAS did up to 1; this adds what is above it (CAS at full strength, scaled)
+        const SharpenConstants sc = fsr ? SharpenConstants{ outW, outH, 1.0f, sharpen - 1.0f } : SharpenConstants{ outW, outH, std::min(sharpen, 1.0f), std::max(sharpen, 1.0f) };
         m_list->SetComputeRoot32BitConstants(2, 4, &sc, 0);
         m_list->Dispatch((outW + 7) / 8, (outH + 7) / 8, 1);
         Transition(m_unsharpened, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);

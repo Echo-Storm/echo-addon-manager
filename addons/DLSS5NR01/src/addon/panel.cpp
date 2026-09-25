@@ -315,10 +315,11 @@ void DrawPanel() {
             if (g_compare.load() == 2) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "Showing Lossless Scaling's NIS for comparison (Before / after hotkey).");
         }
         changed |= SL("Sharpening", &c.p.sharpen, 0.0f, 1.0f, c.p.sharpen <= 0.001f ? "off" : "%.2f");
-        if (kFsrScaler) Tip("FSR 3's own sharpening (AMD's RCAS), part of its upscaling pass. Lossless Scaling's NIS sharpens too (its Sharpness setting), "
-                            "so without it FSR 3 can look softer next to NIS. Try 0.2 to 0.5.");
-        else Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond. DLSS 4 has no sharpening of its own, "
-                 "while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer next to NIS. Try 0.2 to 0.4.");
+        if (kFsrScaler) Tip("FSR 3's own sharpening (AMD's RCAS), part of its upscaling pass; above about 0.6 an extra pass adds more than RCAS can. Lossless Scaling's "
+                            "NIS sharpens too (its Sharpness setting), so without it FSR 3 can look softer next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
+        else Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond; above about 0.6 its effect is amplified "
+                 "past CAS's own maximum. DLSS 4 has no sharpening of its own, while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer "
+                 "next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
         Note("Compare with the Before / after hotkey (Compare and hotkeys): it switches between %s and Lossless Scaling's own NIS while you play.", U);
     }
     if (!kScalerAddon && eam::ui::SectionHeader("Quality and performance")) {

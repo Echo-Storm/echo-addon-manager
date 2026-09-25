@@ -132,7 +132,9 @@ std::string CleanName(std::string name) {
 
 NrParams ProductDefaults() {
     NrParams p;
-    if (kScalerAddon) p.sharpen = 0.3f;   // the upscalers stand in for NIS, which sharpens: without it DLSS or FSR looks softer next to NIS
+    // the upscalers stand in for NIS, which sharpens: without it DLSS or FSR looks softer next to NIS (0.5 = strength 0.8, where it looked
+    // right in Fallout: New Vegas at 1440p -> 4K)
+    if (kScalerAddon) p.sharpen = 0.5f;
     return p;
 }
 
@@ -149,6 +151,12 @@ Loaded LoadSettings(IHost* host, const char* id) {
     for (const UIntSetting& s : kUInts) c.p.*s.field = Limit(static_cast<long long>(number(s.key, defaults.*s.field)), s);
     c.p.useFlow = flag("useFlow", true);
     HudFromText(text("hud"), c.p);
+    // A sharpening saved before the slider's scale (kScalerSharpenScale): the same strength on the new scale
+    // (written back at once: a Lossless Scaling that ends without shutting the addon down must not have it converted a second time)
+    if (kScalerAddon && text("sharpenScale").empty() && !text("sharpen").empty()) {
+        c.p.sharpen = c.p.sharpen / kScalerSharpenScale;
+        if (host) { host->SetConfig(id, "sharpen", std::to_string(c.p.sharpen).c_str()); host->SetConfig(id, "sharpenScale", "1.6"); host->SaveConfig(); }
+    }
 
     c.enabled = flag("enabled", true);
     c.model = std::clamp(integer("model", 0), 0, 1);
@@ -190,6 +198,7 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
     for (const FloatSetting& s : kFloats) put(s.key, Number(c.p.*s.field));
     for (const UIntSetting& s : kUInts) put(s.key, std::to_string(c.p.*s.field));
     putFlag("useFlow", c.p.useFlow);
+    if (kScalerAddon) put("sharpenScale", "1.6");   // the slider's scale this value is on (see LoadSettings)
     put("hud", HudToText(c.p));
 
     put("model", std::to_string(c.model)); put("dlaaPreset", std::to_string(c.dlaaPreset)); put("scalerHandoff", std::to_string(c.scalerHandoff)); put("motionSource", std::to_string(c.motionSource));

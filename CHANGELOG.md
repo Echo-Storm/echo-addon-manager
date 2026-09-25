@@ -9,6 +9,11 @@
   never waits for ever in NVIDIA's or AMD's teardown (a stuck GPU leaves it for Lossless Scaling's exit and says so), and stays loaded until
   Lossless Scaling closes once its engine has run, as Neural Rendering does. The log times the stop. The test host switches each upscaler off
   while it runs and makes a new device after it (`unload=1`, scenarios `scaler_unload`, `fsr_unload`).
+- **Sharpening reaches further** (the upscalers' Sharpening slider). The slider now spans 1.6 times the strength it did: what was 0.8 is
+  0.5, and the top part goes past the standard CAS / RCAS maximum (the sharpening's effect is amplified, still within 0..1). In Fallout:
+  New Vegas at 1440p -> 4K it took 0.8 of the old scale to look right, so 0.5 is the new default. A value saved on the old scale is
+  converted once on load (the `sharpenScale` key marks it). FSR 3 keeps its own RCAS up to the old maximum, and the engine's pass adds the
+  rest on top.
 - **Fewer repeated frames on a busy GPU.** In New Vegas up to one frame in six showed the picture before again (a judder that also reads as
   softness), because the upscaler's GPU work queued behind the game's and was not finished when the next frame came. The engine's queue now
   has high priority, and up to two frames may be with the engine at once (two frame buffers, three pictures in turn), so a late frame is

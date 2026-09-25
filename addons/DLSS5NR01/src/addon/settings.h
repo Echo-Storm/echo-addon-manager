@@ -53,7 +53,10 @@ std::string CleanName(std::string name);
 // The settings file, through the host.
 struct Loaded { Config config; std::vector<Look> looks; int compareStart = 0; float splitStart = 0.5f; };
 Loaded LoadSettings(IHost* host, const char* addonId);
-NrParams ProductDefaults();   // the defaults of this addon's picture settings (NrParams(), except the upscalers' sharpening)
+NrParams ProductDefaults();
+// The upscalers' Sharpening slider (0..1) spans this much strength: 1 is the standard CAS / RCAS maximum, above it the sharpening's effect is
+// amplified (the engine's sharpening pass). Before 0.9.2 the slider was the strength itself; LoadSettings converts a value saved then.
+inline constexpr float kScalerSharpenScale = 1.6f;   // the defaults of this addon's picture settings (NrParams(), except the upscalers' sharpening)
 void SaveSettings(IHost* host, const char* addonId, const Config& config, const std::vector<Look>& looks);
 // The saved text for a look or a program is cleared when it is deleted (the list no longer names it, the text would linger).
 void ForgetLook(IHost* host, const char* addonId, const std::string& name);
