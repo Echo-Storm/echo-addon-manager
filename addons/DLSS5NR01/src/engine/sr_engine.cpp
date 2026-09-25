@@ -177,7 +177,7 @@ void SrEngine::Shutdown() {
     if (m_params) { NVSDK_NGX_D3D12_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(m_params)); m_params = nullptr; }
     if (m_dev) NVSDK_NGX_D3D12_Shutdown1(m_dev);
     m_estimator.Shutdown(); m_estimatedLast = false; m_estimates = 0;
-    SafeRelease(m_motion); SafeRelease(m_depth); SafeRelease(m_depthUpload);
+    SafeRelease(m_motion); SafeRelease(m_distrust); SafeRelease(m_depth); SafeRelease(m_depthUpload);
     SafeRelease(m_motionPso); SafeRelease(m_sharpenPso); SafeRelease(m_unsharpened); m_unsharpenedW = m_unsharpenedH = 0; SafeRelease(m_rootSig); SafeRelease(m_heap);
     SafeRelease(m_timestamps); SafeRelease(m_timestampReadback);
     SafeRelease(m_list); for (auto*& a : m_alloc) SafeRelease(a);
@@ -241,11 +241,13 @@ void SrEngine::ReadTime(int slot) {
 
 bool SrEngine::EnsureInputs(uint32_t w, uint32_t h) {
     if (m_motion && m_inW == w && m_inH == h) return true;
-    SafeRelease(m_motion); SafeRelease(m_depth); SafeRelease(m_depthUpload);
+    SafeRelease(m_motion); SafeRelease(m_distrust); SafeRelease(m_depth); SafeRelease(m_depthUpload);
     D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
     D3D12_RESOURCE_DESC d{}; d.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width = w; d.Height = h; d.DepthOrArraySize = 1; d.MipLevels = 1; d.SampleDesc.Count = 1;
     d.Format = DXGI_FORMAT_R16G16_FLOAT; d.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     if (FAILED(m_dev->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &d, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(&m_motion)))) return false;
+    d.Format = DXGI_FORMAT_R8_UNORM;
+    if (FAILED(m_dev->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &d, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(&m_distrust)))) return false;
     d.Format = DXGI_FORMAT_R32_FLOAT; d.Flags = D3D12_RESOURCE_FLAG_NONE;
     if (FAILED(m_dev->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &d, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_depth)))) return false;
     // flat depth (DLSS reads it; Lossless Scaling has none), uploaded once
@@ -365,7 +367,9 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     Transition(m_motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     ID3D12DescriptorHeap* heaps[] = { m_heap };
     if (estimating) {
-        m_estimator.Record(m_list, slot, in, inFormat == DXGI_FORMAT_UNKNOWN ? DXGI_FORMAT_R8G8B8A8_UNORM : inFormat, m_motion);
+        Transition(m_distrust, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        m_estimator.Record(m_list, slot, in, inFormat == DXGI_FORMAT_UNKNOWN ? DXGI_FORMAT_R8G8B8A8_UNORM : inFormat, m_motion, m_distrust);
+        Transition(m_distrust, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     } else {
         m_list->SetDescriptorHeaps(1, heaps);
         m_list->SetComputeRootSignature(m_rootSig);
@@ -387,6 +391,9 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     p->Set(NVSDK_NGX_Parameter_Output, sharpening ? m_unsharpened : out);
     p->Set(NVSDK_NGX_Parameter_Depth, m_depth);
     p->Set(NVSDK_NGX_Parameter_MotionVectors, m_motion);
+    // where the measured motion cannot be trusted, DLSS leans on this frame instead of its history (none with frame generation's flow)
+    p->Set(NVSDK_NGX_Parameter_DLSS_Input_Bias_Current_Color_Mask, estimating ? m_distrust : static_cast<ID3D12Resource*>(nullptr));
+    p->Set(NVSDK_NGX_Parameter_DLSS_Input_Bias_Current_Color_SubrectBase_X, 0u); p->Set(NVSDK_NGX_Parameter_DLSS_Input_Bias_Current_Color_SubrectBase_Y, 0u);
     p->Set(NVSDK_NGX_Parameter_Jitter_Offset_X, 0.0f); p->Set(NVSDK_NGX_Parameter_Jitter_Offset_Y, 0.0f);
     p->Set(NVSDK_NGX_Parameter_MV_Scale_X, 1.0f); p->Set(NVSDK_NGX_Parameter_MV_Scale_Y, 1.0f);
     p->Set(NVSDK_NGX_Parameter_Reset, (reset || fresh) ? 1 : 0);
@@ -429,10 +436,10 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     if (NVSDK_NGX_FAILED(r)) { Fail("EvaluateFeature(DLSS): %s", ResultName(r)); return false; }
     ++m_runs;
     if (estimating && (++m_estimates == 60 || m_estimates % 1200 == 0)) {   // what the estimate found (a check that it follows the picture)
-        double x = 0, y = 0, length = 0, cost = 0; uint64_t frames = 0;
-        if (m_estimator.TakeAverages(x, y, length, cost, frames))
-            Log("motion estimator: over %llu frames, average vector (%.2f, %.2f) px, average length %.2f px, match cost %.4f; motion %.2f ms of %.2f ms",
-                (unsigned long long)frames, x, y, length, cost, m_motionMs, m_gpuMs);
+        double x = 0, y = 0, length = 0, cost = 0, distrust = 0; uint64_t frames = 0;
+        if (m_estimator.TakeAverages(x, y, length, cost, distrust, frames))
+            Log("motion estimator: over %llu frames, average vector (%.2f, %.2f) px, average length %.2f px, match cost %.4f; motion %.2f ms of %.2f ms; "
+                "DLSS told to lean on the current frame over %.1f%% of the picture", (unsigned long long)frames, x, y, length, cost, m_motionMs, m_gpuMs, distrust * 100.0);
     }
     return true;
 }

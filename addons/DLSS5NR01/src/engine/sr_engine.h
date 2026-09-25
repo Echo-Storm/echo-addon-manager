@@ -80,6 +80,7 @@ private:
     void* m_feature = nullptr;  // NVSDK_NGX_Handle*
     uint32_t m_inW = 0, m_inH = 0, m_outW = 0, m_outH = 0; unsigned m_preset = ~0u;
     ID3D12Resource* m_motion = nullptr;   // RG16F at the game's size, rests readable
+    ID3D12Resource* m_distrust = nullptr; // R8 at the game's size, rests readable: where the measured motion cannot be trusted (DLSS's bias mask)
     ID3D12Resource* m_depth = nullptr;    // R32F, flat
     ID3D12Resource* m_depthUpload = nullptr;
     uint64_t m_runs = 0; double m_buildMs = 0;

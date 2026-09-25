@@ -10,6 +10,10 @@
 //
 // The vectors point from a pixel in this frame to where it was in the frame before, in pixels of the game's frame (DLSS's convention with
 // its low-resolution motion flag). Without a frame before (the first, or after a size change) they are zero.
+//
+// Beside the vectors, a mask of where they cannot be trusted: where even the best vector leaves the pixel's surroundings unlike the frame
+// before (background just uncovered, transparent effects, a wrong estimate). DLSS takes it as its "bias toward the current frame" mask and
+// leans on this frame there instead of smearing its history.
 #pragma once
 #include <windows.h>
 #include <d3d12.h>
@@ -30,19 +34,21 @@ public:
     void Forget() { m_havePrevious = false; }   // the next frame has no frame before (a cut)
 
     // Records the passes. frame: the game's frame (readable, NON_PIXEL_SHADER_RESOURCE; RGBA8); motion: RG16F at the frame's size, in
-    // UNORDERED_ACCESS, receives the vectors. Leaves the command list's descriptor heap and root signature changed.
-    void Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion);
+    // UNORDERED_ACCESS, receives the vectors; distrust: R8 at the frame's size, in UNORDERED_ACCESS, receives the mask (0 trusted .. 1 not).
+    // Leaves the command list's descriptor heap and root signature changed.
+    void Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion, ID3D12Resource* distrust);
     // After the engine has reused the slot (its earlier work is finished): that frame's statistics join the running totals.
     void ReadStats(int slot);
-    // The average vector (game pixels) and match cost (0..1 per pixel) since the last call; false when no frame was measured.
-    bool TakeAverages(double& x, double& y, double& length, double& cost, uint64_t& frames);
+    // The average vector (game pixels), match cost (0..1 per pixel) and distrust (0..1) since the last call; false when no frame was measured.
+    bool TakeAverages(double& x, double& y, double& length, double& cost, double& distrust, uint64_t& frames);
     int Levels() const { return m_levels; }
 
 private:
-    static const int kMaxLevels = 7, kDescriptorsPerPass = 5, kPassesMax = 2 + 2 * kMaxLevels, kDescriptorsPerSlot = kDescriptorsPerPass * kPassesMax;
+    static const int kMaxLevels = 7, kDescriptorsPerPass = 6, kPassesMax = 2 + 2 * kMaxLevels, kDescriptorsPerSlot = kDescriptorsPerPass * kPassesMax;
     enum Pso { Luma, Down, Search, Median, Pixel, PsoCount };
     struct Pass { D3D12_GPU_DESCRIPTOR_HANDLE srvs, uav; };
-    Pass MakePass(int slot, int& index, ID3D12Resource* const srv[4], const DXGI_FORMAT srvFormat[4], ID3D12Resource* uav, DXGI_FORMAT uavFormat);
+    Pass MakePass(int slot, int& index, ID3D12Resource* const srv[4], const DXGI_FORMAT srvFormat[4], ID3D12Resource* uav, DXGI_FORMAT uavFormat,
+                  ID3D12Resource* uav2 = nullptr, DXGI_FORMAT uav2Format = DXGI_FORMAT_R8_UNORM);
     void Barrier(ID3D12GraphicsCommandList* list, ID3D12Resource* r, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to);
     void Release();
     void Log(const char* fmt, ...);
@@ -57,10 +63,10 @@ private:
     ID3D12Resource* m_luma[2][kMaxLevels] = {};   // two pyramids: this frame's and the one before's (R16F, rest readable)
     ID3D12Resource* m_grid[kMaxLevels] = {};      // one vector per 4x4 block of each size from 1 up (RG16F, in that size's pixels, rest readable)
     ID3D12Resource* m_filtered = nullptr;         // the half-size grid after the median
-    ID3D12Resource* m_stats = nullptr;            // 4 uints: summed match cost, summed x and y (1/16 pixel), blocks
+    ID3D12Resource* m_stats = nullptr;            // 8 uints: summed match cost, x and y (1/16 pixel), blocks, length; summed distrust (1/100), pixels
     ID3D12Resource* m_statsReadback = nullptr;    // kSlots x 16 bytes
     bool m_statsPending[kSlots] = {};
     int m_current = 0; bool m_havePrevious = false;
     // running totals for TakeAverages
-    double m_sumCost = 0, m_sumX = 0, m_sumY = 0, m_sumLength = 0, m_blocks = 0; uint64_t m_frames = 0;
+    double m_sumCost = 0, m_sumX = 0, m_sumY = 0, m_sumLength = 0, m_blocks = 0, m_sumDistrust = 0, m_pixels = 0; uint64_t m_frames = 0;
 };

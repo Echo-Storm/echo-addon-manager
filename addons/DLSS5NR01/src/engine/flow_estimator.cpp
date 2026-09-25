@@ -10,9 +10,9 @@ namespace {
 
 template <class T> void SafeRelease(T*& p) { if (p) { p->Release(); p = nullptr; } }
 
-// Every pass: t0-t3 in a table, u0 in a table, u1 the statistics (a root view), twelve constants, a linear sampler.
+// Every pass: t0-t3 in a table, u0-u1 in a table, u7 the statistics (a root view), twelve constants, a linear sampler.
 const char* const kCommonHlsl = R"(
-RWByteAddressBuffer uStats : register(u1);
+RWByteAddressBuffer uStats : register(u7);
 SamplerState sLinear : register(s0);
 cbuffer C : register(b0) { uint2 size; uint2 grid; uint2 coarse; uint radius; uint flags; float lambda; float bias; uint2 unused; };
 )";
@@ -131,16 +131,17 @@ void main(uint3 id : SV_DispatchThreadID) {
 
 // Every pixel at the game's size: "not moving", its own block's vector and the three nearest blocks'; the one under which its 3x3 surroundings
 // match best. "Not moving" wins a tie (a HUD or text that stays put must not slide), and another block's vector must beat the own block's by
-// `bias`. flags: 1 there is a frame before (else zero).
+// `bias`. flags: 1 there is a frame before (else zero). The distrust mask rises from 0 to 1 as even the best match's difference goes from
+// kTrusted to kUntrusted (brightness 0..1, averaged over the 3x3).
 const char* const kPixelHlsl = R"(
 Texture2D<float> tCur : register(t0);
 Texture2D<float> tPrev : register(t1);
 Texture2D<float2> tGrid : register(t2);
 RWTexture2D<float2> uMotion : register(u0);
-[numthreads(8, 8, 1)]
-void main(uint3 id : SV_DispatchThreadID) {
-    if (id.x >= size.x || id.y >= size.y) return;
-    if (!(flags & 1)) { uMotion[id.xy] = float2(0, 0); return; }
+RWTexture2D<float> uDistrust : register(u1);
+static const float kTrusted = 0.03, kUntrusted = 0.10;
+float Pixel(uint2 id) {
+    if (!(flags & 1)) { uMotion[id.xy] = float2(0, 0); uDistrust[id.xy] = 0; return 0; }
     const int2 p = int2(id.xy), last = int2(size) - 1, gl = int2(grid) - 1;
     const int2 cell = min(p >> 3, gl);
     const int2 q = int2((p.x & 7) < 4 ? -1 : 1, (p.y & 7) < 4 ? -1 : 1);
@@ -161,6 +162,25 @@ void main(uint3 id : SV_DispatchThreadID) {
         if (s < bestCost) { bestCost = s; best = cand[n]; }
     }
     uMotion[id.xy] = best;
+    const float distrust = saturate((bestCost - kTrusted) / (kUntrusted - kTrusted));
+    uDistrust[id.xy] = distrust;
+    return distrust;
+}
+groupshared uint gDistrust;
+[numthreads(8, 8, 1)]
+void main(uint3 id : SV_DispatchThreadID, uint index : SV_GroupIndex) {
+    if (index == 0) gDistrust = 0;
+    GroupMemoryBarrierWithGroupSync();
+    const bool inside = id.x < size.x && id.y < size.y;
+    float distrust = 0;
+    if (inside) distrust = Pixel(id.xy);
+    InterlockedAdd(gDistrust, uint(distrust * 100.0 + 0.5));
+    GroupMemoryBarrierWithGroupSync();
+    if (index == 0 && (flags & 1)) {
+        uStats.InterlockedAdd(20, gDistrust);
+        const uint w = min(8u, size.x - min(size.x, (id.x / 8) * 8)), h = min(8u, size.y - min(size.y, (id.y / 8) * 8));
+        uStats.InterlockedAdd(24, w * h);
+    }
 }
 )";
 
@@ -179,11 +199,11 @@ void FlowEstimator::Log(const char* fmt, ...) {
 bool FlowEstimator::Init(ID3D12Device* dev, LogFn log) {
     m_log = std::move(log); m_dev = dev;
     D3D12_DESCRIPTOR_RANGE srv{}; srv.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; srv.NumDescriptors = 4;
-    D3D12_DESCRIPTOR_RANGE uav{}; uav.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV; uav.NumDescriptors = 1;
+    D3D12_DESCRIPTOR_RANGE uav{}; uav.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV; uav.NumDescriptors = 2;
     D3D12_ROOT_PARAMETER params[4]{};
     params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; params[0].DescriptorTable = { 1, &srv };
     params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; params[1].DescriptorTable = { 1, &uav };
-    params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV; params[2].Descriptor.ShaderRegister = 1;
+    params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV; params[2].Descriptor.ShaderRegister = 7;
     params[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; params[3].Constants.Num32BitValues = sizeof(Constants) / 4;
     for (auto& p : params) p.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     D3D12_STATIC_SAMPLER_DESC sampler{}; sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR; sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
@@ -276,7 +296,8 @@ void FlowEstimator::Barrier(ID3D12GraphicsCommandList* list, ID3D12Resource* r, 
     list->ResourceBarrier(1, &b);
 }
 
-FlowEstimator::Pass FlowEstimator::MakePass(int slot, int& index, ID3D12Resource* const srv[4], const DXGI_FORMAT srvFormat[4], ID3D12Resource* uav, DXGI_FORMAT uavFormat) {
+FlowEstimator::Pass FlowEstimator::MakePass(int slot, int& index, ID3D12Resource* const srv[4], const DXGI_FORMAT srvFormat[4], ID3D12Resource* uav, DXGI_FORMAT uavFormat,
+                                             ID3D12Resource* uav2, DXGI_FORMAT uav2Format) {
     const UINT base = static_cast<UINT>(slot * kDescriptorsPerSlot + index * kDescriptorsPerPass);
     ++index;
     D3D12_CPU_DESCRIPTOR_HANDLE cpu = m_heap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr += static_cast<SIZE_T>(base) * m_descriptorSize;
@@ -290,19 +311,23 @@ FlowEstimator::Pass FlowEstimator::MakePass(int slot, int& index, ID3D12Resource
     D3D12_UNORDERED_ACCESS_VIEW_DESC uv{}; uv.Format = uavFormat; uv.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
     D3D12_CPU_DESCRIPTOR_HANDLE hu = cpu; hu.ptr += 4 * static_cast<SIZE_T>(m_descriptorSize);
     m_dev->CreateUnorderedAccessView(uav, nullptr, &uv, hu);
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uv2{}; uv2.Format = uav2Format; uv2.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    hu.ptr += m_descriptorSize;
+    m_dev->CreateUnorderedAccessView(uav2, nullptr, &uv2, hu);   // a null resource makes a null view
     Pass p; p.srvs = gpu; p.uav = gpu; p.uav.ptr += 4 * static_cast<UINT64>(m_descriptorSize);
     return p;
 }
 
-void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion) {
+void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Resource* frame, DXGI_FORMAT frameFormat, ID3D12Resource* motion, ID3D12Resource* distrust) {
     const int cur = m_current, prev = 1 - m_current;
     int index = 0;
     ID3D12DescriptorHeap* heaps[] = { m_heap };
     list->SetDescriptorHeaps(1, heaps);
     list->SetComputeRootSignature(m_root);
     list->SetComputeRootUnorderedAccessView(2, m_stats->GetGPUVirtualAddress());
-    auto run = [&](Pso pso, ID3D12Resource* const srv[4], const DXGI_FORMAT fmt[4], ID3D12Resource* uav, DXGI_FORMAT uavFmt, const Constants& c, uint32_t tw, uint32_t th, bool restsReadable) {
-        const Pass p = MakePass(slot, index, srv, fmt, uav, uavFmt);
+    auto run = [&](Pso pso, ID3D12Resource* const srv[4], const DXGI_FORMAT fmt[4], ID3D12Resource* uav, DXGI_FORMAT uavFmt, const Constants& c, uint32_t tw, uint32_t th, bool restsReadable,
+                   ID3D12Resource* uav2 = nullptr) {
+        const Pass p = MakePass(slot, index, srv, fmt, uav, uavFmt, uav2);
         if (restsReadable) Barrier(list, uav, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         list->SetPipelineState(m_pso[pso]);
         list->SetComputeRootDescriptorTable(0, p.srvs);
@@ -340,7 +365,7 @@ void FlowEstimator::Record(ID3D12GraphicsCommandList* list, int slot, ID3D12Reso
     {   // every pixel (zero without a frame before)
         ID3D12Resource* const srv[4] = { m_luma[cur][0], m_luma[prev][0], m_filtered, nullptr }; const DXGI_FORMAT fmt[4] = { R16, R16, RG16, NONE };
         Constants c{ m_lw[0], m_lh[0], m_gw[1], m_gh[1], 0, 0, 0, m_havePrevious ? 1u : 0u, kLambda, kBias };
-        run(Pixel, srv, fmt, motion, RG16, c, m_lw[0], m_lh[0], false);
+        run(Pixel, srv, fmt, motion, RG16, c, m_lw[0], m_lh[0], false, distrust);
     }
     if (m_havePrevious) {   // the statistics, for ReadStats once this slot comes round again
         Barrier(list, m_stats, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -359,14 +384,15 @@ void FlowEstimator::ReadStats(int slot) {
     if (FAILED(m_statsReadback->Map(0, &range, reinterpret_cast<void**>(&v)))) return;
     const uint32_t* s = v + slot * 8;
     m_sumCost += s[0] / 4096.0; m_sumX += static_cast<int32_t>(s[1]) / 16.0; m_sumY += static_cast<int32_t>(s[2]) / 16.0;
-    m_blocks += s[3]; m_sumLength += s[4] / 16.0; ++m_frames;
+    m_blocks += s[3]; m_sumLength += s[4] / 16.0; m_sumDistrust += s[5] / 100.0; m_pixels += s[6]; ++m_frames;
     const D3D12_RANGE none{ 0, 0 };
     m_statsReadback->Unmap(0, &none);
 }
 
-bool FlowEstimator::TakeAverages(double& x, double& y, double& length, double& cost, uint64_t& frames) {
+bool FlowEstimator::TakeAverages(double& x, double& y, double& length, double& cost, double& distrust, uint64_t& frames) {
     if (m_blocks <= 0) return false;
     x = m_sumX / m_blocks; y = m_sumY / m_blocks; length = m_sumLength / m_blocks; cost = m_sumCost / m_blocks; frames = m_frames;
-    m_sumCost = m_sumX = m_sumY = m_sumLength = m_blocks = 0; m_frames = 0;
+    distrust = m_pixels > 0 ? m_sumDistrust / m_pixels : 0;
+    m_sumCost = m_sumX = m_sumY = m_sumLength = m_blocks = m_sumDistrust = m_pixels = 0; m_frames = 0;
     return true;
 }
