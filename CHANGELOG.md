@@ -37,7 +37,8 @@
 - **Tests:** matrix scenarios `fsr_runtime_switch` and `dlss_runtime_switch` switch the runtime mid-run (the host test's `nisswitch=`).
 
 - **A recorder, in all three addons** (Recording, for bug reports and tests). It keeps the last few seconds of the frames the addon receives,
-  losslessly, and saves them as a `.lsrec` file on a button or Ctrl+Shift+F12.
+  losslessly, and saves them as a `.lsrec` file on a button or Ctrl+Shift+F5 (F12
+  is the manager's own hotkey).
   - **What it records.** Neural Rendering records the game's frames before the model sees them; the upscalers record Lossless Scaling's
     frame before NIS.
   - **What they're for.** A saved file plays back through the addon on another computer (the test host's `replay=`), so a reported

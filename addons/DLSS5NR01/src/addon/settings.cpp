@@ -175,7 +175,8 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.hotkeys = flag("hotkeys", true);
     c.keyAB = integer("keyAB", VK_F6); c.keySplit = integer("keySplit", VK_F7); c.keySharpDn = integer("keySharpDn", VK_F8);
     c.keySharpUp = integer("keySharpUp", VK_F9); c.keyPreset = integer("keyPreset", VK_F10); c.keyShot = integer("keyShot", VK_F11);
-    c.keyRecord = integer("keyRecord", VK_F12);
+    c.keyRecord = integer("keyRecord", VK_F5);
+    if (c.keyRecord == VK_F12) c.keyRecord = VK_F5;   // the first default, saved by builds before 0.9.5: Ctrl+Shift+F12 is the manager's own (show its window)
     c.recordOn = flag("recordOn", false);
     c.recordSeconds = std::clamp(static_cast<float>(number("recordSeconds", 5.0)), 1.0f, 60.0f);
     c.recordBudgetMb = std::clamp(integer("recordBudgetMb", 3072), 256, 65536);

@@ -56,6 +56,8 @@ Scaling wait for it.
 - **Keep the HUD untouched:** take a snapshot of the game and draw the areas the model must leave alone (action bars, chat, the minimap); saved with each look.
 - **Picture controls:** intensity, fine detail, local contrast, skin detail, sharpening, tone, colour and vibrance, shadows and highlights, film grain, temporal smoothing
   and a ghost guard that fades the result where the motion cannot be trusted.
+- **HDR games too:** 16-bit (scRGB) and 10-bit (HDR10) frames are worked on through an SDR view of them, and only the change goes back, so
+  highlights keep their brightness. Automatic, with a *Frame encoding* setting for a setup it gets wrong.
 - **Compare while you play:** before / after, a split view, screenshots of what you see (Ctrl+Shift+F6 to F11).
 - **Auto quality:** keeps the model within a time budget by picking its resolution; changing it never stalls the game.
 - **Requirements check** and a **compatibility test** that tries the model on your card before you play.
@@ -71,28 +73,33 @@ frames and the motion between them, which gives a steadier, more detailed pictur
 support from the game: **the addons measure the motion from the frames themselves.** In Lossless Scaling choose **NIS** as the Scaling Type and run the game in a window
 smaller than the screen (for example 2560x1440 on a 4K screen); at the screen's own size they anti-alias instead (DLAA, FSR native AA).
 
-- **DLSS Upscaler:** NVIDIA DLSS Super Resolution, with the choice of NVIDIA's default model (K) or DLSS 4.5's M. NVIDIA RTX.
-- **FSR Upscaler:** AMD FidelityFX Super Resolution 3.1 with AMD's own sharpening (RCAS). Any DirectX 12 graphics card: AMD, NVIDIA or Intel.
-  FSR 4 (the OptiScaler team's 4.1.1b INT8 build, which runs on cards AMD's own FSR 4 does not) is one click away in the manager's
-  Runtimes list: the + next to FSR, bottom left.
+- **DLSS Upscaler:** NVIDIA DLSS Super Resolution with the model of your choice: NVIDIA's default K (DLSS 4), DLSS 4.5's M, or DLSS 3's E,
+  which keeps a still picture crisper here. NVIDIA RTX.
+- **FSR Upscaler:** AMD FidelityFX Super Resolution with AMD's own sharpening (RCAS). Any DirectX 12 graphics card: AMD, NVIDIA or Intel.
+  *FSR version*, right under its Enable switch, picks AMD's FSR 3.1.4 (shipped, signed) or **FSR 4**: the OptiScaler team's 4.1.1b INT8
+  build, AMD's machine-learning upscaler made to run on cards AMD's own FSR 4 does not support, NVIDIA's included. It follows a moving
+  picture noticeably better. Switching takes a second while the game runs.
 - **Frame generation on or off**, every frame it presents, real and generated.
 - **4:3 and other window shapes:** a window of another shape than the screen is upscaled into the part of the screen Lossless Scaling puts it in, borders left alone.
-- **Stability:** less shimmer on thin lines, wires and leaves (the upscaler averages the flicker out), while thin things that move stay sharp.
+- **Stability:** less shimmer on thin lines, wires and leaves (the upscaler averages the flicker out), while thin things that move stay sharp. FSR 4 does this by itself.
 - **Edge smoothing:** anti-aliasing of the upscaled picture's edges, for older games without anti-aliasing of their own.
 - **Sharpening** from none to well past the upscaler's own maximum.
-- **Settings per game:** sharpening, stability, edge smoothing, the model and the motion are kept for each game and come back when it takes focus.
+- **Colour and tone:** vibrance, saturation, shadows, highlights, brightness, contrast and gamma, applied before upscaling, so they cost
+  nothing. While DLSS 5 Neural Rendering is on, its own Picture controls take over, so nothing is applied twice.
+- **Settings per game:** sharpening, stability, edge smoothing, colour and tone, the model and the motion are kept for each game and come back when it
+  takes focus.
 - **Before / after** hotkey to compare with NIS while you play, and a line of live numbers (pictures a second, how many waited or repeated).
 - Only one of the two runs at a time; both work beside Neural Rendering.
 
 What they cost on an RTX 4070 Ti SUPER (everything the addon does, the motion measurement included):
 
-| | DLSS 4 (model K) | FSR 3 |
+| | DLSS (model K) | FSR 3.1 |
 |---|---|---|
 | 1920x1080 -> 3840x2160 | | about 1.5 ms |
 | 2560x1440 -> 3840x2160 | about 2.4 ms | about 1.85 ms |
 | 3840x2160 at 1:1 (anti-aliasing) | about 3.2 ms | about 2.2 ms |
 
-**Which one?** On an NVIDIA RTX card try both: DLSS smooths edges better by itself, FSR 3 costs less and keeps text crisper. On any other card, FSR. If the game has
+**Which one?** On an NVIDIA RTX card try both: DLSS smooths edges better by itself, FSR 3.1 costs less and keeps text crisper, and FSR 4 is the best in motion. On any other card, FSR. If the game has
 anti-aliasing of its own (MSAA), switch it on: it draws what no upscaler can put back, such as wires thinner than a pixel. The [upscalers' guide](addons/DLSS5NR01/docs/upscalers.md)
 covers the settings, what to expect and what to do when something is wrong.
 
@@ -111,6 +118,12 @@ covers the settings, what to expect and what to do when something is wrong.
   clocks, temperature and memory, and a plain-words reading ("the GPU is at its power limit").
 - **Install and remove addons without touching folders.** *Install addon* takes a folder, a zip or a lone DLL, or drop one on the window. New addons arrive
   switched off. *Remove* moves an addon into `addons\.removed` after asking; nothing is ever erased.
+- **Runtimes, at the bottom of the addon list.** Every file the addons run on (NVIDIA's DLSS, AMD's FSR, your Neural Rendering model) with
+  its version, a tick when it is loaded, a circle when its addon waits for a game, a cross when its addon is off, and *unsigned* or
+  *modified* when the file is not as its maker signed it. Hover for the maker, the path and the SHA-256. **+** switches between the shipped
+  file and others you add, while the game runs; *Shipped* is always the first choice, and updates never touch your files.
+- **Record a bug.** Each addon can keep the last few seconds of the frames it receives and save them (Ctrl+Shift+F5) as a file that plays the
+  problem back on another computer.
 - **Each addon's own settings, inline**, with its live status in the list and in the status bar. Sliders reset on double-click, show a tick at their default, and
   fine-tune with Ctrl+scroll.
 - **Stays out of the way.** Opens with Lossless Scaling, hides to the notification area when you close it, and comes back with a click or **Ctrl+Shift+F12**.
