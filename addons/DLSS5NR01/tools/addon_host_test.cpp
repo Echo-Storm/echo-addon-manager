@@ -242,7 +242,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "nisedge", 7) || !strncmp(argv[i], "nisline", 7) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12) || !strncmp(argv[i], "hdr=", 4) || !strncmp(argv[i], "replay", 6)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "nisedge", 7) || !strncmp(argv[i], "nisline", 7) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "nisswitch", 9) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12) || !strncmp(argv[i], "hdr=", 4) || !strncmp(argv[i], "replay", 6)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     // a 10-bit frame is HDR10 only when the display runs in HDR, and the test's display may not: the addon is told so, as a user can
@@ -449,7 +449,14 @@ int main(int argc, char** argv) {
         for (int i = 4; i < argc; ++i) { if (!strcmp(argv[i], "nisnoflow=1")) nisNoFlow = true; if (!strcmp(argv[i], "nismove=1")) nisMove = true; }
         const int kFrames = 150;
         int nisGap = 12; for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "nisgap=", 7)) nisGap = std::clamp(atoi(argv[i] + 7), 0, 24);
+        // nisswitch=<key>=<value>: that setting changes halfway (as the manager's Runtimes list changes "fsrRuntime" while the game runs)
+        std::string switchKey, switchValue;
+        for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "nisswitch=", 10)) {
+            const char* kv = argv[i] + 10; const char* eq = strchr(kv, '=');
+            if (eq) { switchKey.assign(kv, eq - kv); switchValue = eq + 1; }
+        }
         for (int fr = 0; fr < kFrames; ++fr) {
+            if (fr == kFrames / 2 && !switchKey.empty()) { host.cfg[switchKey] = switchValue; printf("[hosttest] frame %d: %s = %s\n", fr, switchKey.c_str(), switchValue.c_str()); }
             if (nisMove) FillMoving(dc, nisIn, NW, NH, fr);
             if (nisLine) fillLine(fr);
             if (nisNoFlow) { nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(16)); if (fr % 30 == 0) frame("nis"); else emptyFrame(); continue; }

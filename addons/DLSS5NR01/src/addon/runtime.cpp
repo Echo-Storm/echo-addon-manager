@@ -174,6 +174,7 @@ void LogProgress(const NrStats& st) {
 void OnPresent(IDXGISwapChain* sc);
 void Compose(IDXGISwapChain* sc);
 void PresentTap(IDXGISwapChain* sc);
+void FollowRuntimeChoice();   // further down, with the upscalers
 
 // A frame for the recorder (under g_frameMutex, on the render thread): its settings follow the panel's, and for the tests it saves by itself
 // once recordSaveAfter frames are held.
@@ -451,6 +452,7 @@ void Present(IDXGISwapChain* sc) {
     if (!ours) return;
     ++g_lsPresents;
     ReadHotkeys();
+    FollowRuntimeChoice();
     if ((g_lsPresents & 31u) == 0) FollowFocus();
     bool presentMode; { std::lock_guard<std::mutex> lock(g_settingsMutex); presentMode = g_config.presentMode; g_presentWait = g_config.presentWait; }
     FollowFrameGeneration(presentMode);
@@ -765,6 +767,44 @@ void NoteRealFrame() {
 }
 std::atomic<uint32_t> g_scaleInW{ 0 }, g_scaleInH{ 0 }, g_scaleOutW{ 0 }, g_scaleOutH{ 0 };
 
+// The runtime the upscaler runs on: the file chosen in the manager's Runtimes list (its + menu sets "fsrRuntime" / "dlssRuntime" to it), else
+// the one shipped in the addon's fsr or dlss folder. The engine is given the file's folder (NGX looks for nvngx_dlss.dll there by name).
+std::wstring g_srRuntimeDir;   // the folder the engine was started from (empty: not started)
+std::wstring ChosenRuntimeDir() {
+    std::string chosen = g_host ? g_host->GetConfig(kAddonId, kFsrScaler ? "fsrRuntime" : "dlssRuntime", "") : "";
+    if (chosen.empty()) return g_addonDir + (kFsrScaler ? L"\\fsr" : L"\\dlss");
+    std::wstring w(chosen.size(), L'\0');
+    w.resize(std::max(0, MultiByteToWideChar(CP_UTF8, 0, chosen.c_str(), (int)chosen.size(), w.data(), (int)w.size())));
+    const size_t slash = w.find_last_of(L"\\/");
+    return slash == std::wstring::npos ? w : w.substr(0, slash);
+}
+
+// A new choice in the Runtimes list, followed while running (checked twice a second, under g_frameMutex on the render thread). The upscalers
+// stop their engine, and the next pass starts it on the new file; Neural Rendering takes the model file its setting now names and starts again.
+void FollowRuntimeChoice() {
+    static ULONGLONG checkedAt = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - checkedAt < 500 || !g_host) return;
+    checkedAt = now;
+    if (!kScalerAddon) {
+        const std::string chosen = g_host->GetConfig(kAddonId, "snippetPath", "");
+        bool changed;
+        { std::lock_guard<std::mutex> lock(g_settingsMutex); changed = chosen != g_config.snippetPath; if (changed) g_config.snippetPath = chosen; }
+        if (!changed) return;
+        Log("the model file is now %s: the engine starts again on it", chosen.empty() ? "the one in Lossless Scaling's folder" : chosen.c_str());
+        ScanRequirements();
+        RestartEngine();
+        return;
+    }
+    if (g_srStarting || g_srRuntimeDir.empty()) return;   // not started: it starts on the chosen file anyway
+    const std::wstring dir = ChosenRuntimeDir();
+    if (_wcsicmp(dir.c_str(), g_srRuntimeDir.c_str()) == 0) return;
+    Log("%s upscaler: the runtime in %ls is chosen: the engine starts again on it", kUpscalerName, dir.c_str());
+    g_link.Shutdown(); g_linkDevice = nullptr;
+    g_sr.Shutdown(); g_sr.ClearFailure();
+    g_srRuntimeDir.clear();
+}
+
 void StartEngineFor(const LUID& card) {   // the engine's own device only: safe on a thread of its own
     // Once NVIDIA's or AMD's runtime has run in this process, this DLL stays loaded until Lossless Scaling closes: their code keeps state
     // that points into ours (NGX's library is linked in), and a teardown left for the exit must not find freed code. Switching the addon off
@@ -776,10 +816,11 @@ void StartEngineFor(const LUID& card) {   // the engine's own device only: safe 
     }
     g_srStarting = true;
     SetStatus(std::string(kUpscalerName) + ": starting...");
-    std::thread([card] {
+    g_srRuntimeDir = ChosenRuntimeDir();
+    std::thread([card, dir = g_srRuntimeDir] {
         LARGE_INTEGER f, a, b; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
-        const bool ok = kFsrScaler ? g_sr.Init(card, g_addonDir, g_addonDir + L"\\fsr", [](const char* m) { Log("%s", m); }, SrEngine::Backend::Fsr)
-                                   : g_sr.Init(card, g_addonDir, g_addonDir + L"\\dlss", [](const char* m) { Log("%s", m); });
+        const bool ok = kFsrScaler ? g_sr.Init(card, g_addonDir, dir, [](const char* m) { Log("%s", m); }, SrEngine::Backend::Fsr)
+                                   : g_sr.Init(card, g_addonDir, dir, [](const char* m) { Log("%s", m); });
         QueryPerformanceCounter(&b);
         Log("%s upscaler: engine %s in %.0f ms, on a thread of its own", kUpscalerName, ok ? "started" : "failed", (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart);
         SetStatus(ok ? std::string(kUpscalerName) + " ready" : g_sr.LastError());
@@ -823,6 +864,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     NisPass pass;
     if (!FindNisPass(ctx, x, y, z, pass, [](const char* m) { Log("%s", m); })) return false;
     ++g_nisSeen; ++g_nisSinceTap;
+    FollowRuntimeChoice();
     { ID3D11Texture2D* in = nullptr; if (pass.in && SUCCEEDED(pass.in->QueryInterface(IID_PPV_ARGS(&in)))) { Record(ctx, in, lsrec::kNisInput); in->Release(); } }
     if ((g_nisSeen & 63u) == 1) FollowScalerGame(pass.inW, pass.inH);
     g_scaleInW = pass.inW; g_scaleInH = pass.inH; g_scaleOutW = pass.outW; g_scaleOutH = pass.outH;

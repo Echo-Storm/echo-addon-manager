@@ -468,6 +468,22 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
         m_ffxStability = -1.0f;   // a new context has AMD's defaults
         m_buildMs = (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
         Log("FSR 3 upscaler: %ux%u -> %ux%u (x%.2f), made in %.0f ms", inW, inH, outW, outH, ratio, m_buildMs);
+        // which upscaler the runtime chose (a newer runtime can hold FSR 4 as well as FSR 3), and what else it holds
+        {
+            ffxQueryGetProviderVersion used{}; used.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
+            const bool known = m_ffx->fn.Query && m_ffx->fn.Query(&m_ffx->context, &used.header) == FFX_API_RETURN_OK && used.versionName;
+            std::string offered;
+            if (m_ffx->fn.Query) {
+                uint64_t count = 8; uint64_t ids[8] = {}; const char* names[8] = {};
+                ffxQueryDescGetVersions all{}; all.header.type = FFX_API_QUERY_DESC_TYPE_GET_VERSIONS; all.createDescType = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
+                all.device = m_dev; all.outputCount = &count; all.versionIds = ids; all.versionNames = names;
+                if (m_ffx->fn.Query(nullptr, &all.header) == FFX_API_RETURN_OK)
+                    for (uint64_t i = 0; i < count && i < 8; ++i) if (names[i]) offered += (offered.empty() ? "" : ", ") + std::string(names[i]);
+            }
+            m_provider = known ? used.versionName : "";
+            Log("FSR upscaler: the runtime runs %s%s%s%s", known ? used.versionName : "(it does not say which version)", offered.empty() ? "" : " (it holds: ",
+                offered.c_str(), offered.empty() ? "" : ")");
+        }
         return true;
     }
     auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);

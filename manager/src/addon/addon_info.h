@@ -39,6 +39,7 @@ struct AddonManifest {
         std::string configKey;       // an addon setting that holds the file's path when the person chose one ("snippetPath")
         std::string shippedSha256;   // the file the addon ships with, and the version to show for it
         std::string shippedLabel;
+        std::vector<std::string> exports;   // functions a file must offer to be taken for this runtime (a check when one is chosen)
     };
     std::vector<Runtime> runtimes;
     bool parsed = false;                     // addon.json was found and was valid

@@ -1,4 +1,6 @@
 #include "runtime_list.h"
+#include "file_dialog.h"
+#include "toast.h"
 #include "imgui.h"
 #include <eam/icons.h>
 #include <eam/widgets.h>
@@ -19,7 +21,7 @@ std::string Utf8(const std::wstring& w) {
 }
 } // namespace
 
-RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows) {
+RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows, int openMenu) {
     RuntimeAction action;
     if (rows.empty()) return action;
     namespace th = ui::theme;
@@ -90,10 +92,79 @@ RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows) {
             ImGui::EndTooltip();
         }
 
-        // + : another file
+        // + : the files there are for it, one click to switch, and adding one
         ImGui::SameLine(0, 0);
-        if (ui::IconButton("##choose", ui::icons::kPlus, h)) action = { i, RuntimeAction::Choose };
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) ImGui::SetTooltip("Use another %s file...", r.label.c_str());
+        if (ui::IconButton("##choose", ui::icons::kPlus, h)) { action = { i, RuntimeAction::Choose }; ImGui::OpenPopup("##files"); }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) ImGui::SetTooltip("Switch %s file", r.label.c_str());
+        if (i == openMenu && !ImGui::IsPopupOpen("##files")) ImGui::OpenPopup("##files");
+        // the menu opens beside the list, its bottom at this line (not wherever the pointer is)
+        ImGui::SetNextWindowPos(ImVec2(p.x + w + ImGui::GetStyle().ItemSpacing.x, p.y + h), ImGuiCond_Appearing, ImVec2(0.0f, 1.0f));
+        if (ImGui::BeginPopup("##files")) {
+            ui::SectionLabel((r.label + " file").c_str());
+            ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.2f));
+            auto line = [&](const RuntimeFile& f, const std::string& name) {
+                std::string text = name;
+                const std::string v = f.exists && f.read ? f.ShownVersion() : std::string();
+                if (!v.empty()) text += "  " + v;
+                if (!f.exists) text += "  (missing)";
+                else if (f.read && f.signature == RuntimeFile::Signature::Broken) text += "  modified";
+                else if (f.read && f.signature != RuntimeFile::Signature::Signed) text += "  unsigned";
+                return text;
+            };
+            const bool usingDefault = r.usingDefault;
+            // the default first: always there, so there is always a way back
+            {
+                const RuntimeFile def = DescribeRuntimeFile(r.defaultPath, r);
+                if (ImGui::Selectable(line(def, r.shippedKnown ? "Shipped" : "Default").c_str(), usingDefault)
+                    && !usingDefault) {
+                    UseRuntimeFile(r, L"");
+                    ToastShow(r.label + ": back to the " + (r.shippedKnown ? "shipped" : "default") + " file", ToastType::Success, 4.0f);
+                }
+            }
+            const std::vector<std::wstring> library = RuntimeLibrary(r);
+            for (size_t k = 0; k < library.size(); ++k) {
+                ImGui::PushID((int)k);
+                const RuntimeFile f = DescribeRuntimeFile(library[k], r);
+                const bool current = !usingDefault && _wcsicmp(library[k].c_str(), r.path.c_str()) == 0;
+                const float trash = ImGui::GetFrameHeight();
+                const std::string title = RuntimeFileTitle(library[k]);
+                if (ImGui::Selectable((title.empty() ? line(f, r.label) : title + (f.read && f.signature == RuntimeFile::Signature::Signed ? "" : "  unsigned")).c_str(), current,
+                                      ImGuiSelectableFlags_DontClosePopups, ImVec2(ImGui::GetFontSize() * 16.0f, 0)) && !current) {
+                    UseRuntimeFile(r, library[k]);
+                    ToastShow(r.label + ": switched to " + (f.ShownVersion().empty() ? std::string("the new file") : f.ShownVersion()), ToastType::Success, 4.0f);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+                    ImGui::BeginTooltip();
+                    if (!f.description.empty()) ImGui::TextUnformatted((f.description + "  " + f.version).c_str());
+                    if (f.signature == RuntimeFile::Signature::Signed) ImGui::Text("Signed by %s", f.signer.c_str()); else ImGui::TextUnformatted(f.signature == RuntimeFile::Signature::Broken ? "Modified after signing" : "Not signed");
+                    if (!f.sha256.empty()) ImGui::TextDisabled("SHA-256 %s", f.sha256.c_str());
+                    ImGui::EndTooltip();
+                }
+                ImGui::SameLine();
+                if (ui::IconButton("##remove", ui::icons::kTrash, trash)) {
+                    std::string error;
+                    if (RemoveRuntimeFile(r, library[k], error)) ToastShow(r.label + ": file removed (moved to runtimes\\.removed)", ToastType::Info, 4.0f);
+                    else ToastShow(error, ToastType::Warning, 5.0f);
+                }
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) ImGui::SetTooltip("Remove it from this list");
+                ImGui::PopID();
+            }
+            ImGui::Separator();
+            if (ImGui::Selectable("+  Add a file...")) {
+                std::wstring picked;
+                const std::wstring title = L"Choose a " + std::wstring(r.label.begin(), r.label.end()) + L" file";
+                if (PickOpenFile(title.c_str(), L"DLL files", L"*.dll", picked)) {
+                    std::wstring added; std::string error;
+                    if (AddRuntimeFile(r, picked, added, error)) {
+                        UseRuntimeFile(r, added);
+                        const RuntimeFile f = DescribeRuntimeFile(added, r);
+                        ToastShow(r.label + ": added and switched" + (f.ShownVersion().empty() ? std::string() : " to " + f.ShownVersion()), ToastType::Success, 4.0f);
+                    } else ToastShow(error, ToastType::Warning, 6.0f);
+                }
+            }
+            ImGui::EndPopup();
+        }
         ImGui::PopID();
     }
     measured = ImGui::GetCursorPosY() - top;

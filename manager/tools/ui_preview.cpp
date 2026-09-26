@@ -135,10 +135,11 @@ int main(int argc, char** argv) {
         free(v);
     }
     const std::vector<AddonInfo> runtimeAddons = { a, b, c };
-    auto noConfig = [](const std::string&, const std::string&) { return std::string(); };
     for (int i = 0; i < 100; ++i) {   // the files are read on a thread of their own: wait for them, so the picture shows what they are
-        const std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir, noConfig);
-        if (std::all_of(rows.begin(), rows.end(), [](const RuntimeFile& r) { return r.read || !r.exists; })) break;
+        const std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir);
+        bool all = std::all_of(rows.begin(), rows.end(), [](const RuntimeFile& r) { return r.read || !r.exists; });
+        for (const RuntimeFile& r : rows) for (const std::wstring& lib : RuntimeLibrary(r)) all = all && DescribeRuntimeFile(lib, r).read;   // the + menus' files too
+        if (all) break;
         Sleep(100);
     }
 
@@ -233,9 +234,12 @@ int main(int argc, char** argv) {
             ImGui::Dummy(ImVec2(0, S(4)));
             for (int i = 0; i < 3; ++i) { widgets::AddonCard(*list[i], i, i == selected); ImGui::Dummy(ImVec2(0, S(1))); }
             {   // as tab_addons.cpp: the runtimes at the bottom of the list
-                std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir, noConfig);
+                std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir);
                 for (RuntimeFile& r : rows) r.loaded = r.addonOn && r.exists;   // the preview loads none of them: as a running install shows them
-                widgets::RuntimeListAtBottom(rows);
+                // EAM_PREVIEW_RUNTIME_MENU=<line>: that line's + menu shown open
+                char* mv = nullptr; size_t mn = 0; _dupenv_s(&mv, &mn, "EAM_PREVIEW_RUNTIME_MENU");
+                const int openMenu = mv && *mv ? atoi(mv) : -1; free(mv);
+                widgets::RuntimeListAtBottom(rows, openMenu);
             }
             ImGui::EndChild();
             ImGui::SameLine();

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Runtimes, at the bottom of the addon list.** Each file the addons run on is listed: the DLSS 5 model, NVIDIA's DLSS and AMD's FSR.
+  - **What each line shows:** a tick when the file is loaded right now and a cross when it isn't, then its version. "unsigned" or
+    "modified" appears when the file is not as its maker signed it. Hovering shows the maker, the signer, the path and the SHA-256.
+  - **Switching:** + opens the files there are for that runtime, and one click switches while the game runs. The upscaler starts again
+    on the new file in about a second; Neural Rendering reloads its model.
+  - **Always a way back:** "Shipped" is always the first entry.
+  - **Adding a file:** "Add a file..." takes any DLL that has the functions that runtime needs and refuses others with one line. The
+    file is copied into the addon's own `runtimes` folder, so updates never touch it.
+  - **How addons declare them:** a `runtimes` list in `addon.json`.
+- **FSR 4 in the FSR Upscaler.** OptiScaler's FSR 4.1.1b INT8 build with the RDNA 2 fix comes as a second choice in the FSR menu; AMD's
+  signed FSR 3.1.4 stays the default.
+  - **It runs on NVIDIA cards too:** tested on an RTX 4070 Ti.
+  - **The log says what runs:** which upscaler the runtime chose and what else it holds, for example "runs 4.1.1b (it holds: 4.1.1b,
+    3.1.5, 2.3.4)".
+  - **Fetching it:** `tools/fetch_fsr4.ps1` fetches it and checks its SHA-256.
+- **DLSS model E** (DLSS 3's CNN model) as a third choice beside K and M: a user reports K and M soften a still picture here.
+- **Tests:** matrix scenarios `fsr_runtime_switch` and `dlss_runtime_switch` switch the runtime mid-run (the host test's `nisswitch=`).
+
 - **A recorder, in all three addons** (Recording, for bug reports and tests). It keeps the last few seconds of the frames the addon receives,
   losslessly, and saves them as a `.lsrec` file on a button or Ctrl+Shift+F12.
   - **What it records.** Neural Rendering records the game's frames before the model sees them; the upscalers record Lossless Scaling's

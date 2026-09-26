@@ -482,14 +482,8 @@ void RenderTabAddons(AddonManager* manager) {
     // the runtime files the addons use, at the bottom of the list (right under the addons when they fill it)
     {
         const std::wstring lsDir = std::filesystem::path(manager->GetAddonsPath()).parent_path().wstring();
-        const std::vector<RuntimeFile> runtimes = RuntimeFiles(addons, lsDir, [](const std::string& id, const std::string& key) {
-            return ConfigManager::Instance().Get(id, key, "");
-        });
-        if (!runtimes.empty()) {
-            const widgets::RuntimeAction act = widgets::RuntimeListAtBottom(runtimes);
-            if (act.kind != widgets::RuntimeAction::None)
-                widgets::ToastShow("Choosing another runtime file comes in the next step (this is the preview of the list).", widgets::ToastType::Info, 5.0f);
-        }
+        const std::vector<RuntimeFile> runtimes = RuntimeFiles(addons, lsDir);
+        if (!runtimes.empty()) widgets::RuntimeListAtBottom(runtimes);
     }
     ImGui::EndChild();
 

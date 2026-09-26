@@ -41,7 +41,10 @@ $addons = @(
     # FSR 3 Upscaler: the same sources again; AMD's FidelityFX runtime (MIT, signed by AMD) ships in its fsr folder (tools\fetch_ffx_sdk.ps1)
     @{ Id = 'FSR3UPSC'; Dir = "$root\addons\DLSS5NR01\products\FSR3UPSC"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('FSR3UPSC.dll');
        Extra = @{ 'AMD-FidelityFX-LICENSE.txt' = "$root\addons\DLSS5NR01\third_party\ffx\LICENSE.txt"; 'LICENSE.txt' = "$root\addons\DLSS5NR01\LICENSE";
-                  'fsr\amd_fidelityfx_dx12.dll' = "$root\addons\DLSS5NR01\external\ffx\bin\amd_fidelityfx_dx12.dll" } }
+                  'fsr\amd_fidelityfx_dx12.dll' = "$root\addons\DLSS5NR01\external\ffx\bin\amd_fidelityfx_dx12.dll";
+                  # the second choice in the manager's Runtimes list: FSR 4.1.1b, OptiScaler's build (tools\fetch_fsr4.ps1)
+                  'runtimes\FSR\0dd77d9c\amd_fidelityfx_dx12.dll' = "$root\addons\DLSS5NR01\external\fsr4\amd_fidelityfx_dx12.dll";
+                  'runtimes\FSR\0dd77d9c\ABOUT.txt' = "$root\addons\DLSS5NR01\products\FSR3UPSC\FSR4-ABOUT.txt" } }
 )
 $included = @(); $skipped = @()
 foreach ($a in $addons) {

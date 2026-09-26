@@ -51,6 +51,7 @@ bool ReadManifest(const std::filesystem::path& file, AddonManifest& out, std::st
             AddonManifest::Runtime r;
             TakeText(item, "name", r.name); TakeText(item, "file", r.file); TakeText(item, "config_key", r.configKey);
             TakeText(item, "shipped_sha256", r.shippedSha256); TakeText(item, "shipped_label", r.shippedLabel);
+            TakeList(item, "exports", r.exports);
             if (!r.name.empty() && !r.file.empty()) out.runtimes.push_back(r);
         }
     out.parsed = true;

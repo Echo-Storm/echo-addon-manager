@@ -137,6 +137,17 @@ def scenario_record_replay(ctx, res, text, frame):
     res.check('...and pictures of it written', len(glob.glob(os.path.join(out, 'replay_*.bmp'))) > 0)
 
 
+def scenario_runtime_switch(ctx, res, text, frame):
+    # the runtime file chosen in the manager's Runtimes list changes while the upscaler runs: it must start again on the new file and go on
+    # replacing NIS (an FSR runtime tells which version it runs)
+    res.check('the new choice is seen', 'is chosen: the engine starts again on it' in text)
+    res.check('...the engine starts again', text.count('engine started') >= 2, '%d starts' % text.count('engine started'))
+    if 'fsrRuntime' in ' '.join(ctx['keys']):
+        m = re.findall(r'the runtime runs (\S+)', text)
+        res.check('...on FSR 4.1.1b (OptiScaler), after 3.1.4', m[:1] == ['3.1.4'] and m[-1:] == ['4.1.1b'], ', '.join(m))
+    res.check('...and still replaces NIS', 'REPLACED NIS' in text)
+
+
 def scenario_base(ctx, res, text, frame):
     res.check('compose applied', 'COMPOSE APPLIED' in text)
     mc = motion_counts(text)
@@ -469,6 +480,8 @@ SCENARIOS = [
     ('fsr_move_none', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_fsr_move_none),
     ('fsr_move', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_fsr_move),
     ('fsr_stable', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'scalerStability=1'], scenario_fsr_stable),
+    ('fsr_runtime_switch', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisswitch=fsrRuntime=@FSR4@'], scenario_runtime_switch),   # the Runtimes list's +
+    ('dlss_runtime_switch', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisswitch=dlssRuntime=@DLSSCOPY@'], scenario_runtime_switch),
     ('scaler_unload', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'unload=1'], scenario_unload),   # switched off while running, then a new device
     ('fsr_unload', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'unload=1'], scenario_unload),
     ('pair', ['second=DLSS4DLAA.dll'], scenario_pair),
@@ -560,6 +573,16 @@ def main():
         if only and name not in only and name != 'base':
             continue
         keys = [k.replace('@OUT@', a.out.replace('\\', '/')) for k in keys]
+        if any('@FSR4@' in k for k in keys):   # tools\fetch_fsr4.ps1 puts it there
+            fsr4 = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'addons', 'DLSS5NR01', 'external', 'fsr4', 'amd_fidelityfx_dx12.dll')
+            if not os.path.exists(fsr4):
+                print('== %s  skipped: run tools\\fetch_fsr4.ps1 first' % name); continue
+            keys = [k.replace('@FSR4@', os.path.abspath(fsr4).replace('\\', '/')) for k in keys]
+        if any('@DLSSCOPY@' in k for k in keys):   # the shipped DLSS runtime, copied to a folder of its own (a second file to switch to)
+            src = os.path.join(a.nr, 'dlss', 'nvngx_dlss.dll')
+            copy_dir = os.path.join(a.out, 'dlss_copy'); os.makedirs(copy_dir, exist_ok=True)
+            shutil.copyfile(src, os.path.join(copy_dir, 'nvngx_dlss.dll'))
+            keys = [k.replace('@DLSSCOPY@', os.path.join(copy_dir, 'nvngx_dlss.dll').replace('\\', '/')) for k in keys]
         rc, text, frame, secs = run_host(a.nr, a.snippet, keys, a.out, name)
         res = Result()
         ctx['keys'] = keys

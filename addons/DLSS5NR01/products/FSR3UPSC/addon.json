@@ -20,7 +20,15 @@
       "name": "FSR",
       "file": "fsr/amd_fidelityfx_dx12.dll",
       "shipped_sha256": "12a5081257ec95b0b53ad51b4a87fb3c03f97fe0bbb59f9496968f8d50ef93a6",
-      "shipped_label": "3.1.4"
+      "shipped_label": "3.1.4",
+      "config_key": "fsrRuntime",
+      "exports": [
+        "ffxCreateContext",
+        "ffxConfigure",
+        "ffxDispatch",
+        "ffxQuery",
+        "ffxDestroyContext"
+      ]
     }
   ]
 }
