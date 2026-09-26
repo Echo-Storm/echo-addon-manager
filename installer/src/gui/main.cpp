@@ -4,6 +4,9 @@
 //   LSAddonManagerSetup.exe --folder <Lossless Scaling folder>      the wizard, starting with that folder
 //   LSAddonManagerSetup.exe --silent status|install|uninstall --folder <dir> [--remove-addons] [--payload <dir>] [--log <file>]
 //   LSAddonManagerSetup.exe --version                               what this setup carries (used by the build to check it)
+//   LSAddonManagerSetup.exe --shot <dir> --folder <fake folder>     the README's pictures: the start page, then (after installing into that folder)
+//                                                                   the result page, saved as setup-start.bmp and setup-done.bmp; the window
+//                                                                   is kept off the screen, nothing is remembered. For a throwaway folder only.
 //
 // The files it installs are a resource of this exe (see payload.h); --payload <dir> uses a folder instead (for development and tests).
 // The wizard is Windows' own TaskDialog: a few pages moved between with TDM_NAVIGATE_PAGE. Nothing here decides anything about files: that is the core's job.
@@ -41,7 +44,7 @@ namespace {
 const wchar_t* const kNoModelNotice =
     L"DLSS 5 Neural Rendering needs your own copy of nvngx_dlssnr.dll. It is not part of this download, and this project does not download it or say where to get it. "
     L"Setup can copy your file into the folder afterwards. Everything else works without it.\n"
-    L"Tested with World of Warcraft: Forever and Lossless Scaling 3.2.2.0. Unsigned, like everything in this project.";
+    L"Tested with World of Warcraft: Forever, Fallout: New Vegas and Lossless Scaling 3.2.2.0. Unsigned, like everything in this project.";
 
 std::wstring W(const std::string& s) { return Widen(s); }
 
@@ -97,6 +100,9 @@ struct App {
 
     int testCloseMs = 0;
     DWORD startTick = 0;
+    std::wstring shotDir;   // --shot: where the two pictures go
+    int shotStage = 0;      // 0 the start page, 1 installing, 2 the result page shown, 3 done
+    DWORD shotTick = 0;
     HICON icon = nullptr;
     std::vector<std::unique_ptr<Page>> pages;   // kept alive until the dialog ends: the dialog may still point into the last ones
 };
@@ -383,19 +389,60 @@ HRESULT OnButton(HWND hwnd, App& a, int id) {
     }
 }
 
+// The window as it is drawn, into a 32-bit BMP (PrintWindow with the full content, so it works off the screen too).
+bool SaveWindowPicture(HWND hwnd, const std::wstring& path) {
+    RECT r{};
+    if (!GetWindowRect(hwnd, &r)) return false;
+    const int w = r.right - r.left, h = r.bottom - r.top;
+    HDC screen = GetDC(nullptr), dc = CreateCompatibleDC(screen);
+    BITMAPINFO bi{}; bi.bmiHeader.biSize = sizeof(bi.bmiHeader); bi.bmiHeader.biWidth = w; bi.bmiHeader.biHeight = -h; bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    HGDIOBJ old = SelectObject(dc, bmp);
+    const bool drawn = PrintWindow(hwnd, dc, PW_RENDERFULLCONTENT) != FALSE;
+    bool ok = false;
+    if (drawn && bits) {
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, path.c_str(), L"wb") == 0 && f) {
+            BITMAPFILEHEADER fh{}; fh.bfType = 0x4D42; fh.bfOffBits = sizeof(fh) + sizeof(bi.bmiHeader);
+            fh.bfSize = fh.bfOffBits + static_cast<DWORD>(w) * h * 4;
+            BITMAPINFOHEADER ih = bi.bmiHeader; ih.biHeight = -h;   // top-down rows, as drawn
+            ok = fwrite(&fh, sizeof fh, 1, f) == 1 && fwrite(&ih, sizeof ih, 1, f) == 1 && fwrite(bits, static_cast<size_t>(w) * h * 4, 1, f) == 1;
+            fclose(f);
+        }
+    }
+    SelectObject(dc, old); DeleteObject(bmp); DeleteDC(dc); ReleaseDC(nullptr, screen);
+    return ok;
+}
+
 HRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM, LONG_PTR data) {
     App& a = *reinterpret_cast<App*>(data);
     switch (msg) {
     case TDN_CREATED:
     case TDN_NAVIGATED:
         if (a.showingProgress) SendMessageW(hwnd, TDM_SET_PROGRESS_BAR_MARQUEE, TRUE, 30);
+        if (!a.shotDir.empty()) SetWindowPos(hwnd, nullptr, -32000, -32000, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);   // off the screen
         break;
     case TDN_TIMER:
+        if (!a.shotDir.empty()) {   // the README's pictures: the start page, install, the result page, close
+            const DWORD now = GetTickCount();
+            if (a.shotStage == 0 && now - a.startTick > 1200) {
+                SaveWindowPicture(hwnd, JoinPath(a.shotDir, L"setup-start.bmp"));
+                a.shotStage = 1;
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, kAction, 0);
+            } else if (a.shotStage == 2 && now - a.shotTick > 1200) {
+                SaveWindowPicture(hwnd, JoinPath(a.shotDir, L"setup-done.bmp"));
+                a.shotStage = 3;
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, IDCLOSE, 0);
+            }
+        }
         if (a.showingProgress && a.done) {
             if (a.worker.joinable()) a.worker.join();
-            if (a.result.ok && !a.resultIsUninstall) RememberFolder(a.folder);
+            if (a.result.ok && !a.resultIsUninstall && a.shotDir.empty()) RememberFolder(a.folder);
             Refresh(a);
             Navigate(hwnd, ResultPage(a));
+            if (a.shotStage == 1) { a.shotStage = 2; a.shotTick = GetTickCount(); }
         } else if (a.testCloseMs > 0 && !a.showingProgress && GetTickCount() - a.startTick > static_cast<DWORD>(a.testCloseMs)) {
             SendMessageW(hwnd, TDM_CLICK_BUTTON, IDCLOSE, 0);   // the window test closes the wizard by itself
         }
@@ -476,7 +523,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     const bool silent = Has(args, L"--silent"), showVersion = Has(args, L"--version");
     const std::wstring testClose = Flag(args, L"--test-close-ms");
     if (!testClose.empty()) a.testCloseMs = _wtoi(testClose.c_str());
-    if (!testClose.empty() || Has(args, L"--no-remember"))
+    a.shotDir = Flag(args, L"--shot");
+    if (!testClose.empty() || !a.shotDir.empty() || Has(args, L"--no-remember"))
         UseRegistryKeyForTest(L"Software\\LSAddonManager\\SetupTest");   // tests must never touch the person's remembered folder
 
     Out out;

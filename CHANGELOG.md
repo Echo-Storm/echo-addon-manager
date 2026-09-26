@@ -24,6 +24,10 @@ The step toward 1.0: a finished interface, the upscalers out of preview, and the
   features, and what the manager does; new screenshots of the real window (header, list, each addon's own panel), rendered by
   `tools/ui_preview.ps1`, which now renders the window at 1100x740 with the addons' own panels loaded from their DLLs. The upscalers' guide
   corrected: the game's MSAA helps (8x made a large difference in Fallout: New Vegas); a post-process AA before the upscaler does not.
+- **Setup's pictures retaken** (they still said "Echo Addon Manager 0.7.0"): Setup has a `--shot <dir>` mode that keeps its window off the
+  screen, pictures the start page, installs into the (throwaway) folder given, pictures the result and closes, remembering nothing;
+  `tools/setup_shots.ps1` makes the fake folder, runs it and moves the folder away afterwards. Setup's note says it was tested with
+  Fallout: New Vegas too.
 - Version 0.9.4 (manager, all three addons).
 
 The work below was done after 0.9.1 and is part of 0.9.4.
