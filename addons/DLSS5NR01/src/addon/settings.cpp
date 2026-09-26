@@ -166,6 +166,7 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.motionSource = std::clamp(integer("motionSource", 0), 0, 2);
     c.scalerGpuWait = flag("scalerGpuWait", true);
     c.scalerStability = std::clamp(static_cast<float>(number("scalerStability", 0.0)), 0.0f, 1.0f);
+    c.scalerEdges = std::clamp(static_cast<float>(number("scalerEdges", 0.0)), 0.0f, 1.0f);
     c.lsFirst = flag("lsFirst", true);
     c.freshFlow = flag("freshFlow", true);
     c.presentMode = flag("presentMode", true);
@@ -178,6 +179,14 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.autoBudgetMs = std::clamp(static_cast<float>(number("autoBudgetMs", 5.0)), 2.0f, 15.0f);
     c.autoFloor = std::clamp(static_cast<float>(number("autoFloor", 0.25)), 0.25f, 1.0f);
     c.gameAuto = flag("gameAuto", true);
+    c.scalerPerGame = flag("scalerPerGame", true);
+    for (const std::string& exe : SplitList(text("scalerGameList"))) {
+        ScalerProfile p; float sharpen = 0, stability = 0, edges = 0; unsigned preset = 0; int motion = 0;
+        if (sscanf_s(text("scalerGame." + exe).c_str(), "%f,%f,%f,%u,%d", &sharpen, &stability, &edges, &preset, &motion) != 5) continue;
+        p.sharpen = std::clamp(sharpen, 0.0f, 1.0f); p.stability = std::clamp(stability, 0.0f, 1.0f); p.edges = std::clamp(edges, 0.0f, 1.0f);
+        p.preset = std::min(preset, 15u); p.motion = std::clamp(motion, 0, 2);
+        c.scalerGames.push_back({ exe, p });
+    }
     for (const std::string& exe : SplitList(text("gameList"))) {
         const std::string look = text("game." + exe);
         if (!look.empty()) c.games.push_back({ exe, look });
@@ -206,13 +215,22 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
     if (kScalerAddon) put("sharpenScale", "1.6");   // the slider's scale this value is on (see LoadSettings)
     put("hud", HudToText(c.p));
 
-    put("model", std::to_string(c.model)); put("dlaaPreset", std::to_string(c.dlaaPreset)); put("scalerHandoff", std::to_string(c.scalerHandoff)); put("motionSource", std::to_string(c.motionSource)); putFlag("scalerGpuWait", c.scalerGpuWait); put("scalerStability", Number(c.scalerStability));
+    put("model", std::to_string(c.model)); put("dlaaPreset", std::to_string(c.dlaaPreset)); put("scalerHandoff", std::to_string(c.scalerHandoff)); put("motionSource", std::to_string(c.motionSource)); putFlag("scalerGpuWait", c.scalerGpuWait); put("scalerStability", Number(c.scalerStability)); put("scalerEdges", Number(c.scalerEdges));
     putFlag("enabled", c.enabled); putFlag("lsFirst", c.lsFirst); putFlag("freshFlow", c.freshFlow); putFlag("presentMode", c.presentMode); putFlag("presentWait", c.presentWait); putFlag("hotkeys", c.hotkeys);
     put("keyAB", std::to_string(c.keyAB)); put("keySplit", std::to_string(c.keySplit)); put("keySharpDn", std::to_string(c.keySharpDn));
     put("keySharpUp", std::to_string(c.keySharpUp)); put("keyPreset", std::to_string(c.keyPreset)); put("keyShot", std::to_string(c.keyShot));
     put("screenshotFolder", c.screenshotFolder);
     putFlag("autoQuality", c.autoQuality); put("autoBudgetMs", Number(c.autoBudgetMs)); put("autoFloor", Number(c.autoFloor));
     putFlag("gameAuto", c.gameAuto);
+    putFlag("scalerPerGame", c.scalerPerGame);
+    {
+        std::vector<std::string> scalerExes;
+        for (const auto& [exe, p] : c.scalerGames) {
+            char v[96]; snprintf(v, sizeof v, "%g,%g,%g,%u,%d", p.sharpen, p.stability, p.edges, p.preset, p.motion);
+            scalerExes.push_back(exe); put("scalerGame." + exe, v);
+        }
+        put("scalerGameList", JoinList(scalerExes));
+    }
     std::vector<std::string> exes;
     for (const auto& [exe, look] : c.games) { exes.push_back(exe); put("game." + exe, look); }
     put("gameList", JoinList(exes));
@@ -227,5 +245,20 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
 
 void ForgetLook(IHost* host, const char* id, const std::string& name) { if (host) host->SetConfig(id, ("preset." + name).c_str(), ""); }
 void ForgetGame(IHost* host, const char* id, const std::string& exe) { if (host) host->SetConfig(id, ("game." + exe).c_str(), ""); }
+
+ScalerProfile ProfileOf(const Config& c) {
+    ScalerProfile p; p.sharpen = c.p.sharpen; p.stability = c.scalerStability; p.edges = c.scalerEdges; p.preset = c.dlaaPreset; p.motion = c.motionSource;
+    return p;
+}
+
+void ApplyProfile(Config& c, const ScalerProfile& p) {
+    c.p.sharpen = p.sharpen; c.scalerStability = p.stability; c.scalerEdges = p.edges; c.dlaaPreset = p.preset; c.motionSource = p.motion;
+}
+
+void KeepForGame(Config& c, const std::string& exe) {
+    if (exe.empty()) return;
+    for (auto& [e, p] : c.scalerGames) if (e == exe) { p = ProfileOf(c); return; }
+    c.scalerGames.push_back({ exe, ProfileOf(c) });
+}
 
 } // namespace nr

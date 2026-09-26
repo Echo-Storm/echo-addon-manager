@@ -44,6 +44,15 @@ multisampling (MSAA 4x/8x) costs a lot and adds little here; keep the game's own
   measurement then judges trust by a pixel's surroundings rather than the pixel itself, so flicker is no longer reported as "do not trust the
   history here" and the upscaler averages it out; FSR 3 also keeps more history and reacts less to small shading changes (AMD's tuning keys).
   Real motion is followed as before. 0.5 is a good start.
+- **Edge smoothing** (off to start with): anti-aliasing along the edges of the upscaled picture, for games without anti-aliasing of
+  their own. It finds where the brightness steps, which way the edge runs and how far, and blends across it by the part of a pixel the true
+  edge would cover (our own pass, in the family of FXAA). It runs after the upscaler, before the sharpening: smoothing the game's frame
+  first did nothing, as both upscalers rebuild edges their own way. It helps FSR 3 most (a hard slanted edge 27% closer to the ideal at
+  1.5x, 35% at 1:1); DLSS already smooths edges itself. A fraction of a millisecond. The game's own MSAA is better where there is one.
+- **Keep these settings per game** (on): sharpening, stability, edge smoothing, the DLSS model and the motion are kept for each game
+  (by its program name) and come back when it takes focus. Only the window being scaled counts (its inside is the frame's size), so a chat
+  program or browser in front is not taken for a game. A game seen for the first time keeps the settings in use; a change made in the
+  panel counts for the game played last. The list under it shows each game's settings, with a button to forget one.
 - **Before / after** (Ctrl+Shift+F6): switches between the upscaler and Lossless Scaling's own NIS while you play. The hotkeys work only while
   the upscaler is actually upscaling.
 

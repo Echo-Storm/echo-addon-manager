@@ -58,6 +58,7 @@ extern AutoQuality g_auto;
 
 extern std::mutex g_textMutex;
 extern std::string g_status, g_offReason, g_frameText, g_cardName, g_tappedDeviceText, g_focusExe;
+extern std::string g_scalerGame;   // the upscalers: the game whose settings are in use (under g_settingsMutex; empty until one had focus)
 extern bool g_cardDrivesDisplay;
 extern uint64_t g_runs, g_otherPasses, g_lsPresents, g_composed, g_lastDelta;
 extern double g_lastModelMs, g_avgModelMs, g_lastRunMs, g_lastOffset;

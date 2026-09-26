@@ -358,6 +358,37 @@ void DrawPanel() {
                    "you look at a fence or a power line. The game's own anti-aliasing (MSAA) is still what draws thin lines in the first place.",
                    U, kFsrScaler ? ", and FSR 3 keeps more of its history and reacts less to small changes of shading" : "");
           Tip(tip); }
+        { const float off = 0.0f; changed |= eam::ui::SliderFloat("Edge smoothing", &c.scalerEdges, 0.0f, 1.0f, c.scalerEdges <= 0.001f ? "off" : "%.2f", 0, &off); }
+        Tip("Anti-aliasing along the edges of the upscaled picture: for games without anti-aliasing of their own (stair steps on roofs, fences and "
+            "wires). It finds where the brightness steps, which way the edge runs and how far, and blends across it by the part of a pixel the true "
+            "edge would cover. Costs a fraction of a millisecond. It also softens text a little. If the game has anti-aliasing (MSAA), that is "
+            "better: use this where it has none.");
+        {
+            std::string game; { std::lock_guard<std::mutex> lk(g_settingsMutex); game = g_scalerGame; }
+            if (ImGui::Checkbox("Keep these settings per game", &c.scalerPerGame)) changed = true;
+            Tip("On (the default): sharpening, stability, edge smoothing, the DLSS model and the motion are kept for each game, and come back when "
+                "that game takes focus. A change made here counts for the game played last.");
+            if (c.scalerPerGame) {
+                ImGui::SameLine();
+                ImGui::TextDisabled(game.empty() ? "(no game seen yet)" : "for %s", game.c_str());
+                if (!c.scalerGames.empty()) {
+                    int forget = -1;
+                    if (ImGui::TreeNode("Games with settings of their own")) {
+                        for (size_t i = 0; i < c.scalerGames.size(); ++i) {
+                            const auto& [exe, p] = c.scalerGames[i];
+                            ImGui::PushID(static_cast<int>(i));
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::Text("%s: sharpening %.2f, stability %.2f, edges %.2f", exe.c_str(), p.sharpen, p.stability, p.edges);
+                            ImGui::SameLine();
+                            if (ImGui::SmallButton("Forget")) forget = static_cast<int>(i);
+                            ImGui::PopID();
+                        }
+                        ImGui::TreePop();
+                    }
+                    if (forget >= 0) { c.scalerGames.erase(c.scalerGames.begin() + forget); changed = true; }
+                }
+            }
+        }
         if (ImGui::Checkbox("Wait on the GPU rather than repeat a picture", &c.scalerGpuWait)) changed = true;
         Tip("When the upscaler has not finished a new picture by the time Lossless Scaling needs one (two frames close together, as adaptive frame generation makes "
             "them), the picture before would be shown again: a small judder. On (the default), Lossless Scaling's frame waits on the GPU for the new picture instead, "

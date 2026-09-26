@@ -271,6 +271,37 @@ def scenario_fsr_viewport(ctx, res, text, frame):
     scenario_viewport(ctx, res, text, frame, 'FSR 3')
 
 
+def edge_error(text):
+    m = re.search(r'\[check-edge\] the slanted edge is off the ideal smooth edge by ([0-9.]+) levels over (\d+) pixels', text)
+    return (float(m.group(1)), int(m.group(2))) if m else None
+
+
+def scenario_fsr_aliased(ctx, res, text, frame):
+    scenario_fsr(ctx, res, text, frame)
+    e = edge_error(text)
+    res.check('a hard slanted edge is measured against the ideal smooth one', e is not None and e[1] > 1000, '%.2f levels over %d pixels' % e if e else 'no check-edge line')
+    if e:
+        ctx['edge_error_none'] = e[0]
+
+
+def scenario_fsr_edges(ctx, res, text, frame):
+    scenario_fsr(ctx, res, text, frame)
+    res.check('edge smoothing runs and is timed', re.search(r'after the upscaler [0-9.]+ ms \(edge smoothing 1\.00', text) is not None)
+    e = edge_error(text); none = ctx.get('edge_error_none')
+    res.check('with edge smoothing the edge is closer to the ideal smooth edge', e is not None and none is not None and e[0] < none * 0.9,
+              '%.2f against %s levels without' % (e[0], none) if e else 'no check-edge line')
+
+
+def scenario_fsr_edges_sharp(ctx, res, text, frame):
+    scenario_fsr(ctx, res, text, frame)
+    res.check('edge smoothing and the sharpening pass run one after the other', re.search(r'after the upscaler [0-9.]+ ms \(edge smoothing 1\.00, sharpening 1.60', text) is not None)
+
+
+def scenario_scaler_edges(ctx, res, text, frame):
+    scenario_scaler_noflow(ctx, res, text, frame)
+    res.check('edge smoothing runs with DLSS too', re.search(r'after the upscaler [0-9.]+ ms \(edge smoothing 1\.00', text) is not None)
+
+
 def stable_checks(ctx, res, text, none_key, name):
     # Stability at 1: the upscaler must still follow a sliding picture (the slide is real motion, not flicker), and FSR takes its settings
     err = move_error(text)
@@ -367,6 +398,11 @@ SCENARIOS = [
     ('scaler_bgra', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_scaler_noflow),   # frame generation off: only NIS, on the BGRA8 capture
     ('scaler_move_none', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_move_none),   # a sliding picture, DLSS told nothing moves
     ('scaler_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_move),
+    ('fsr_aliased', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisedge=1', 'sharpen=0'], scenario_fsr_aliased),   # a hard slanted edge
+    ('fsr_edges', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisedge=1', 'sharpen=0', 'scalerEdges=1'], scenario_fsr_edges),   # ...smoothed first
+    ('fsr_edges_1x', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisedge=1', 'sharpen=0', 'nisScale=1', 'scalerEdges=1'], scenario_fsr),   # (numbers only)
+    ('fsr_edges_sharp', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisedge=1', 'sharpen=1', 'sharpenScale=1.6', 'scalerEdges=1'], scenario_fsr_edges_sharp),   # edges, then our sharpening
+    ('scaler_edges', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisedge=1', 'sharpen=0', 'scalerEdges=1'], scenario_scaler_edges),
     ('scaler_4_3', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisvp=1', 'nisW=960', 'nisH=720', 'nisScale=1.5'], scenario_viewport),   # 4:3 on 16:9
     ('fsr_4_3', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisvp=1', 'nisW=960', 'nisH=720', 'nisScale=1.5'], scenario_fsr_viewport),
     ('scaler_stable', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'scalerStability=1'], scenario_stable),   # stability at 1 on the slide

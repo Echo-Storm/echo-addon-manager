@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "nisedge", 7) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -327,13 +327,23 @@ int main(int argc, char** argv) {
         { const float sx = (float)NW / VW, sy = (float)NH / VH; memcpy(&nisCfg[12], &sx, 4); memcpy(&nisCfg[13], &sy, 4);
           const uint32_t vp[8] = { 0, 0, NW, NH, OX, OY, VW, VH }; memcpy(&nisCfg[18], vp, sizeof vp); }
         ID3D11Buffer* nisCb = nullptr;
-        { D3D11_BUFFER_DESC bd{}; bd.ByteWidth = sizeof nisCfg; bd.Usage = D3D11_USAGE_DEFAULT; bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        { D3D11_BUFFER_DESC bd{}; bd.ByteWidth = sizeof nisCfg; bd.Usage = D3D11_USAGE_DYNAMIC; bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;   // as a pass that updates it each frame
+          bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
           D3D11_SUBRESOURCE_DATA sd{ nisCfg }; dev->CreateBuffer(&bd, &sd, &nisCb); }
         ID3D11ComputeShader* csNis = MakeCS(dev, "Texture2D<float4> f:register(t0); Texture2D<float4> c1:register(t1); Texture2D<float4> c2:register(t2); RWTexture2D<float4> o:register(u0);"
                                                  " cbuffer c:register(b0){ uint4 cfg[7]; };"
                                                  " [numthreads(32,24,1)] void main(uint3 id:SV_DispatchThreadID){ if (id.x < cfg[6].x && id.y < cfg[6].y)"
                                                  " o[id.xy + cfg[5].zw]=float4(1,0,1,1)+(f[uint2(0,0)]+c1[uint2(0,0)]+c2[uint2(0,0)])*0; }");
         Fill(dc, nisIn, NW, NH);
+        // nisedge=1: the frame is a hard slanted edge drawn without anti-aliasing (white where u - 3v passes the middle, point-sampled: stair
+        // steps three pixels long), and the output is measured against the ideal smooth edge ([check-edge])
+        bool nisEdge = false; for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "nisedge=1")) nisEdge = true;
+        auto edgeDistance = [&](double u, double v) { return ((u - NW * 0.5) - 3.0 * (v - NH * 0.5)) / std::sqrt(10.0); };   // in frame pixels
+        if (nisEdge) {
+            std::vector<uint32_t> px((size_t)NW * NH);
+            for (UINT y = 0; y < NH; ++y) for (UINT x = 0; x < NW; ++x) px[(size_t)y * NW + x] = edgeDistance(x + 0.5, y + 0.5) > 0.0 ? 0xFFFFFFFFu : 0xFF000000u;
+            dc->UpdateSubresource(nisIn, 0, nullptr, px.data(), NW * 4, 0);
+        }
         // gpuload=<n>: before each NIS pass, n thousand iterations of busy work on this (Lossless Scaling's) queue, as a game at its GPU
         // limit keeps the card busy; the upscaler's frame read and signal then queue behind it (Fallout: New Vegas, 2026-09-25)
         int gpuLoad = 0; for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "gpuload=", 8)) gpuLoad = std::clamp(atoi(argv[i] + 8), 0, 1000);
@@ -374,7 +384,7 @@ int main(int argc, char** argv) {
         // read the output back: how much of it is the fake pass's magenta, and how close its average colour is to the frame's
         D3D11_TEXTURE2D_DESC sd{}; nisOut->GetDesc(&sd); sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
         ID3D11Texture2D* st = nullptr; dev->CreateTexture2D(&sd, nullptr, &st);
-        uint64_t magenta = 0, borderLit = 0; double sum[3] = {}, want[3] = {}, detail = 0;   // detail: the average step between neighbouring pixels (sharpening raises it)
+        uint64_t magenta = 0, borderLit = 0, edgePixels = 0; double sum[3] = {}, want[3] = {}, detail = 0, edgeError = 0;   // detail: the average step between neighbouring pixels (sharpening raises it)
         double moveError[3] = {};   // nismove: how far the picture is from the moving picture of the last three frames (the one shown is a frame late)
         if (st) {
             dc->CopyResource(st, nisOut);
@@ -386,6 +396,13 @@ int main(int argc, char** argv) {
                     if (!inside) { if (px[0] | px[1] | px[2]) ++borderLit; continue; }   // Lossless Scaling's borders: nothing may be drawn there
                     const UINT x = ox - OX, y = oy - OY;   // within the viewport, as NIS's picture
                     if (px[0] == 255 && px[1] == 0 && px[2] == 255) ++magenta;
+                    if (nisEdge) {   // near the edge: how far from the ideal (a box filter one frame pixel wide over the true edge)
+                        const double d = edgeDistance((x + 0.5) / NS, (y + 0.5) / NS);
+                        if (std::abs(d) < 3.0 && x > 8 && y > 8 && x + 8 < VW && y + 8 < VH) {
+                            const double ideal = 255.0 * std::clamp(0.5 + d, 0.0, 1.0);
+                            edgeError += std::abs(px[0] - ideal); ++edgePixels;
+                        }
+                    }
                     for (int c = 0; c < 3; ++c) sum[c] += px[c];
                     if (x + 1 < VW) detail += std::abs(int(px[4]) - int(px[0])) + std::abs(int(px[5]) - int(px[1])) + std::abs(int(px[6]) - int(px[2]));
                     if (nisMove && x >= VW / 8 && x < VW * 7 / 8 && y >= VH / 8 && y < VH * 7 / 8)   // the middle (edges have no frame before to come from)
@@ -404,8 +421,11 @@ int main(int argc, char** argv) {
             printf("[check-move] the picture is off the moving picture by %.2f levels a channel (frame shown: %d before the last; the others %.2f, %.2f, %.2f)\n",
                    moveError[shown] / n, shown, moveError[0] / n, moveError[1] / n, moveError[2] / n);
         }
+        if (nisEdge) printf("[check-edge] the slanted edge is off the ideal smooth edge by %.2f levels over %llu pixels\n", edgePixels ? edgeError / edgePixels : 0.0,
+                            (unsigned long long)edgePixels);
         for (UINT y = 0; y < NH; ++y) for (UINT x = 0; x < NW; ++x) {
-            const uint32_t v = nisMove ? MovingPixel((int)x, (int)y, kFrames - 1) : Pattern(x, y, NW, NH);   // in memory: B, G, R
+            const uint32_t v = nisEdge ? (edgeDistance(x + 0.5, y + 0.5) > 0.0 ? 0xFFFFFFFFu : 0xFF000000u)
+                             : nisMove ? MovingPixel((int)x, (int)y, kFrames - 1) : Pattern(x, y, NW, NH);   // in memory: B, G, R
             if (nisBgra) { want[0] += (v >> 16) & 255; want[1] += (v >> 8) & 255; want[2] += v & 255; }   // the RGBA8 output holds R, G, B
             else { want[0] += v & 255; want[1] += (v >> 8) & 255; want[2] += (v >> 16) & 255; }
         }

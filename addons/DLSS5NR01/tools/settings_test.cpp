@@ -89,6 +89,25 @@ int main() {
     host.values["saturation"] = "9"; host.values["passes"] = "-4"; host.values["debugView"] = "12";
     Loaded wild = LoadSettings(&host, "DLSS5NR01");
     Check("values edited out of range in the file are kept to their range", Same(wild.config.p.saturation, 2.0f) && wild.config.p.passes == 1 && wild.config.p.debugView == 5);
+    {   // the upscalers' settings per game
+        Config u; u.p.sharpen = 0.4f; u.scalerStability = 0.3f; u.scalerEdges = 0.6f; u.dlaaPreset = 13; u.motionSource = 1;
+        KeepForGame(u, "falloutnv.exe");
+        u.p.sharpen = 0.8f; u.scalerStability = 0.0f;
+        KeepForGame(u, "wowb.exe");
+        u.p.sharpen = 0.5f; KeepForGame(u, "falloutnv.exe");   // a change for a game replaces what it had
+        SaveSettings(&host, "DLSS5NR01", u, {});
+        const Loaded ub = LoadSettings(&host, "DLSS5NR01");
+        const auto& g = ub.config.scalerGames;
+        Check("the upscalers' settings per game load back, a change replacing a game's own", g.size() == 2 && g[0].first == "falloutnv.exe" &&
+              Same(g[0].second.sharpen, 0.5f) && Same(g[0].second.stability, 0.0f) && Same(g[0].second.edges, 0.6f) && g[0].second.preset == 13 &&
+              g[0].second.motion == 1 && g[1].first == "wowb.exe" && Same(g[1].second.sharpen, 0.8f) && ub.config.scalerPerGame,
+              std::to_string(g.size()) + " " + host.values["scalerGameList"] + " " + host.values["scalerGame.falloutnv.exe"]);
+        Config v; ApplyProfile(v, g[1].second);
+        Check("...and a game's settings go back into the settings in use", Same(v.p.sharpen, 0.8f) && Same(v.scalerStability, 0.0f) && Same(v.scalerEdges, 0.6f) &&
+              v.dlaaPreset == 13);
+        host.values["scalerGame.wowb.exe"] = "garbage";
+        Check("a game whose line cannot be read is left out", LoadSettings(&host, "DLSS5NR01").config.scalerGames.size() == 1);
+    }
     ForgetLook(&host, "DLSS5NR01", "Night");
     Check("a deleted look's text is cleared", host.values["preset.Night"].empty());
 

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Upscalers: settings per game** (on by default). Sharpening, stability, edge smoothing, the DLSS model and the motion are kept for each
+  game by its program name and come back when it takes focus (checked about once a second). Only the window being scaled counts (its
+  inside is the frame's size: a chat program in front was taken for a game in the first test), and Lossless Scaling's own windows do not,
+  so changes made in the panel go to the game played last. The panel lists the games with their settings, each with a Forget button. The log
+  says when a game's settings come back.
+- **Upscalers: Edge smoothing** (off by default), for games without anti-aliasing of their own: our own edge anti-aliasing pass (it finds
+  the edge's direction and how far its step runs each way, and blends across it by the part of a pixel the true edge covers), on the
+  upscaled picture before the sharpening. Tried first on the game's frame before the upscaler, where it did nothing: DLSS and FSR 3 both
+  rebuild edges their own way and gave the stair steps back (test host: the smoothed frame 7.2 levels off the ideal edge, 11.4 after FSR 3).
+  After the upscaler, a hard slanted edge comes out 27% closer to the ideal with FSR 3 at 1.5x (12.45 to 9.13 levels) and 35% at 1:1;
+  DLSS, which smooths edges itself, hardly changes. 0.02-0.05 ms. The engine's log gives the time of the passes after the upscaler. Test
+  host: `nisedge=1` (a hard slanted edge measured against the ideal one); scenarios `fsr_aliased`, `fsr_edges`, `fsr_edges_1x`,
+  `fsr_edges_sharp`, `scaler_edges`.
 - **Upscalers: windows of another shape than the screen** (a 4:3 game on a 16:9 screen). Lossless Scaling scales such a window into part
   of the screen, and its NIS pass then covers only that part, which the upscalers used to leave to NIS. Now they read NIS's two viewports
   from its constants (NVIDIA's NISConfig; copied once per pass shape and read back a frame later, never waiting), use them only when they

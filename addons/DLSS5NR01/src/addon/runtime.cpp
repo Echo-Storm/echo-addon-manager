@@ -344,7 +344,8 @@ void ReadHotkeys() {
                 if (next.data.empty()) Log("hotkey: no presets saved"); else ApplyLookNow(next.name, next.data, "hotkey");
             } else {
                 float sharpen;
-                { std::lock_guard<std::mutex> lock(g_settingsMutex); sharpen = g_config.p.sharpen = std::clamp(g_config.p.sharpen + (i == 3 ? 0.05f : -0.05f), 0.0f, 1.0f); }
+                { std::lock_guard<std::mutex> lock(g_settingsMutex); sharpen = g_config.p.sharpen = std::clamp(g_config.p.sharpen + (i == 3 ? 0.05f : -0.05f), 0.0f, 1.0f);
+                  if (kScalerAddon && g_config.scalerPerGame) KeepForGame(g_config, g_scalerGame); }
                 Config c; std::vector<Look> looks;
                 { std::lock_guard<std::mutex> lock(g_settingsMutex); c = g_config; looks = g_looks; }
                 SaveSettings(g_host, kAddonId, c, looks);
@@ -357,9 +358,10 @@ void ReadHotkeys() {
 }
 
 // The program in focus, lower case; empty when it is Lossless Scaling itself (its overlay and the manager are in this process) or unknown.
-std::string FocusExe() {
+std::string FocusExe(uint32_t* clientW = nullptr, uint32_t* clientH = nullptr) {
     const HWND window = GetForegroundWindow();
     if (!window) return {};
+    if (clientW && clientH) { RECT r{}; GetClientRect(window, &r); *clientW = static_cast<uint32_t>(r.right - r.left); *clientH = static_cast<uint32_t>(r.bottom - r.top); }
     DWORD pid = 0;
     GetWindowThreadProcessId(window, &pid);
     if (!pid || pid == GetCurrentProcessId()) return {};
@@ -742,6 +744,31 @@ void StartEngineFor(const LUID& card) {   // the engine's own device only: safe 
     }).detach();
 }
 
+// The upscalers' settings per game: when another game takes focus (checked about once a second), its own settings come back; one seen for
+// the first time keeps the settings in use, and whatever is changed while it is the game in play is kept for it (Commit). Only the window
+// Lossless Scaling is scaling counts: one whose inside is the frame's size (a chat program or a browser in front is not a game).
+void FollowScalerGame(uint32_t frameW, uint32_t frameH) {
+    uint32_t w = 0, h = 0;
+    const std::string exe = FocusExe(&w, &h);   // empty for Lossless Scaling itself (its panel): the game before stays the one in play
+    if (exe.empty()) return;
+    auto alike = [](uint32_t a, uint32_t b) { return a + 8 >= b && b + 8 >= a; };
+    if (!alike(w, frameW) || !alike(h, frameH)) return;
+    { std::lock_guard<std::mutex> lock(g_textMutex); g_focusExe = exe; }
+    Config c; std::vector<Look> looks; bool known = false;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        if (exe == g_scalerGame) return;
+        g_scalerGame = exe;
+        if (!g_config.scalerPerGame) return;
+        for (const auto& [e, p] : g_config.scalerGames) if (e == exe) { ApplyProfile(g_config, p); known = true; }
+        if (!known) KeepForGame(g_config, exe);
+        c = g_config; looks = g_looks;
+    }
+    SaveSettings(g_host, kAddonId, c, looks);
+    if (known) Log("game %s took focus: its own settings (sharpening %.2f, stability %.2f, edge smoothing %.2f)", exe.c_str(), c.p.sharpen, c.scalerStability, c.scalerEdges);
+    else Log("game %s took focus: new to the upscaler; it keeps the settings in use, and any change made now is kept for it", exe.c_str());
+}
+
 bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     std::lock_guard<std::mutex> lock(g_frameMutex);
     TapDecision d;
@@ -753,6 +780,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     NisPass pass;
     if (!FindNisPass(ctx, x, y, z, pass, [](const char* m) { Log("%s", m); })) return false;
     ++g_nisSeen; ++g_nisSinceTap;
+    if ((g_nisSeen & 63u) == 1) FollowScalerGame(pass.inW, pass.inH);
     g_scaleInW = pass.inW; g_scaleInH = pass.inH; g_scaleOutW = pass.outW; g_scaleOutH = pass.outH;
     ReadHotkeys();
     bool replaced = false;
@@ -773,10 +801,10 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
                 !PresentHook::Install(dev, OnPresent, [](const char* m) { Log("%s", m); }))
                 Log("%s upscaler: could not hook Present; the picture cannot go over NIS's there", kUpscalerName);
             if (g_linkDevice == dev && g_compare.load() != 2) {   // "original only" lets NIS run, for comparing
-                NrParams p; unsigned preset; int handoff, motion; bool gpuWait; float stability;
+                NrParams p; unsigned preset; int handoff, motion; bool gpuWait; float stability, edges;
                 { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; handoff = g_config.scalerHandoff; motion = g_config.motionSource;
-                  gpuWait = g_config.scalerGpuWait; stability = g_config.scalerStability; }
-                g_sr.SetStability(stability);
+                  gpuWait = g_config.scalerGpuWait; stability = g_config.scalerStability; edges = g_config.scalerEdges; }
+                g_sr.SetStability(stability); g_sr.SetEdgeSmoothing(edges);
                 uint32_t fw = 0, fh = 0;
                 ID3D11Resource* flow = motion == 1 ? g_tap.NewestFlow(fw, fh) : nullptr;
                 const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;

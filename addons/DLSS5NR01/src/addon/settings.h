@@ -15,6 +15,13 @@ struct IHost;
 
 namespace nr {
 
+// The upscalers' picture settings as kept for one game (Config::scalerGames).
+struct ScalerProfile { float sharpen = 0.5f, stability = 0.0f, edges = 0.0f; unsigned preset = 0; int motion = 0; };
+ScalerProfile ProfileOf(const struct Config& c);
+void ApplyProfile(struct Config& c, const ScalerProfile& p);
+// Keeps c's picture settings as game exe's own (added, or replacing what it had).
+void KeepForGame(struct Config& c, const std::string& exe);
+
 struct Config {
     bool enabled = true;
     int model = 0;                       // 0 DLSS 5 Neural Rendering (the person's model file), 1 DLAA (NVIDIA's DLSS runtime, shipped)
@@ -24,6 +31,9 @@ struct Config {
     // picture again (ScalerLink::Upscale). A CPU wait tried before made repeats more frequent on a busy GPU and is gone (2026-09-25).
     bool scalerGpuWait = true;
     float scalerStability = 0.0f;        // the upscalers: less shimmer, more trailing (SrEngine::SetStability)
+    float scalerEdges = 0.0f;            // the upscalers: edge smoothing of the upscaled picture (SrEngine::SetEdgeSmoothing)
+    bool scalerPerGame = true;           // the upscalers: their picture settings kept per game (scalerGames), back when the game takes focus
+    std::vector<std::pair<std::string, struct ScalerProfile>> scalerGames;   // lower-case exe name, its settings
     int scalerHandoff = 0;               // the DLSS 4 Upscaler's handoff (ScalerLink::Handoff): 0 one frame late, 1 GPU wait, 2 DLSS runs but NIS stays,
                                          // 3 NIS runs and DLSS's picture is copied over it at Present
     NrParams p;                          // the look, and the few model settings that are not part of a look

@@ -51,6 +51,10 @@ public:
     // Stability 0..1 (from the next run): the motion's distrust mask looks past flicker, and FSR 3 keeps more of its history and reacts less
     // to small changes of shading. Less shimmer on thin lines and leaves; more trailing behind what moves. 0 = as before.
     void SetStability(float s) { m_stability.store(s < 0.0f ? 0.0f : s > 1.0f ? 1.0f : s); }
+    // Edge smoothing 0..1 (from the next run): the upscaler's picture is anti-aliased along its edges before the sharpening (for games
+    // without anti-aliasing of their own). 0 = off.
+    void SetEdgeSmoothing(float s) { m_edges.store(s < 0.0f ? 0.0f : s > 1.0f ? 1.0f : s); }
+    double AfterMs() const { return m_afterMs; }   // the passes after the upscaler (edges, sharpening), on the GPU, smoothed
     double GpuMs() const { return m_gpuMs; }   // everything a run does, on the GPU, smoothed
     double MotionMs() const { return m_motionMs; }   // of that, the motion (the estimate, or the flow pass)
     uint64_t Runs() const { return m_runs; }
@@ -83,7 +87,12 @@ private:
     ID3D12QueryHeap* m_timestamps = nullptr; ID3D12Resource* m_timestampReadback = nullptr; uint64_t m_timestampFreq = 1;
     double m_gpuMs = 0, m_motionMs = 0;
     FlowEstimator m_estimator; bool m_estimatedLast = false; uint64_t m_estimates = 0;
-    std::atomic<float> m_stability{ 0.0f };
+    std::atomic<float> m_stability{ 0.0f }, m_edges{ 0.0f };
+    static const int kDescriptors = 6;   // per slot: flow, motion, sharpen in/out, edges in/out
+    ID3D12PipelineState* m_edgesPso = nullptr;
+    ID3D12Resource* m_smoothed = nullptr; uint32_t m_smoothedW = 0, m_smoothedH = 0; DXGI_FORMAT m_smoothedFmt = DXGI_FORMAT_UNKNOWN;
+    double m_afterMs = 0;
+    bool EnsureSmoothTarget(uint32_t w, uint32_t h, DXGI_FORMAT fmt);
     float m_ffxStability = -1.0f;      // the stability FSR's context was last configured for (-1: not yet)
     float m_loggedStability = -1.0f;
     void ConfigureFsrStability(float s);

@@ -64,6 +64,69 @@ void main(uint3 id : SV_DispatchThreadID) {
 )";
 struct SharpenConstants { uint32_t w, h; float amount, gain; };
 
+// Edge smoothing of the upscaler's picture, for games without anti-aliasing of their own. Where the brightness steps sharply (an edge drawn
+// without anti-aliasing: stair steps), it finds which way the edge runs and how far along it each way the step continues, which says where
+// on the stair this pixel sits; then it blends the pixel with its neighbour across the edge by the fraction of a pixel the true edge would
+// have covered. A lone pixel that stands out from all its neighbours (a thin line's broken bit) is softened too. strength 0..1 scales the
+// blend. Our own formulation of the well-known idea (morphological / FXAA-style anti-aliasing). It runs after the upscaler, not before:
+// both DLSS and FSR 3 rebuild edges their own way and gave the stair steps back (test host, 2026-09-25: a smoothed frame 7.2 levels off the
+// ideal edge, after FSR 3 at 1:1 11.4, the same as from the hard frame).
+const char* kEdgesHlsl = R"(
+Texture2D<float4> tIn : register(t0);
+RWTexture2D<float4> uOut : register(u0);
+SamplerState sLinear : register(s0);
+cbuffer C : register(b0) { uint2 size; float strength; float unused; };
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+float LumaAt(float2 uv) { return Luma(tIn.SampleLevel(sLinear, uv, 0).rgb); }
+static const float kSteps[12] = { 1.0, 1.0, 1.0, 1.5, 2.0, 2.0, 2.0, 2.0, 4.0, 4.0, 8.0, 8.0 };
+[numthreads(8, 8, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= size.x || id.y >= size.y) return;
+    const int2 p = int2(id.xy), last = int2(size) - 1;
+    const float2 inv = 1.0 / float2(size);
+    const float2 uv = (float2(p) + 0.5) * inv;
+    const float4 c = tIn[p];
+    float l[9];   // the 3x3's brightness; k: x = k % 3 - 1, y = k / 3 - 1
+    [unroll] for (int k = 0; k < 9; ++k) l[k] = Luma(tIn[clamp(p + int2(k % 3 - 1, k / 3 - 1), int2(0, 0), last)].rgb);
+    const float lc = l[4], ln = l[1], ls = l[7], lw = l[3], le = l[5];
+    const float lo = min(lc, min(min(ln, ls), min(lw, le))), hi = max(lc, max(max(ln, ls), max(lw, le)));
+    const float range = hi - lo;
+    if (range < max(0.03, hi * 0.12)) { uOut[p] = c; return; }   // flat, or a step too faint to be an edge
+    // which way the edge runs: the change down the columns (a horizontal edge) against the change along the rows (a vertical one)
+    const float acrossRows = abs(l[0] - 2.0 * l[3] + l[6]) + 2.0 * abs(ln - 2.0 * lc + ls) + abs(l[2] - 2.0 * l[5] + l[8]);
+    const float acrossCols = abs(l[0] - 2.0 * l[1] + l[2]) + 2.0 * abs(lw - 2.0 * lc + le) + abs(l[6] - 2.0 * l[7] + l[8]);
+    const bool horizontal = acrossRows >= acrossCols;
+    // the side the step is on: towards the neighbour across the edge that differs most
+    const float before = horizontal ? ln : lw, after = horizontal ? ls : le;
+    const bool towardAfter = abs(after - lc) > abs(before - lc);
+    const float side = towardAfter ? after : before;
+    const float2 across = horizontal ? float2(0.0, inv.y) : float2(inv.x, 0.0);
+    const float2 along = horizontal ? float2(inv.x, 0.0) : float2(0.0, inv.y);
+    const float dir = towardAfter ? 1.0 : -1.0;
+    const float edgeLuma = 0.5 * (lc + side), gradient = 0.25 * abs(side - lc);
+    // along the edge, halfway between this pixel and that neighbour, both ways, until the brightness leaves the edge's
+    const float2 start = uv + across * (0.5 * dir);
+    float distBack = 0.0, distFwd = 0.0, endBack = 0.0, endFwd = 0.0; bool doneBack = false, doneFwd = false;
+    [unroll] for (int s = 0; s < 12; ++s) {
+        if (!doneBack) { distBack += kSteps[s]; endBack = LumaAt(start - along * distBack) - edgeLuma; doneBack = abs(endBack) >= gradient; }
+        if (!doneFwd) { distFwd += kSteps[s]; endFwd = LumaAt(start + along * distFwd) - edgeLuma; doneFwd = abs(endFwd) >= gradient; }
+    }
+    // the nearer end says where on the stair this pixel is: at the step's middle nothing moves, at its ends up to half a pixel. Only when
+    // that end turns away from this pixel's side of the edge (otherwise the pixel is on the stair's flat part)
+    const float nearEnd = distBack < distFwd ? endBack : endFwd;
+    const bool centreBelow = lc - edgeLuma < 0.0;
+    const float spanOffset = ((nearEnd < 0.0) != centreBelow) ? 0.5 - min(distBack, distFwd) / (distBack + distFwd) : 0.0;
+    // a pixel unlike all its neighbours (a thin line's lone bit): softened towards them
+    const float around = (2.0 * (ln + ls + lw + le) + l[0] + l[2] + l[6] + l[8]) / 12.0;
+    float lone = saturate(abs(around - lc) / range);
+    lone = (-2.0 * lone + 3.0) * lone * lone;
+    const float offset = max(spanOffset, 0.75 * lone * lone) * saturate(strength);
+    uOut[p] = float4(tIn.SampleLevel(sLinear, uv + across * (offset * dir), 0).rgb, c.a);
+}
+)";
+struct EdgeConstants { uint32_t w, h; float strength, unused; };
+
+
 const char* ResultName(NVSDK_NGX_Result r) {
     switch (r) {
     case NVSDK_NGX_Result_Success: return "Success";
@@ -135,10 +198,10 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
     if (FAILED(m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_alloc[0], nullptr, IID_PPV_ARGS(&m_list)))) { Fail("CreateCommandList"); return false; }
     m_list->Close();
     if (FAILED(m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence))) || !(m_event = CreateEventW(nullptr, FALSE, FALSE, nullptr))) { Fail("CreateFence"); return false; }
-    D3D12_QUERY_HEAP_DESC queries{}; queries.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP; queries.Count = 3 * kSlots;   // start, motion done, end
+    D3D12_QUERY_HEAP_DESC queries{}; queries.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP; queries.Count = 4 * kSlots;   // start, motion done, upscaler done, end
     m_dev->CreateQueryHeap(&queries, IID_PPV_ARGS(&m_timestamps));
     D3D12_HEAP_PROPERTIES readback{}; readback.Type = D3D12_HEAP_TYPE_READBACK;
-    D3D12_RESOURCE_DESC buffer{}; buffer.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; buffer.Width = 24 * kSlots; buffer.Height = 1; buffer.DepthOrArraySize = 1;
+    D3D12_RESOURCE_DESC buffer{}; buffer.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; buffer.Width = 32 * kSlots; buffer.Height = 1; buffer.DepthOrArraySize = 1;
     buffer.MipLevels = 1; buffer.SampleDesc.Count = 1; buffer.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     m_dev->CreateCommittedResource(&readback, D3D12_HEAP_FLAG_NONE, &buffer, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_timestampReadback));
     m_queue->GetTimestampFrequency(&m_timestampFreq);
@@ -171,12 +234,12 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
         if (FAILED(h)) { Fail("the %s pipeline 0x%08x", name, (unsigned)h); return false; }
         return true;
     };
-    if (!build(kMotionHlsl, "sr_motion", &m_motionPso) || !build(kSharpenHlsl, "sr_sharpen", &m_sharpenPso)) return false;
+    if (!build(kMotionHlsl, "sr_motion", &m_motionPso) || !build(kSharpenHlsl, "sr_sharpen", &m_sharpenPso) || !build(kEdgesHlsl, "sr_edges", &m_edgesPso)) return false;
     static_assert(FlowEstimator::kSlots == kSlots, "the estimator reads its statistics back per engine slot");
     if (!m_estimator.Init(m_dev, [this](const char* m) { Log("%s", m); })) Log("%s upscaler: the motion estimator could not start; motion comes from frame generation only", Name());
     m_estimator.SetTimestampFrequency(m_timestampFreq);
-    // per allocator slot: the flow's view, the motion vectors', and the sharpening pass's input and output
-    D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors = 4 * kSlots; heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    // per allocator slot: the flow's view, the motion vectors', the sharpening pass's input and output, the edge pass's input and output
+    D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors = kDescriptors * kSlots; heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     if (FAILED(m_dev->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&m_heap)))) { Fail("CreateDescriptorHeap"); return false; }
     m_descriptorSize = m_dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
@@ -227,7 +290,7 @@ bool SrEngine::Shutdown() {
     if (m_dev && m_backend == Backend::Dlss) NVSDK_NGX_D3D12_Shutdown1(m_dev);
     m_estimator.Shutdown(); m_estimatedLast = false; m_estimates = 0;
     SafeRelease(m_motion); SafeRelease(m_distrust); SafeRelease(m_depth); SafeRelease(m_depthUpload);
-    SafeRelease(m_motionPso); SafeRelease(m_sharpenPso); SafeRelease(m_unsharpened); m_unsharpenedW = m_unsharpenedH = 0; SafeRelease(m_rootSig); SafeRelease(m_heap);
+    SafeRelease(m_motionPso); SafeRelease(m_sharpenPso); SafeRelease(m_edgesPso); SafeRelease(m_smoothed); m_smoothedW = m_smoothedH = 0; SafeRelease(m_unsharpened); m_unsharpenedW = m_unsharpenedH = 0; SafeRelease(m_rootSig); SafeRelease(m_heap);
     SafeRelease(m_timestamps); SafeRelease(m_timestampReadback);
     SafeRelease(m_list); for (auto*& a : m_alloc) SafeRelease(a);
     SafeRelease(m_fence); if (m_event) { CloseHandle(m_event); m_event = nullptr; }
@@ -276,15 +339,16 @@ int SrEngine::TakeSlot() {
 
 void SrEngine::ReadTime(int slot) {
     if (!m_slotDone[slot] || !m_timestampReadback) return;
-    const D3D12_RANGE range{ static_cast<SIZE_T>(slot) * 24, static_cast<SIZE_T>(slot) * 24 + 24 };
+    const D3D12_RANGE range{ static_cast<SIZE_T>(slot) * 32, static_cast<SIZE_T>(slot) * 32 + 32 };
     uint64_t* t = nullptr;
     if (FAILED(m_timestampReadback->Map(0, &range, reinterpret_cast<void**>(&t)))) return;
-    const uint64_t t0 = t[slot * 3], t1 = t[slot * 3 + 1], t2 = t[slot * 3 + 2];
+    const uint64_t t0 = t[slot * 4], t1 = t[slot * 4 + 1], t2 = t[slot * 4 + 2], t3 = t[slot * 4 + 3];
     const D3D12_RANGE none{ 0, 0 };
     m_timestampReadback->Unmap(0, &none);
     auto smooth = [](double& avg, double ms) { avg = avg == 0 ? ms : avg * 0.9 + ms * 0.1; };
-    if (t2 > t0 && m_timestampFreq) smooth(m_gpuMs, (t2 - t0) * 1000.0 / m_timestampFreq);
-    if (t1 >= t0 && t2 >= t1 && m_timestampFreq) smooth(m_motionMs, (t1 - t0) * 1000.0 / m_timestampFreq);
+    if (!m_timestampFreq || !(t0 <= t1 && t1 <= t2 && t2 <= t3) || t3 == t0) return;
+    const double ms = 1000.0 / m_timestampFreq;
+    smooth(m_gpuMs, (t3 - t0) * ms); smooth(m_motionMs, (t1 - t0) * ms); smooth(m_afterMs, (t3 - t2) * ms);
 }
 
 // ---- the feature and its inputs (on the caller's thread; our own device only)
@@ -316,6 +380,18 @@ bool SrEngine::EnsureInputs(uint32_t w, uint32_t h) {
     D3D12_TEXTURE_COPY_LOCATION from{}; from.pResource = m_depthUpload; from.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; from.PlacedFootprint = layout;
     m_list->CopyTextureRegion(&to, 0, 0, 0, &from, nullptr);
     Transition(m_depth, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    return true;
+}
+
+// The edge-smoothed picture, when the sharpening pass follows (output size and format), left in UNORDERED_ACCESS between runs.
+bool SrEngine::EnsureSmoothTarget(uint32_t w, uint32_t h, DXGI_FORMAT fmt) {
+    if (m_smoothed && m_smoothedW == w && m_smoothedH == h && m_smoothedFmt == fmt) return true;
+    if (m_smoothed) { WaitIdle(); SafeRelease(m_smoothed); }
+    D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_RESOURCE_DESC d{}; d.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width = w; d.Height = h; d.DepthOrArraySize = 1; d.MipLevels = 1; d.SampleDesc.Count = 1;
+    d.Format = fmt; d.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    if (FAILED(m_dev->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &d, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&m_smoothed)))) return false;
+    m_smoothedW = w; m_smoothedH = h; m_smoothedFmt = fmt;
     return true;
 }
 
@@ -428,6 +504,10 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     // Sharpening (strength 0..1.6, see kScalerSharpenScale): DLSS has none of its own, so the upscaler writes into a texture of ours and the
     // sharpening pass goes from there into out. FSR sharpens by itself (its RCAS) up to 1; beyond that our pass adds the rest on top.
     const bool sharpening = (fsr ? sharpen > 1.001f : sharpen > 0.001f) && EnsureSharpenTarget(outW, outH, outFormat);
+    // edge smoothing of the upscaler's picture: from m_unsharpened into the output, or into m_smoothed when sharpening follows
+    const float edges = m_edges.load();
+    const bool smoothing = edges > 0.001f && EnsureSharpenTarget(outW, outH, outFormat) && (!sharpening || EnsureSmoothTarget(outW, outH, outFormat));
+    ID3D12Resource* const upscaled = (sharpening || smoothing) ? m_unsharpened : out;   // where the upscaler writes
     LARGE_INTEGER qpcNow, qpcFreq; QueryPerformanceCounter(&qpcNow); QueryPerformanceFrequency(&qpcFreq);
     const float frameMs = m_lastRunQpc ? std::clamp(static_cast<float>((qpcNow.QuadPart - m_lastRunQpc) * 1000.0 / qpcFreq.QuadPart), 1.0f, 100.0f) : 16.7f;
     m_lastRunQpc = qpcNow.QuadPart;
@@ -443,26 +523,35 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     m_estimator.ReadStats(slot);
 
     // descriptors: the flow (or a null view) and the motion vectors
-    D3D12_CPU_DESCRIPTOR_HANDLE cpu = m_heap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr += static_cast<SIZE_T>(slot) * 4 * m_descriptorSize;
-    D3D12_GPU_DESCRIPTOR_HANDLE gpu = m_heap->GetGPUDescriptorHandleForHeapStart(); gpu.ptr += static_cast<UINT64>(slot) * 4 * m_descriptorSize;
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu = m_heap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr += static_cast<SIZE_T>(slot) * kDescriptors * m_descriptorSize;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu = m_heap->GetGPUDescriptorHandleForHeapStart(); gpu.ptr += static_cast<UINT64>(slot) * kDescriptors * m_descriptorSize;
     D3D12_SHADER_RESOURCE_VIEW_DESC sv{}; sv.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; sv.Texture2D.MipLevels = 1;
     m_dev->CreateShaderResourceView(flow, &sv, cpu);
     D3D12_CPU_DESCRIPTOR_HANDLE cpuUav = cpu; cpuUav.ptr += m_descriptorSize;
     D3D12_UNORDERED_ACCESS_VIEW_DESC uv{}; uv.Format = DXGI_FORMAT_R16G16_FLOAT; uv.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
     m_dev->CreateUnorderedAccessView(m_motion, nullptr, &uv, cpuUav);
-    if (sharpening) {   // the sharpening pass: DLSS's picture in, the shared output out
-        D3D12_CPU_DESCRIPTOR_HANDLE cpuIn = cpu; cpuIn.ptr += 2 * m_descriptorSize;
+    if (smoothing) {   // the edge pass: the upscaler's picture in; the output, or m_smoothed for the sharpening pass, out
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuIn = cpu; cpuIn.ptr += 4 * m_descriptorSize;
         D3D12_SHADER_RESOURCE_VIEW_DESC si{}; si.Format = outFormat; si.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         si.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; si.Texture2D.MipLevels = 1;
         m_dev->CreateShaderResourceView(m_unsharpened, &si, cpuIn);
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuOut = cpu; cpuOut.ptr += 5 * m_descriptorSize;
+        D3D12_UNORDERED_ACCESS_VIEW_DESC uo{}; uo.Format = outFormat; uo.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+        m_dev->CreateUnorderedAccessView(sharpening ? m_smoothed : out, nullptr, &uo, cpuOut);
+    }
+    if (sharpening) {   // the sharpening pass: the upscaler's (or the edge pass's) picture in, the shared output out
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuIn = cpu; cpuIn.ptr += 2 * m_descriptorSize;
+        D3D12_SHADER_RESOURCE_VIEW_DESC si{}; si.Format = outFormat; si.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        si.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; si.Texture2D.MipLevels = 1;
+        m_dev->CreateShaderResourceView(smoothing ? m_smoothed : m_unsharpened, &si, cpuIn);
         D3D12_CPU_DESCRIPTOR_HANDLE cpuOut = cpu; cpuOut.ptr += 3 * m_descriptorSize;
         D3D12_UNORDERED_ACCESS_VIEW_DESC uo{}; uo.Format = outFormat; uo.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
         m_dev->CreateUnorderedAccessView(out, nullptr, &uo, cpuOut);
     }
 
     m_list->Reset(m_alloc[slot], nullptr);
-    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 3);
+    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 4);
     // the shared textures come in COMMON
     Transition(in, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     if (flow) Transition(flow, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -488,7 +577,7 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
         m_list->Dispatch((inW + 7) / 8, (inH + 7) / 8, 1);
     }
     Transition(m_motion, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 3 + 1);
+    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 4 + 1);
 
     // 2. the upscaler: FSR 3, or DLSS
     bool evaluated = true; char evalError[96] = {};
@@ -499,7 +588,7 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
         d.depth = ffxApiGetResourceDX12(m_depth, FFX_API_RESOURCE_STATE_COMPUTE_READ);
         d.motionVectors = ffxApiGetResourceDX12(m_motion, FFX_API_RESOURCE_STATE_COMPUTE_READ);
         d.reactive = ffxApiGetResourceDX12(estimating ? m_distrust : nullptr, FFX_API_RESOURCE_STATE_COMPUTE_READ);   // where the motion cannot be trusted
-        d.output = ffxApiGetResourceDX12(sharpening ? m_unsharpened : out, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
+        d.output = ffxApiGetResourceDX12(upscaled, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
         d.jitterOffset = { 0.0f, 0.0f }; d.motionVectorScale = { 1.0f, 1.0f };   // vectors in the game's pixels
         d.renderSize = { inW, inH }; d.upscaleSize = { outW, outH };
         d.enableSharpening = sharpen > 0.001f; d.sharpness = std::clamp(sharpen, 0.0f, 1.0f);
@@ -512,7 +601,7 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
     if (!fsr) {
     p->Set(NVSDK_NGX_Parameter_Color, in);
-    p->Set(NVSDK_NGX_Parameter_Output, sharpening ? m_unsharpened : out);
+    p->Set(NVSDK_NGX_Parameter_Output, upscaled);
     p->Set(NVSDK_NGX_Parameter_Depth, m_depth);
     p->Set(NVSDK_NGX_Parameter_MotionVectors, m_motion);
     // where the measured motion cannot be trusted, DLSS leans on this frame instead of its history (none with frame generation's flow)
@@ -529,9 +618,26 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
     if (NVSDK_NGX_FAILED(r)) { evaluated = false; snprintf(evalError, sizeof evalError, "EvaluateFeature(DLSS): %s", ResultName(r)); }
     }
 
-    // 3. sharpening, from DLSS's picture into the shared output (DLSS leaves its own heap and root signature bound)
-    if (sharpening) {
+    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 4 + 2);
+    // 3. edge smoothing, from the upscaler's picture (the upscaler leaves its own heap and root signature bound)
+    if (smoothing) {
         Transition(m_unsharpened, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        m_list->SetDescriptorHeaps(1, heaps);
+        m_list->SetComputeRootSignature(m_rootSig);
+        m_list->SetPipelineState(m_edgesPso);
+        D3D12_GPU_DESCRIPTOR_HANDLE gpuIn = gpu; gpuIn.ptr += 4 * m_descriptorSize;
+        D3D12_GPU_DESCRIPTOR_HANDLE gpuOut = gpu; gpuOut.ptr += 5 * m_descriptorSize;
+        m_list->SetComputeRootDescriptorTable(0, gpuIn);
+        m_list->SetComputeRootDescriptorTable(1, gpuOut);
+        const EdgeConstants ec{ outW, outH, std::clamp(edges, 0.0f, 1.0f), 0.0f };
+        m_list->SetComputeRoot32BitConstants(2, 4, &ec, 0);
+        m_list->Dispatch((outW + 7) / 8, (outH + 7) / 8, 1);
+        Transition(m_unsharpened, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
+    // 4. sharpening, into the shared output
+    if (sharpening) {
+        ID3D12Resource* const source = smoothing ? m_smoothed : m_unsharpened;
+        Transition(source, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         m_list->SetDescriptorHeaps(1, heaps);
         m_list->SetComputeRootSignature(m_rootSig);
         m_list->SetPipelineState(m_sharpenPso);
@@ -543,14 +649,14 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
         const SharpenConstants sc = fsr ? SharpenConstants{ outW, outH, 1.0f, sharpen - 1.0f } : SharpenConstants{ outW, outH, std::min(sharpen, 1.0f), std::max(sharpen, 1.0f) };
         m_list->SetComputeRoot32BitConstants(2, 4, &sc, 0);
         m_list->Dispatch((outW + 7) / 8, (outH + 7) / 8, 1);
-        Transition(m_unsharpened, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        Transition(source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
 
     Transition(in, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
     if (flow) Transition(flow, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
     Transition(out, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
-    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 3 + 2);
-    m_list->ResolveQueryData(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 3, 3, m_timestampReadback, static_cast<UINT64>(slot) * 24);
+    m_list->EndQuery(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 4 + 3);
+    m_list->ResolveQueryData(m_timestamps, D3D12_QUERY_TYPE_TIMESTAMP, slot * 4, 4, m_timestampReadback, static_cast<UINT64>(slot) * 32);
     m_list->Close();
 
     // submitted even when DLSS failed, so "done" is always signalled for a queued run
@@ -567,6 +673,8 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
         if (m_estimator.TakeAverages(x, y, length, cost, distrust, frames))
             Log("motion estimator: over %llu frames, average vector (%.2f, %.2f) px, average length %.2f px, match cost %.4f; motion %.2f ms of %.2f ms; "
                 "the upscaler told to lean on the current frame over %.1f%% of the picture", (unsigned long long)frames, x, y, length, cost, m_motionMs, m_gpuMs, distrust * 100.0);
+        if (smoothing || sharpening)
+            Log("%s upscaler: after the upscaler %.2f ms (edge smoothing %.2f, sharpening %.2f)", Name(), m_afterMs, smoothing ? edges : 0.0f, sharpen);
         double stage[4];
         if (m_estimator.TakeStageTimes(stage))
             Log("motion estimator: stages %.3f ms pyramid, %.3f search, %.3f median, %.3f every pixel", stage[0], stage[1], stage[2], stage[3]);
