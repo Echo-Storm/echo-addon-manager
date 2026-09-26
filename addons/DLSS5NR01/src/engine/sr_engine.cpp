@@ -4,6 +4,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 #include "nvsdk_ngx.h"
 #include "nvsdk_ngx_defs.h"
@@ -151,6 +152,17 @@ void FfxMessage(uint32_t type, const wchar_t* message) {
     g_ffxLog(line);
 }
 
+// NGX's log (the reasons it gives when DLSS does not start) into the addon's log: errors and warnings only, as Neural Rendering does.
+std::function<void(const char*)> g_ngxLog;
+void NVSDK_CONV NgxMessage(const char* message, NVSDK_NGX_Logging_Level, NVSDK_NGX_Feature) {
+    if (!g_ngxLog || !message) return;
+    std::string line(message);
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+    if (line.find("error") == std::string::npos && line.find("warning") == std::string::npos) return;
+    if (line.find("NGXLoadConfig") != std::string::npos || line.find("NGXCore") != std::string::npos) return;   // noise on every start
+    g_ngxLog(("[ngx] " + line).c_str());
+}
+
 } // namespace
 
 bool SrEngine::HasFeature() const { return m_backend == Backend::Fsr ? (m_ffx && m_ffx->context) : m_feature != nullptr; }
@@ -259,15 +271,35 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
     // NGX, with NVIDIA's runtime from the addon's dlss folder
     const wchar_t* paths[] = { runtimeDir.c_str() };
     NVSDK_NGX_FeatureCommonInfo info{}; info.PathListInfo.Path = paths; info.PathListInfo.Length = 1;
+    g_ngxLog = [this](const char* m) { Log("%s", m); };
+    info.LoggingInfo.LoggingCallback = NgxMessage; info.LoggingInfo.MinimumLoggingLevel = NVSDK_NGX_LOGGING_LEVEL_ON;
+    info.LoggingInfo.DisableOtherLoggingSinks = false;
+    const std::wstring runtime = runtimeDir + L"\\nvngx_dlss.dll";
+    if (GetFileAttributesW(runtime.c_str()) == INVALID_FILE_ATTRIBUTES)
+        Log("DLSS upscaler: NVIDIA's runtime is not at %ls (error %lu); NGX will look for one elsewhere", runtime.c_str(), GetLastError());
     NVSDK_NGX_Result r = NVSDK_NGX_D3D12_Init(kAppId, dataPath.c_str(), m_dev, &info);
     if (NVSDK_NGX_FAILED(r)) { Fail("NGX Init: %s", ResultName(r)); return false; }
     NVSDK_NGX_Parameter* p = nullptr;
     if (NVSDK_NGX_FAILED(NVSDK_NGX_D3D12_AllocateParameters(&p)) || !p) { Fail("NGX parameters"); return false; }
     m_params = p;
-    int available = 0;
+    // Available, or why not: NGX says whether the driver is too old (and which it needs) and what went wrong when it set the feature up
+    // (the runtime not found or not accepted, for example); both go into the message, so a report says more than "not available".
+    int available = 0, needsDriver = 0, initResult = 0;
+    unsigned minMajor = 0, minMinor = 0;
     NVSDK_NGX_Parameter* caps = nullptr;
-    if (NVSDK_NGX_SUCCEED(NVSDK_NGX_D3D12_GetCapabilityParameters(&caps)) && caps) { caps->Get(NVSDK_NGX_Parameter_SuperSampling_Available, &available); NVSDK_NGX_D3D12_DestroyParameters(caps); }
-    if (!available) { Fail("DLSS Super Resolution is not available on this graphics card or driver"); return false; }
+    if (NVSDK_NGX_SUCCEED(NVSDK_NGX_D3D12_GetCapabilityParameters(&caps)) && caps) {
+        caps->Get(NVSDK_NGX_Parameter_SuperSampling_Available, &available);
+        caps->Get(NVSDK_NGX_Parameter_SuperSampling_NeedsUpdatedDriver, &needsDriver);
+        caps->Get(NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMajor, &minMajor);
+        caps->Get(NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMinor, &minMinor);
+        caps->Get(NVSDK_NGX_Parameter_SuperSampling_FeatureInitResult, &initResult);
+        NVSDK_NGX_D3D12_DestroyParameters(caps);
+    }
+    if (!available) {
+        if (needsDriver) Fail("DLSS needs a newer NVIDIA driver (%u.%u or later)", minMajor, minMinor);
+        else Fail("DLSS Super Resolution did not start: %s, 0x%08x (NVIDIA's runtime: %ls)", ResultName(static_cast<NVSDK_NGX_Result>(initResult)), static_cast<unsigned>(initResult), runtime.c_str());
+        return false;
+    }
     m_ready = true;
     Log("DLSS upscaler ready on its own D3D12 device (runtime from %ls)", runtimeDir.c_str());
     return true;
@@ -285,6 +317,7 @@ bool SrEngine::Shutdown() {
         delete m_ffx; m_ffx = nullptr;
         g_ffxLog = nullptr;
     }
+    g_ngxLog = nullptr;
     if (m_feature) { NVSDK_NGX_D3D12_ReleaseFeature(static_cast<NVSDK_NGX_Handle*>(m_feature)); m_feature = nullptr; }
     if (m_params) { NVSDK_NGX_D3D12_DestroyParameters(static_cast<NVSDK_NGX_Parameter*>(m_params)); m_params = nullptr; }
     if (m_dev && m_backend == Backend::Dlss) NVSDK_NGX_D3D12_Shutdown1(m_dev);
