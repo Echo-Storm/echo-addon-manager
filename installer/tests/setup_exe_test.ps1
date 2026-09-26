@@ -133,7 +133,9 @@ $third = Start-Process -FilePath $setup -ArgumentList ($common + @('--test-close
 $thirdEnded = $third.WaitForExit(20000)
 if (-not $thirdEnded) { Stop-Process -Id $third.Id -Force -ErrorAction SilentlyContinue }
 Check 'once the first has closed, Setup can be opened again' ($thirdEnded -and $third.ExitCode -eq 0) "ended=$thirdEnded code=$($third.ExitCode)"
-Check 'opening the window changed nothing in the folder' ((Hash "$ls3\Lossless.dll") -eq $before -and -not (Test-Path "$ls3\Lossless_original.dll") -and -not (Test-Path "$ls3\backups"))
+$same = (Hash "$ls3\Lossless.dll") -eq $before; $orig = Test-Path "$ls3\Lossless_original.dll"; $bk = Test-Path "$ls3\backups"
+$left = (Get-ChildItem $ls3 -Force -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName.Substring($ls3.Length) }) -join ' '
+Check 'opening the window changed nothing in the folder' ($same -and -not $orig -and -not $bk) "Lossless.dll unchanged=$same, Lossless_original.dll=$orig, backups=$bk; in the folder: $left"
 Check 'the window left no write-test file behind' (-not (Get-ChildItem $ls3 -Force -Filter '.echo_setup_write_test_*' -ErrorAction SilentlyContinue))
 
 }   # end of the window checks

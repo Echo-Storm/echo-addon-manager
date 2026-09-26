@@ -42,6 +42,9 @@ $suites = [ordered]@{
                    Build = @('manager', 'Lossless', 'eam_guitest');
                    Runs = @(@('window (defaults)', "$mgr\eam_guitest.exe", @()), @('window (saved placement)', "$mgr\eam_guitest.exe", @('place')),
                             @('window (saved placement, interface size 150 %)', "$mgr\eam_guitest.exe", @('scaled'))) }
+    runtimes  = @{ When = '^manager/src/addon/runtime_files|^manager/tools/runtime_test';
+                   Build = @('manager', 'eam_runtimetest');
+                   Runs = @(, @('Runtimes list (a runtime file read, loaded under another path spelling)', "$mgr\eam_runtimetest.exe", @("$nrBuild\Release"))) }
     installer = @{ When = '^installer/src/core/|^installer/tests/(installer_test|payload_test)|^installer/CMakeLists|^manager/sdk/include/eam/version\.h';
                    Build = @('installer', 'setup_core', 'setup_test', 'setup_payload_test');
                    Runs = @(@('installer core (fake Lossless Scaling folders)', "$root\installer\build\Release\setup_test.exe", @()),

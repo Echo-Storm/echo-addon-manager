@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.9.5 (not released yet)
+## 0.9.5 (2026-09-26)
+
+FSR 4 on any card, runtimes you can see and switch, colour and tone in the upscalers, HDR games in Neural Rendering, and a recorder
+that turns a bug into a file we can replay.
 
 - **Runtimes, at the bottom of the addon list.** Each file the addons run on is listed: the DLSS 5 model, NVIDIA's DLSS and AMD's FSR.
   - **What each line shows:** a tick when the file is loaded right now, a circle when its addon is on and waits for a game to be
@@ -43,6 +46,7 @@
     no upscaler.
   - **Test host:** the compose check starts counting at the first result, so a slow first model build (NVIDIA's cold start, up to a
     second) no longer fails it.
+- **Licences:** FSR 4.1.1b ships with AMD's FidelityFX SDK 2.x licence (binary form) beside it, and `NOTICE.md` credits AMD and the OptiScaler team.
 - **DLSS model E** (DLSS 3's CNN model) as a third choice beside K and M: a user reports K and M soften a still picture here.
 - **Tests:** matrix scenarios `fsr_runtime_switch` and `dlss_runtime_switch` switch the runtime mid-run (the host test's `nisswitch=`).
 

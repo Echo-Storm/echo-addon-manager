@@ -27,6 +27,7 @@ new. The original copyright and licence are in [LICENSE](LICENSE), which must st
 | [MinHook](https://github.com/TsudaKageyu/minhook) | BSD-2-Clause | fetched by CMake for the manager (its code hooks and the Windowed feature) |
 | Icon shapes | drawn in the manner of the [Lucide](https://lucide.dev) set (ISC) | `manager/sdk/include/eam/icons.h` |
 | [AMD FidelityFX API headers](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) (SDK v1.1.4, FSR 3.1.4), unchanged | MIT (AMD) | `addons/DLSS5NR01/third_party/ffx`, compiled into the upscaler addons |
+| FSR 4.1.1b INT8 with the RDNA 2 fix: AMD's FSR 4 upscaler library (AMD FidelityFX Upscaler Library 4.1.1.2740), as changed by the OptiScaler team so it runs on cards AMD's own FSR 4 does not; not signed. With thanks to the OptiScaler team | AMD's FidelityFX SDK 2.x licence (binary form; `LICENSE.txt` beside it, from `addons/DLSS5NR01/third_party/ffx4`) | fetched by `tools/fetch_fsr4.ps1` (pinned SHA-256); ships in `addons/FSR3UPSC/runtimes/FSR/0dd77d9c/` with `ABOUT.txt` and `LICENSE.txt`, as the FSR Upscaler's second choice (0.9.5). A stand-in until AMD's own FSR 4 runs on every card |
 | AMD's FidelityFX runtime (`amd_fidelityfx_dx12.dll`, the SDK v1.1.4 prebuilt, signed by AMD), unmodified | MIT (AMD) | fetched by `tools/fetch_ffx_sdk.ps1` (pinned SHA-256, AMD's signature checked); ships in `addons/FSR3UPSC/fsr/` with `AMD-FidelityFX-LICENSE.txt`, with the FSR Upscaler (in the release since 0.9.1) |
 
 ## NVIDIA software in the release (not MIT)

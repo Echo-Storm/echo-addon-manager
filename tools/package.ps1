@@ -44,7 +44,8 @@ $addons = @(
                   'fsr\amd_fidelityfx_dx12.dll' = "$root\addons\DLSS5NR01\external\ffx\bin\amd_fidelityfx_dx12.dll";
                   # the second choice in the manager's Runtimes list: FSR 4.1.1b, OptiScaler's build (tools\fetch_fsr4.ps1)
                   'runtimes\FSR\0dd77d9c\amd_fidelityfx_dx12.dll' = "$root\addons\DLSS5NR01\external\fsr4\amd_fidelityfx_dx12.dll";
-                  'runtimes\FSR\0dd77d9c\ABOUT.txt' = "$root\addons\DLSS5NR01\products\FSR3UPSC\FSR4-ABOUT.txt" } }
+                  'runtimes\FSR\0dd77d9c\ABOUT.txt' = "$root\addons\DLSS5NR01\products\FSR3UPSC\FSR4-ABOUT.txt";
+                  'runtimes\FSR\0dd77d9c\LICENSE.txt' = "$root\addons\DLSS5NR01\third_party\ffx4\LICENSE.txt" } }
 )
 $included = @(); $skipped = @()
 foreach ($a in $addons) {
