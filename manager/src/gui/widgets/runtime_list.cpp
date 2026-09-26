@@ -50,8 +50,9 @@ RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows, int open
         const bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
         if (ImGui::IsItemHovered()) dl->AddRectFilled(p, ImVec2(p.x + w - buttons, p.y + h), th::U(th::kRowHover, a), 3.0f);
         const float ico = ImGui::GetFontSize() * 0.9f;
-        // a tick: loaded now; a cross: not (the addon is off, has not started on it yet, or the file is not there)
-        const char* glyph = r.loaded ? ui::icons::kCheck : ui::icons::kClose;
+        // a tick: loaded now; a circle: its addon is on and loads it when Lossless Scaling scales a game; a cross: its addon is off (or no file)
+        const bool waiting = !r.loaded && r.addonOn && r.exists;
+        const char* glyph = r.loaded ? ui::icons::kCheck : waiting ? ui::icons::kCircle : ui::icons::kClose;
         const ImU32 tint = r.loaded ? th::U(th::kAccent, a) : th::U(th::kMuted, a);
         std::string note;
         if (!r.exists) note = "not found";
@@ -76,7 +77,9 @@ RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows, int open
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
             ImGui::Text("%s runtime, used by %s (%s)", r.label.c_str(), r.addonName.c_str(), r.addonOn ? "on" : "off");
             if (r.loaded) ImGui::TextColored(th::V(th::kAccent), "Loaded now");
-            else ImGui::TextDisabled("Not loaded now");
+            else if (waiting) ImGui::TextDisabled("Ready: it loads when Lossless Scaling scales a game with %s on", r.addonName.c_str());
+            else if (!r.exists) ImGui::TextDisabled("Not loaded: the file is not there");
+            else ImGui::TextDisabled("Not loaded: %s is off", r.addonName.c_str());
             if (!r.exists) ImGui::Text("Not found: %s", Utf8(r.path).c_str());
             else if (!r.read) ImGui::TextDisabled("Reading the file...");
             else {

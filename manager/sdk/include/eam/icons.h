@@ -211,6 +211,7 @@ inline constexpr const char* kUpscaleFast = "M9.5 9.5H20V20H9.5ZM3 13h3.5M3 16.5
 inline constexpr const char* kKeyboard   = "M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2ZM6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8";
 inline constexpr const char* kMonitor    = "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 21h8M12 17v4";
 inline constexpr const char* kEye        = "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z";
+inline constexpr const char* kCircle     = "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z";
 inline constexpr const char* kAlert      = "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01";
 } // namespace icons
 

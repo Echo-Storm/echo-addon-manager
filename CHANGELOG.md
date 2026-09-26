@@ -3,7 +3,8 @@
 ## Unreleased
 
 - **Runtimes, at the bottom of the addon list.** Each file the addons run on is listed: the DLSS 5 model, NVIDIA's DLSS and AMD's FSR.
-  - **What each line shows:** a tick when the file is loaded right now and a cross when it isn't, then its version. "unsigned" or
+  - **What each line shows:** a tick when the file is loaded right now, a circle when its addon is on and waits for a game to be
+    scaled, and a cross when its addon is off; then its version. "unsigned" or
     "modified" appears when the file is not as its maker signed it. Hovering shows the maker, the signer, the path and the SHA-256.
   - **Switching:** + opens the files there are for that runtime, and one click switches while the game runs. The upscaler starts again
     on the new file in about a second; Neural Rendering reloads its model.

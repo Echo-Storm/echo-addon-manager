@@ -235,7 +235,7 @@ int main(int argc, char** argv) {
             for (int i = 0; i < 3; ++i) { widgets::AddonCard(*list[i], i, i == selected); ImGui::Dummy(ImVec2(0, S(1))); }
             {   // as tab_addons.cpp: the runtimes at the bottom of the list
                 std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir);
-                for (RuntimeFile& r : rows) r.loaded = r.addonOn && r.exists;   // the preview loads none of them: as a running install shows them
+                for (RuntimeFile& r : rows) r.loaded = r.addonOn && r.exists && r.addonId == "DLSS5NR01";   // the preview loads none: one running, one waiting, one off
                 // EAM_PREVIEW_RUNTIME_MENU=<line>: that line's + menu shown open
                 char* mv = nullptr; size_t mn = 0; _dupenv_s(&mv, &mn, "EAM_PREVIEW_RUNTIME_MENU");
                 const int openMenu = mv && *mv ? atoi(mv) : -1; free(mv);

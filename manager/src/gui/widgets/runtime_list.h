@@ -1,6 +1,6 @@
 #pragma once
 // The runtime files the addons use, as a short fixed list at the bottom of the addon list: one line each, a tick when the file is loaded
-// (the addon runs on it now) and a cross when it is not; the name, the version, and "unsigned" or "modified" (signed, then changed) when
+// (the addon runs on it now), a circle when its addon is on and waits for a game to be scaled, a cross when its addon is off; the name, the version, and "unsigned" or "modified" (signed, then changed) when
 // the file is not as its maker signed it; + to choose another file. Hovering a line shows the rest (file, maker, signer, SHA-256, which
 // addon uses it).
 #include "../../addon/runtime_files.h"
