@@ -114,6 +114,29 @@ def scenario_hdr(ctx, res, text, frame):
     res.check('...with no failure', 'SwitchOff' not in text and 'switched off:' not in text.lower() and 'Compose11: HLSL' not in text)
 
 
+def scenario_record_replay(ctx, res, text, frame):
+    # the recorder on during the run: it saves by itself once it holds 60 frames; the file is then looked into (nr_lsrec info) and played back
+    # through the addon in a second run of the host
+    import glob
+    saved = re.search(r'recorder: Saved ([0-9.]+) s \((\d+) frames, .*? to (.+\.lsrec)', text)
+    res.check('the recorder saved the last frames', saved is not None, saved.group(0)[10:] if saved else 'no "recorder: Saved" line')
+    rec_lines = [l for l in text.splitlines() if 'recorder:' in l]
+    res.check('...with no failure', not any('could not' in l or 'cannot' in l or 'did not finish' in l for l in rec_lines))
+    if not saved:
+        return
+    path = saved.group(3).strip()
+    tool = os.path.join(ctx['nr'], 'nr_lsrec.exe')
+    info = subprocess.run([tool, 'info', path], capture_output=True, text=True, timeout=60)
+    frames = re.search(r'(\d+) frames over ([0-9.]+) s', info.stdout)
+    res.check('nr_lsrec reads it: the frames and their time', info.returncode == 0 and frames is not None and int(frames.group(1)) >= 60,
+              (frames.group(0) if frames else info.stdout.strip()[:200]))
+    out = os.path.join(ctx['out'], 'replay').replace('\\', '/')
+    rc, rtext, _, secs = run_host(ctx['nr'], ctx['snippet'], ['offframes=150', 'replay=' + path.replace('\\', '/'), 'replayOut=' + out], ctx['out'], 'record_replay_second')
+    line = re.search(r'\[check-replay\] .*', rtext)
+    res.check('played back through the addon, its result on the frames', rc == 0 and 'REPLAY COMPOSED' in rtext, (line.group(0)[15:] if line else 'no check-replay line') + ' (%.0f s)' % secs)
+    res.check('...and pictures of it written', len(glob.glob(os.path.join(out, 'replay_*.bmp'))) > 0)
+
+
 def scenario_base(ctx, res, text, frame):
     res.check('compose applied', 'COMPOSE APPLIED' in text)
     mc = motion_counts(text)
@@ -412,6 +435,7 @@ SCENARIOS = [
     ('present_wait', ['offframes=150', 'presentWait=1'], scenario_present_mode),   # the same, each frame waiting for its own result
     ('hdr_scrgb', ['offframes=150', 'hdr=scrgb'], scenario_hdr),   # ...then the presented frames HDR: 16-bit float scRGB
     ('hdr_pq', ['offframes=150', 'hdr=pq'], scenario_hdr),         # ...and HDR10 (10-bit PQ)
+    ('record_replay', ['recordOn=1', 'recordSaveAfter=60', 'recordSeconds=3', 'recordFolder=@OUT@/recordings'], scenario_record_replay),   # save, read, play back
     ('hud_left_half', ['hud=0,0,0.5,1', 'hudFeather=0'], scenario_hud),
     ('sharpen', ['sharpen=0.8'], scenario_sharpen),
     ('shadows_up', ['shadows=1'], scenario_shadows_up),
@@ -530,7 +554,7 @@ def main():
         return 0
     os.makedirs(a.out, exist_ok=True)
     only = set(x for x in a.only.split(',') if x) | (QUICK if a.quick else set())
-    ctx = {'pat': pattern()}
+    ctx = {'pat': pattern(), 'nr': a.nr, 'snippet': a.snippet, 'out': a.out}
     failed = 0
     for name, keys, checker in SCENARIOS:
         if only and name not in only and name != 'base':

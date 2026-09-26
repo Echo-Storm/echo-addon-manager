@@ -41,7 +41,7 @@ set(NR_ADDON_SOURCES
     src/addon/addon.cpp src/addon/runtime.cpp src/addon/panel.cpp src/addon/tasks.cpp src/addon/settings.cpp src/addon/log.cpp
     src/addon/screenshot.cpp src/addon/screenshot_pixels.cpp src/addon/hud_editor.cpp src/addon/auto_quality.cpp
     src/addon/bridge.cpp src/addon/frame_tap.cpp src/addon/gpu_timer11.cpp
-    src/addon/present_hook.cpp src/addon/compose11.cpp src/addon/requirements.cpp src/addon/scaler11.cpp src/addon/hdr.cpp
+    src/addon/present_hook.cpp src/addon/compose11.cpp src/addon/requirements.cpp src/addon/scaler11.cpp src/addon/hdr.cpp src/addon/lsrec.cpp src/addon/recorder.cpp
     src/engine/nr_engine.cpp
     src/engine/dlaa_model.cpp src/engine/sr_engine.cpp src/engine/flow_estimator.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -81,11 +81,11 @@ if(EXISTS ${FFX_DLL})
 endif()
 
 # ---- offline test host: loads the built addon with a fake IHost, headless ImGui and a synthetic LSFG pattern ----
-add_executable(nr_hosttest tools/addon_host_test.cpp
+add_executable(nr_hosttest tools/addon_host_test.cpp src/addon/lsrec.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp)
-target_include_directories(nr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${CMAKE_SOURCE_DIR}/../../manager/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+target_include_directories(nr_hosttest PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/../../manager/sdk/include ${CMAKE_SOURCE_DIR}/tools ${CMAKE_SOURCE_DIR}/../../manager/tools ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(nr_hosttest PRIVATE d3d11 dxgi d3dcompiler)
 add_dependencies(nr_hosttest DLSS5NR01 DLSS4DLAA FSR3UPSC)
 
@@ -95,6 +95,10 @@ target_include_directories(nr_taptest PRIVATE src)
 target_link_libraries(nr_taptest PRIVATE d3d11)
 
 # ---- offline test of the settings and looks (the table, looks as text and back, the settings file through a stand-in host)
+add_executable(nr_rectest tools/record_test.cpp src/addon/lsrec.cpp)
+target_include_directories(nr_rectest PRIVATE src)
+add_executable(nr_lsrec tools/lsrec_tool.cpp src/addon/lsrec.cpp src/addon/screenshot_pixels.cpp)
+target_include_directories(nr_lsrec PRIVATE src)
 add_executable(nr_settingstest tools/settings_test.cpp src/addon/settings.cpp src/addon/screenshot_pixels.cpp)
 target_include_directories(nr_settingstest PRIVATE src ${CMAKE_SOURCE_DIR}/../../manager/sdk/include)
 

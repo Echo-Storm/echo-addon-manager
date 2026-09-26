@@ -22,6 +22,7 @@
 #include "eam/addon_sdk.h"
 #include "eam/widgets.h"
 #include "ui_shot.h"
+#include "addon/lsrec.h"
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -222,6 +223,9 @@ int main(int argc, char** argv) {
     // hdr=scrgb|pq: after the rest, the presented frames in HDR (see [check-hdr])
     int hdrMode = 0;
     for (int i = 4; i < argc; ++i) { if (!strcmp(argv[i], "hdr=scrgb")) hdrMode = 1; if (!strcmp(argv[i], "hdr=pq")) hdrMode = 2; }
+    // replay=<file.lsrec>: after the rest, a recording's frames presented (see [check-replay]); replayOut=<folder>: pictures of the result
+    std::string replayPath, replayOut;
+    for (int i = 4; i < argc; ++i) { if (!strncmp(argv[i], "replay=", 7)) replayPath = argv[i] + 7; if (!strncmp(argv[i], "replayOut=", 10)) replayOut = argv[i] + 10; }
 
     // ImGui: headless normally; with shot= it renders through the DX11 backend into an offscreen target, in the manager's theme
     ImGuiContext* ctx = ImGui::CreateContext(); ImGuiIO& io = ImGui::GetIO(); io.DisplaySize = ImVec2(1280, 800); io.DeltaTime = 1.0f / 60; io.IniFilename = nullptr;
@@ -238,7 +242,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "nisedge", 7) || !strncmp(argv[i], "nisline", 7) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12) || !strncmp(argv[i], "hdr=", 4)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "nisedge", 7) || !strncmp(argv[i], "nisline", 7) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12) || !strncmp(argv[i], "hdr=", 4) || !strncmp(argv[i], "replay", 6)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     // a 10-bit frame is HDR10 only when the display runs in HDR, and the test's display may not: the addon is told so, as a user can
@@ -261,7 +265,7 @@ int main(int argc, char** argv) {
         if (shotMode) {
             ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ImVec2((float)shotW, 0.0f));
             ImGui::Begin("Addon Manager", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
-            for (const char* h : { "Model (what it does to the picture)", "Motion", "Quality and performance", "Picture (sharpness, tone, colour, grain)", "Keep the HUD untouched", "Upscaling", "Compare and hotkeys", "Games (a look per program)", "Frame detection (advanced)", "Technical status", "Advanced" })
+            for (const char* h : { "Model (what it does to the picture)", "Motion", "Quality and performance", "Picture (sharpness, tone, colour, grain)", "Keep the HUD untouched", "Upscaling", "Compare and hotkeys", "Recording (for bug reports and tests)", "Games (a look per program)", "Frame detection (advanced)", "Technical status", "Advanced" })
                 if (openSections) ImGui::GetStateStorage()->SetInt(ImGui::GetID(h), 1);
         } else { ImGui::SetNextWindowSize(ImVec2(900, 700)); ImGui::Begin("Addon Manager"); }
         Render(); ImGui::End();
@@ -627,6 +631,89 @@ int main(int argc, char** argv) {
                        (unsigned long long)last.bad, last.bad == 0 ? "CLEAN" : "BAD VALUES");
             }
             if (pic) pic->Release();
+        }
+
+        // replay=: a recording (.lsrec, as the addon's recorder saves them) presented frame by frame at its own pace, with frame generation
+        // off, so the model takes the frames at Present as it would in the game. Looped until at least 300 presents. Every tenth present
+        // (after the first 120) the buffer the addon composed two presents ago is compared with the frame that went into it: the model's
+        // result must be on it. replayOut= writes it as a picture every 30 presents.
+        if (!replayPath.empty()) {
+            nr::lsrec::Reader rec; std::string error;
+            std::wstring widePath(replayPath.size(), L'\0');
+            widePath.resize(std::max(0, MultiByteToWideChar(CP_UTF8, 0, replayPath.c_str(), (int)replayPath.size(), widePath.data(), (int)widePath.size())));
+            if (!rec.Open(widePath, &error) || !rec.Count()) printf("[check-replay] %s: %s\n", replayPath.c_str(), error.empty() ? "no frames" : error.c_str());
+            else {
+                const nr::lsrec::FileHeader& rh = rec.Header();
+                const DXGI_FORMAT rf = (DXGI_FORMAT)rh.format;
+                D3D11_TEXTURE2D_DESC td{}; td.Width = rh.width; td.Height = rh.height; td.MipLevels = 1; td.ArraySize = 1; td.Format = rf; td.SampleDesc.Count = 1;
+                td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+                ID3D11Texture2D* src = nullptr; dev->CreateTexture2D(&td, nullptr, &src);
+                const HRESULT hr = sc->ResizeBuffers(2, rh.width, rh.height, rf, 0);
+                if (!src || FAILED(hr)) printf("[check-replay] a %ux%u swap chain of format %u could not be made (0x%08x)\n", rh.width, rh.height, rh.format, (unsigned)hr);
+                else {
+                    if (!replayOut.empty()) CreateDirectoryA(replayOut.c_str(), nullptr);
+                    const size_t total = std::max<size_t>(300, rec.Count());
+                    std::vector<uint8_t> px, history[2];
+                    int samples = 0, composed = 0, pictures = 0; bool readFailed = false;
+                    for (size_t k = 0; k < total && !readFailed; ++k) {
+                        const size_t i = k % rec.Count();
+                        if (!rec.Read(i, px)) { readFailed = true; break; }
+                        ID3D11Texture2D* bb = nullptr; sc->GetBuffer(0, IID_PPV_ARGS(&bb));
+                        const bool sample = k >= 120 && k % 10 == 0 && rh.bytesPerPixel == 4 && !history[k % 2].empty();
+                        const bool picture = !replayOut.empty() && k >= 120 && k % 30 == 0 && rh.bytesPerPixel == 4;
+                        if (sample || picture) {
+                            D3D11_TEXTURE2D_DESC sd = td; sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+                            ID3D11Texture2D* st = nullptr; dev->CreateTexture2D(&sd, nullptr, &st);
+                            D3D11_MAPPED_SUBRESOURCE m{};
+                            if (st) { dc->CopyResource(st, bb); }
+                            if (st && SUCCEEDED(dc->Map(st, 0, D3D11_MAP_READ, 0, &m))) {
+                                const std::vector<uint8_t>& before = history[k % 2];
+                                uint64_t changed = 0;
+                                for (UINT y = 0; y < rh.height; ++y) {
+                                    const uint8_t* row = (const uint8_t*)m.pData + y * m.RowPitch;
+                                    if (sample) for (UINT x = 0; x < rh.width; ++x) if (memcmp(row + x * 4, before.data() + ((size_t)y * rh.width + x) * 4, 3) != 0) ++changed;
+                                }
+                                if (sample) { samples++; if (changed > (uint64_t)rh.width * rh.height / 20) composed++; }
+                                if (picture) {
+                                    char name[64]; snprintf(name, sizeof name, "/replay_%05zu.bmp", k);
+                                    FILE* fp = fopen((replayOut + name).c_str(), "wb");
+                                    if (fp) {
+                                        const uint32_t rowBytes = rh.width * 4, img = rowBytes * rh.height, fsz = 54 + img, off = 54, ihs = 40; uint8_t fh[14] = { 'B', 'M' }; memcpy(fh + 2, &fsz, 4); memcpy(fh + 10, &off, 4);
+                                        uint8_t ih[40] = {}; memcpy(ih, &ihs, 4); int32_t wv = (int32_t)rh.width, hv = -(int32_t)rh.height; memcpy(ih + 4, &wv, 4); memcpy(ih + 8, &hv, 4);
+                                        uint16_t planes = 1, bpp = 32; memcpy(ih + 12, &planes, 2); memcpy(ih + 14, &bpp, 2); memcpy(ih + 20, &img, 4);
+                                        fwrite(fh, 1, 14, fp); fwrite(ih, 1, 40, fp);
+                                        std::vector<uint8_t> line(rowBytes);
+                                        for (UINT y = 0; y < rh.height; ++y) {
+                                            memcpy(line.data(), (const uint8_t*)m.pData + y * m.RowPitch, rowBytes);
+                                            if (rf == DXGI_FORMAT_R8G8B8A8_UNORM) for (UINT x = 0; x < rh.width; ++x) std::swap(line[x * 4], line[x * 4 + 2]);
+                                            fwrite(line.data(), 1, rowBytes, fp);
+                                        }
+                                        fclose(fp); pictures++;
+                                    }
+                                }
+                                dc->Unmap(st, 0);
+                            }
+                            if (st) st->Release();
+                        }
+                        dc->UpdateSubresource(src, 0, nullptr, px.data(), rh.width * rh.bytesPerPixel, 0);
+                        dc->CopyResource(bb, src);
+                        bb->Release();
+                        history[k % 2] = px;
+                        sc->Present(0, 0); pump();
+                        if (k % 60 == 0) frame("replay"); else emptyFrame();
+                        // the recording's own pace (4 to 50 ms a frame)
+                        const size_t next = (k + 1) % rec.Count();
+                        double ms = 16.7;
+                        if (next && rh.qpcFrequency) ms = (double)(rec.FrameInfo(next).qpc - rec.FrameInfo(i).qpc) * 1000.0 / rh.qpcFrequency;
+                        std::this_thread::sleep_for(std::chrono::microseconds((int64_t)(std::clamp(ms, 4.0, 50.0) * 1000.0)));
+                    }
+                    printf("[check-replay] %zu frames of %ux%u (format %u) from '%s', %zu presents: the model's result was on %d of %d sampled presents (%s); %d pictures%s\n",
+                           rec.Count(), rh.width, rh.height, rh.format, rh.game, total, composed, samples,
+                           readFailed ? "A FRAME COULD NOT BE READ" : samples && composed >= samples / 2 ? "REPLAY COMPOSED" : "REPLAY NOT COMPOSED", pictures,
+                           replayOut.empty() ? "" : (" in " + replayOut).c_str());
+                }
+                if (src) src->Release();
+            }
         }
 
     }

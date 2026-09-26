@@ -175,6 +175,12 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.hotkeys = flag("hotkeys", true);
     c.keyAB = integer("keyAB", VK_F6); c.keySplit = integer("keySplit", VK_F7); c.keySharpDn = integer("keySharpDn", VK_F8);
     c.keySharpUp = integer("keySharpUp", VK_F9); c.keyPreset = integer("keyPreset", VK_F10); c.keyShot = integer("keyShot", VK_F11);
+    c.keyRecord = integer("keyRecord", VK_F12);
+    c.recordOn = flag("recordOn", false);
+    c.recordSeconds = std::clamp(static_cast<float>(number("recordSeconds", 5.0)), 1.0f, 60.0f);
+    c.recordBudgetMb = std::clamp(integer("recordBudgetMb", 3072), 256, 65536);
+    c.recordFolder = text("recordFolder");
+    c.recordSaveAfter = std::max(0, integer("recordSaveAfter", 0));
     c.screenshotFolder = text("screenshotFolder");
     c.autoQuality = flag("autoQuality", false);
     c.autoBudgetMs = std::clamp(static_cast<float>(number("autoBudgetMs", 5.0)), 2.0f, 15.0f);
@@ -221,6 +227,9 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
     put("frameEncoding", std::to_string(c.frameEncoding));
     put("keyAB", std::to_string(c.keyAB)); put("keySplit", std::to_string(c.keySplit)); put("keySharpDn", std::to_string(c.keySharpDn));
     put("keySharpUp", std::to_string(c.keySharpUp)); put("keyPreset", std::to_string(c.keyPreset)); put("keyShot", std::to_string(c.keyShot));
+    put("keyRecord", std::to_string(c.keyRecord));
+    putFlag("recordOn", c.recordOn); put("recordSeconds", Number(c.recordSeconds)); put("recordBudgetMb", std::to_string(c.recordBudgetMb));
+    put("recordFolder", c.recordFolder);
     put("screenshotFolder", c.screenshotFolder);
     putFlag("autoQuality", c.autoQuality); put("autoBudgetMs", Number(c.autoBudgetMs)); put("autoFloor", Number(c.autoFloor));
     putFlag("gameAuto", c.gameAuto);

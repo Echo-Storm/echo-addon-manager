@@ -91,6 +91,19 @@ queue, with GPU-side waits only. A patch on the swap chain's `Present` vtable sl
 presented frame; a compute pass on Lossless Scaling's own device adds the delta. The full design,
 including why each hook is the kind it is, is in [docs/architecture.md](docs/architecture.md).
 
+## Recording (for bug reports)
+
+*Recording* in the panel keeps the last few seconds of the frames the addon receives (the game's frames, before anything is done to
+them) in memory, losslessly compressed, and saves them as a `.lsrec` file on its button or Ctrl+Shift+F12. It's off by default. On, it
+uses some processor time and up to the memory set there (about 2 to 3 GB for 5 seconds of 1080p at 120 frames a second). Files go to
+`Videos\Lossless Scaling`. Sending one with a bug report lets the problem be replayed on another computer:
+
+```
+nr_lsrec info <file.lsrec>
+nr_lsrec export <file.lsrec> <folder> every=10
+nr_hosttest DLSS5NR01.dll - <model path> offframes=150 replay=<file.lsrec> replayOut=<folder>
+```
+
 ## Limitations
 
 - HDR frames (scRGB 16-bit float, HDR10 10-bit) are worked on through an SDR view of them relative to Windows' SDR content

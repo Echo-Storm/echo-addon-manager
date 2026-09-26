@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **A recorder, in all three addons** (Recording, for bug reports and tests). It keeps the last few seconds of the frames the addon receives,
+  losslessly, and saves them as a `.lsrec` file on a button or Ctrl+Shift+F12.
+  - **What it records.** Neural Rendering records the game's frames before the model sees them; the upscalers record Lossless Scaling's
+    frame before NIS.
+  - **What they're for.** A saved file plays back through the addon on another computer (the test host's `replay=`), so a reported
+    problem can be seen and fixed without the reporter's game or display. Recordings also serve as real footage for tuning and
+    comparisons.
+  - **How it works.** Nothing waits. Each frame is copied on the GPU into one of six staging textures, mapped a few frames later
+    without waiting, compressed by background threads straight from the mapped memory, and kept in memory up to a set number of
+    seconds and megabytes. A frame that comes while every copy is busy is left out and counted.
+  - **Cost.** Off by default and free when off. On, it costs processor time on the background threads; a 1080p frame takes about 13 ms
+    on one thread and shrinks to about a third.
+  - **The file.** Our own QOI-style lossless codec, written from QOI's public-domain specification, on 4-byte units, so 8-bit, 10-bit
+    and half-float frames are all lossless.
+  - **Where it goes.** Files go to Videos\Lossless Scaling, or the profile's own Videos folder when Videos is synced by OneDrive (a
+    recording is gigabytes).
+  - **New tools.** `nr_lsrec` shows what is in a recording, exports frames as pictures, and makes a synthetic one. `nr_rectest` tests
+    the codec and file. The matrix scenario `record_replay` records during a run, reads the file back and plays it through the addon.
 - **Neural Rendering works on HDR games.** HDR frames used to stop it with "unsupported frame format". Now it takes 16-bit float (scRGB)
   and 10-bit (HDR10, PQ) frames as well as 8-bit ones. The model and the look controls work on the frame's SDR view: light relative to
   Windows' *SDR content brightness*, a curve that leaves everything up to 75% of white alone and rolls brighter light off smoothly, then

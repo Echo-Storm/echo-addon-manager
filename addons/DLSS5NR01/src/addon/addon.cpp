@@ -20,6 +20,7 @@ std::mutex g_settingsMutex;
 Config g_config;
 std::vector<Look> g_looks;
 std::mutex g_frameMutex;
+Recorder& g_recorder = *new Recorder;
 NrEngine g_engine;
 Bridge g_bridge;
 FrameTap g_tap;
@@ -162,7 +163,8 @@ EAM_EXPORT void AddonShutdown() {
     DropHudSnapshot();
     for (int i = 0; i < 3000 && g_engineStarting; ++i) Sleep(10);   // a model that is loading is let finish
     for (int i = 0; i < 300 && Scanning(); ++i) Sleep(10);          // a requirements scan takes milliseconds (an open file dialog is left: the process is ending)
-    { std::lock_guard<std::mutex> lock(g_frameMutex); g_bridge.Shutdown(); g_compose.Shutdown(); g_engine.Shutdown(); }
+    { std::lock_guard<std::mutex> lock(g_frameMutex); g_recorder.Forget(); g_bridge.Shutdown(); g_compose.Shutdown(); g_engine.Shutdown(); }
+    g_recorder.Shutdown();
     Config config; std::vector<Look> looks;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); config = g_config; looks = g_looks; }
     SaveSettings(g_host, kAddonId, config, looks);

@@ -16,6 +16,7 @@
 #include "addon/hdr.h"
 #include "engine/sr_engine.h"
 #include <windows.h>
+#include <shlobj.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #include <algorithm>
@@ -97,6 +98,7 @@ int g_presentsWithoutTap = 0;
 ID3D11Device* g_presentHookTriedOn = nullptr;   // the device the Present hook was last tried from (once per device, not every pass)
 void ForgetDevice() {   // under g_frameMutex
     screenshot::Forget();
+    g_recorder.Forget();
     g_bridge.Shutdown(); g_compose.Shutdown(); g_tap.Reset();
     g_presentMode = false; g_tapsSeen = 0; g_presentsWithoutTap = 0; g_presentHookTriedOn = nullptr;
     g_seen.clear(); g_tapDevice = nullptr; g_lsChain = nullptr; g_otherChain = nullptr;
@@ -173,6 +175,19 @@ void OnPresent(IDXGISwapChain* sc);
 void Compose(IDXGISwapChain* sc);
 void PresentTap(IDXGISwapChain* sc);
 
+// A frame for the recorder (under g_frameMutex, on the render thread): its settings follow the panel's, and for the tests it saves by itself
+// once recordSaveAfter frames are held.
+void Record(ID3D11DeviceContext* ctx, ID3D11Texture2D* frame, uint32_t source) {
+    static const bool logSet = (g_recorder.SetLog([](const char* m) { Log("%s", m); }), true);
+    (void)logSet;
+    bool on; float seconds; int budget, saveAfter;
+    { std::lock_guard<std::mutex> lock(g_settingsMutex); on = g_config.recordOn; seconds = g_config.recordSeconds; budget = g_config.recordBudgetMb; saveAfter = g_config.recordSaveAfter; }
+    g_recorder.Configure(on, seconds, static_cast<uint32_t>(budget));
+    g_recorder.Offer(ctx, frame, source);
+    static bool savedForTest = false;
+    if (saveAfter > 0 && !savedForTest && g_recorder.GetStatus().frames >= static_cast<uint32_t>(saveAfter)) { savedForTest = true; SaveRecording(); }
+}
+
 // What frames of this format hold, on the display the chain is on (hdr.h), with the SDR white; logged when it changes.
 nr::FrameEncoding FrameEncodingOf(DXGI_FORMAT format, IDXGISwapChain* chain, float* white) {
     int setting;
@@ -240,6 +255,7 @@ void Tap(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     }
     { char text[96]; snprintf(text, sizeof text, "%ux%u %s slot %d", frame.Width, frame.Height, FormatName(frame.Format), d.frameSlot);
       std::lock_guard<std::mutex> lock(g_textMutex); g_frameText = text; }
+    Record(ctx, d.frame, lsrec::kCaptured);   // as it came, before the model sees it
     if (!g_bridge.Ensure(frame.Width, frame.Height, frame.Format)) { SetStatus("unsupported frame format"); ReleaseDecision(d); return; }
     { float white; const nr::FrameEncoding e = FrameEncodingOf(frame.Format, g_lsChain, &white); g_engine.SetFrameEncoding(static_cast<uint32_t>(e), white); }
 
@@ -345,22 +361,23 @@ void ApplyLookNow(const std::string& name, const std::string& data, const char* 
 }
 
 void ReadHotkeys() {
-    bool on; int keys[6];
+    bool on; int keys[7];
     { std::lock_guard<std::mutex> lock(g_settingsMutex);   // only what is needed: a copy of the whole Config would allocate at every present
       on = g_config.hotkeys; keys[0] = g_config.keyAB; keys[1] = g_config.keySplit; keys[2] = g_config.keySharpDn; keys[3] = g_config.keySharpUp; keys[4] = g_config.keyPreset;
-      keys[5] = g_config.keyShot; }
-    static bool wasDown[6] = {};
+      keys[5] = g_config.keyShot; keys[6] = g_config.keyRecord; }
+    static bool wasDown[7] = {};
     static int lookCursor = -1;
     const bool modifiers = on && (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 7; ++i) {
         const bool down = modifiers && keys[i] > 0 && (GetAsyncKeyState(keys[i]) & 0x8000);
         // the upscalers have no split view, looks or screenshots: only before / after and the sharpening keys act there (a look could
         // otherwise overwrite the upscaler's sharpening with one saved for Neural Rendering)
-        const bool applies = !kScalerAddon || i == 0 || i == 2 || i == 3;
+        const bool applies = !kScalerAddon || i == 0 || i == 2 || i == 3 || i == 6;
         if (down && !wasDown[i] && applies) {
             if (i == 0) { g_compare = g_compare == 2 ? 0 : 2; ShowMarker(g_compare == 2 ? 2 : 1); Log("hotkey: %s", g_compare == 2 ? "original only" : "enhanced"); }
             else if (i == 1) { g_compare = g_compare == 1 ? 0 : 1; ShowMarker(g_compare == 1 ? 3 : 1); Log("hotkey: %s", g_compare == 1 ? "split view" : "enhanced"); }
             else if (i == 5) { screenshot::Request(); Log("hotkey: screenshot"); }   // no corner square: it would be in the picture
+            else if (i == 6) { Log("hotkey: save the recording"); SaveRecording(); }   // no corner square either: it would be recorded
             else if (i == 4) {
                 Look next;
                 { std::lock_guard<std::mutex> lock(g_settingsMutex); if (!g_looks.empty()) { lookCursor = (lookCursor + 1) % static_cast<int>(g_looks.size()); next = g_looks[lookCursor]; } }
@@ -469,6 +486,7 @@ void PresentTap(IDXGISwapChain* sc) {   // under g_frameMutex, on the presenting
     ID3D11Texture2D* buffer = nullptr;
     if (FAILED(sc->GetBuffer(0, IID_PPV_ARGS(&buffer)))) { ctx->Release(); return; }
     D3D11_TEXTURE2D_DESC frame; buffer->GetDesc(&frame);
+    Record(ctx, buffer, lsrec::kPresented);   // before the compose puts anything on it
     const bool fits = frame.Width >= 64 && frame.Height >= 64 && g_bridge.Ensure(frame.Width, frame.Height, frame.Format);
     if (!fits && frame.Width >= 64 && frame.Height >= 64) SetStatus("frame generation off: the presented frame's format cannot be given to the model");
     if (fits) {
@@ -805,6 +823,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     NisPass pass;
     if (!FindNisPass(ctx, x, y, z, pass, [](const char* m) { Log("%s", m); })) return false;
     ++g_nisSeen; ++g_nisSinceTap;
+    { ID3D11Texture2D* in = nullptr; if (pass.in && SUCCEEDED(pass.in->QueryInterface(IID_PPV_ARGS(&in)))) { Record(ctx, in, lsrec::kNisInput); in->Release(); } }
     if ((g_nisSeen & 63u) == 1) FollowScalerGame(pass.inW, pass.inH);
     g_scaleInW = pass.inW; g_scaleInH = pass.inH; g_scaleOutW = pass.outW; g_scaleOutH = pass.outH;
     ReadHotkeys();
@@ -948,5 +967,33 @@ bool OnPass(uint32_t x, uint32_t y, uint32_t z, void*) {
 }
 
 void ResetWatchdog() { g_watchdogHits = 0; }
+
+std::wstring RecordFolder() {
+    std::string chosen;
+    { std::lock_guard<std::mutex> lock(g_settingsMutex); chosen = g_config.recordFolder; }
+    if (!chosen.empty()) {
+        std::wstring w(chosen.size(), L'\0');
+        const int n = MultiByteToWideChar(CP_UTF8, 0, chosen.c_str(), static_cast<int>(chosen.size()), w.data(), static_cast<int>(w.size()));
+        w.resize(n > 0 ? n : 0);
+        for (wchar_t& ch : w) if (ch == L'/') ch = L'\\';
+        return w;
+    }
+    PWSTR videos = nullptr; std::wstring folder;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Videos, 0, nullptr, &videos)) && videos) folder = videos;
+    CoTaskMemFree(videos);
+    // Videos moved into OneDrive would upload every recording (gigabytes): the profile's own Videos folder instead
+    if (folder.find(L"\\OneDrive") != std::wstring::npos) {
+        PWSTR profile = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Profile, 0, nullptr, &profile)) && profile) folder = std::wstring(profile) + L"\\Videos";
+        CoTaskMemFree(profile);
+    }
+    return (folder.empty() ? g_lsDir : folder) + L"\\Lossless Scaling";
+}
+
+void SaveRecording() {
+    std::string game;
+    { std::lock_guard<std::mutex> lock(g_textMutex); game = g_focusExe; }
+    if (!g_recorder.Save(RecordFolder(), game)) Log("recorder: nothing saved (%s)", g_recorder.GetStatus().saving ? "a save is running" : "nothing recorded yet");
+}
 
 } // namespace nr

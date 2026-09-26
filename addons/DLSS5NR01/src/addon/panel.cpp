@@ -527,10 +527,10 @@ void DrawPanel() {
             ImGui::SetNextItemWidth(ImGui::CalcTextSize("F12").x + st.FramePadding.x * 2.0f + ImGui::GetFrameHeight() + st.ItemInnerSpacing.x);
             if (ImGui::Combo(label, &idx, names, 12)) { *vk = VK_F1 + idx; changed = true; }
         };
-        fkey("Before / after", &c.keyAB); fkey("Sharpen -", &c.keySharpDn); fkey("Sharpen +", &c.keySharpUp);
+        fkey("Before / after", &c.keyAB); fkey("Sharpen -", &c.keySharpDn); fkey("Sharpen +", &c.keySharpUp); fkey("Save the recording", &c.keyRecord);
         auto fname = [](int vk) { static char b[4][8]; static int n = 0; char* o = b[n++ & 3]; snprintf(o, 8, "F%d", vk - VK_F1 + 1); return (const char*)o; };
-        Note("Now: Ctrl+Shift+%s before/after  |  %s / %s sharpen - / +  (%s)", fname(c.keyAB), fname(c.keySharpDn), fname(c.keySharpUp),
-             c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
+        Note("Now: Ctrl+Shift+%s before/after  |  %s / %s sharpen - / +  |  %s save the recording  (%s)", fname(c.keyAB), fname(c.keySharpDn), fname(c.keySharpUp),
+             fname(c.keyRecord), c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
     }
     if (!kScalerAddon && eam::ui::SectionHeader("Compare and hotkeys")) {
         int cm = g_compare; const char* cms[] = { "Enhanced", "Split: left original | right enhanced", "Original only (before)" };
@@ -550,10 +550,11 @@ void DrawPanel() {
             if (ImGui::Combo(label, &idx, names, 12)) { *vk = VK_F1 + idx; changed = true; }
         };
         fkey("Before / after", &c.keyAB); fkey("Split view", &c.keySplit); fkey("Sharpen -", &c.keySharpDn); fkey("Sharpen +", &c.keySharpUp); fkey("Next preset", &c.keyPreset);
-        fkey("Screenshot", &c.keyShot);
+        fkey("Screenshot", &c.keyShot); fkey("Save the recording", &c.keyRecord);
         auto fname = [](int vk) { static char b[8][8]; static int n = 0; char* o = b[n++ & 7]; snprintf(o, 8, "F%d", vk - VK_F1 + 1); return (const char*)o; };
-        Note("Now: Ctrl+Shift+%s before/after  |  %s split  |  %s / %s sharpen - / +  |  %s next preset  |  %s screenshot  (%s)",
-            fname(c.keyAB), fname(c.keySplit), fname(c.keySharpDn), fname(c.keySharpUp), fname(c.keyPreset), fname(c.keyShot), c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
+        Note("Now: Ctrl+Shift+%s before/after  |  %s split  |  %s / %s sharpen - / +  |  %s next preset  |  %s screenshot  |  %s save the recording  (%s)",
+            fname(c.keyAB), fname(c.keySplit), fname(c.keySharpDn), fname(c.keySharpUp), fname(c.keyPreset), fname(c.keyShot), fname(c.keyRecord),
+            c.hotkeys ? "hotkeys on" : "hotkeys OFF: tick the box above");
         Note("A small square appears in the screen's top-left corner for a moment: green enhanced, red original, amber split, blue sharpen changed, purple preset.");
     }
     if (!kScalerAddon && eam::ui::SectionHeader("Screenshots")) {
@@ -577,6 +578,42 @@ void DrawPanel() {
         if (ImGui::SmallButton("Open folder")) { CreateDirectoryW(folder.c_str(), nullptr); ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }
         if (!c.screenshotFolder.empty()) { ImGui::SameLine(); if (ImGui::SmallButton("Use Pictures again")) { c.screenshotFolder.clear(); changed = true; } }
         bool ok; const std::string result = screenshot::LastResult(ok);
+        if (!result.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", result.c_str()); ImGui::PopStyleColor(); }
+    }
+    if (eam::ui::SectionHeader("Recording (for bug reports and tests)")) {
+        Note(kScalerAddon ? "Keeps the last few seconds of the frames the upscaler receives (Lossless Scaling's frame before NIS scales it), losslessly, ready to "
+                            "save as a .lsrec file. Send one with a bug report and the problem can be replayed and fixed on another computer."
+                          : "Keeps the last few seconds of the frames Neural Rendering receives (the game's frames before the model or anything else changes "
+                            "them), losslessly, ready to save as a .lsrec file. Send one with a bug report and the problem can be replayed and fixed on "
+                            "another computer.");
+        changed |= ImGui::Checkbox("Keep the last few seconds ready to save", &c.recordOn);
+        Tip("Off (the default) costs nothing. On: every frame is copied off the graphics card and compressed on a few background threads, which "
+            "takes some processor time and the memory below. Nothing waits for it: a frame that comes while all the copies are busy is left out.");
+        if (!c.recordOn) ImGui::BeginDisabled();
+        { const float d = 5.0f; changed |= eam::ui::SliderFloat("Seconds kept", &c.recordSeconds, 1.0f, 30.0f, "%.0f s", 0, &d); }
+        Tip("How far back a saved recording goes. More seconds take more memory.");
+        { float mb = static_cast<float>(c.recordBudgetMb); const float d = 3072.0f;
+          if (eam::ui::SliderFloat("Memory for it", &mb, 512.0f, 16384.0f, "%.0f MB", 0, &d)) { c.recordBudgetMb = static_cast<int>(mb / 256.0f + 0.5f) * 256; changed = true; } }
+        Tip("The most memory the kept frames may take; past it the oldest go first, so fewer seconds are kept. A 1080p frame takes about 3 to 5 MB "
+            "compressed, so 5 seconds at 120 frames a second is about 2 to 3 GB.");
+        const Recorder::Status rs = g_recorder.GetStatus();
+        if (rs.on && rs.frames) ImGui::TextDisabled("Holding %.1f s: %u frames of %ux%u, %.0f MB%s", rs.seconds, rs.frames, rs.w, rs.h, rs.bytes / 1048576.0,
+                                                   rs.missed ? "" : ", none left out");
+        else if (rs.on) ImGui::TextDisabled("Waiting for frames (the game must be running and scaled).");
+        if (rs.on && rs.missed) ImGui::TextDisabled("%llu frames left out so far (the copies were all busy).", (unsigned long long)rs.missed);
+        const bool saving = rs.saving;
+        if (saving) ImGui::BeginDisabled();
+        if (eam::ui::Button(saving ? "Saving..." : "Save the last seconds", eam::ui::icons::kCheck, eam::ui::ButtonKind::Primary)) SaveRecording();
+        if (saving) ImGui::EndDisabled();
+        Tip("In the game, Ctrl+Shift + the Save the recording key (see Compare and hotkeys) does the same. The file is named after the game and the time.");
+        if (!c.recordOn) ImGui::EndDisabled();
+        const std::wstring folder = RecordFolder();
+        const int size = WideCharToMultiByte(CP_UTF8, 0, folder.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string folderText(size > 0 ? size - 1 : 0, '\0');
+        if (size > 1) WideCharToMultiByte(CP_UTF8, 0, folder.c_str(), -1, folderText.data(), size, nullptr, nullptr);
+        ImGui::TextWrapped("Folder: %s", folderText.c_str());
+        if (ImGui::SmallButton("Open folder##rec")) { CreateDirectoryW(folder.c_str(), nullptr); ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }
+        bool ok; const std::string result = g_recorder.LastResult(ok);
         if (!result.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", result.c_str()); ImGui::PopStyleColor(); }
     }
     if (!kScalerAddon && eam::ui::SectionHeader("Games (a look per program)")) {
