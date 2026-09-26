@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.6 (2026-09-26)
+
+A quick fix for the upscalers' panels, which showed Neural Rendering's messages.
+
+- **The DLSS and FSR Upscalers no longer say "waiting for LSFG dispatches".** That is Neural Rendering's message; until the upscaler
+  starts, its panel now says what it waits for: *Lossless Scaling's NIS pass (Scaling Type: NIS, the game in a window smaller than the
+  screen)*. Once it runs, its own line takes over ("DLSS 2560x1440 -> 3840x2160, ... ms").
+- **Technical status shows the upscaler's own engine** (starting, running, waiting for the NIS pass, or failed and why) instead of
+  Neural Rendering's, which always read "not started" there.
+- Why 0.9.6 and not 0.9.5.1: the update check compares three numbers, so only 0.9.6 tells people on 0.9.5 that there is an update.
+
 ## 0.9.5 (2026-09-26)
 
 FSR 4 on any card, runtimes you can see and switch, colour and tone in the upscalers, HDR games in Neural Rendering, and a recorder
