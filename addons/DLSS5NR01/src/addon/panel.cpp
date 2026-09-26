@@ -761,7 +761,8 @@ void DrawPanel() {
         }
     }
     if (eam::ui::SectionHeader("Technical status")) {
-    ImGui::Text("last LS device: %s %s   engine: %s", adapterName.c_str(), hasDisplay ? "(drives a display)" : "(no display output)", g_engineCardKnown ? "on the LSFG device" : "not started");
+    ImGui::Text("last LS device: %s %s   engine: %s", adapterName.c_str(), hasDisplay ? "(drives a display)" : "(no display output)",
+                kScalerAddon ? ScalerEngineText().c_str() : g_engineCardKnown ? "on the LSFG device" : "not started");
     ImGui::Text("frame: %s   NR %.1f ms (avg %.1f)  run %.1f ms   runs %llu   fails %llu", frameInfo.c_str(), g_lastModelMs, g_avgModelMs, g_lastRunMs, (unsigned long long)g_runs, (unsigned long long)g_engine.Stats().fails);
     ImGui::Text("dispatches %llu  ticks %llu  taps %llu  gate:%s  float-slot %d", (unsigned long long)g_tap.Dispatches(), (unsigned long long)g_tap.Ticks(), (unsigned long long)g_tap.Taps(), g_tap.GateName(), g_engine.Stats().floatSlot);
     { std::string tdi; { std::lock_guard<std::mutex> lk(g_textMutex); tdi = g_tappedDeviceText; }

@@ -94,6 +94,7 @@ struct ScalerView { bool starting = false, ready = false, failed = false; std::s
                     double gpuMs = 0, motionMs = 0; uint64_t runs = 0, nisSeen = 0; uint32_t perFrame = 0; ScalerSecond second;
                     std::string provider; };   // FSR: the upscaler the runtime chose ("3.1.4", "4.1.1b")
 ScalerView GetScalerView();
+std::string ScalerEngineText();   // the upscalers: their engine's state in a few words, for Technical status
 void StopScaler();
 bool NeuralRenderingOn();
 void FollowModelChoice();   // Neural Rendering: take a model file chosen in the manager's Runtimes list (the panel calls it before it saves)

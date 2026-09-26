@@ -720,6 +720,7 @@ void OnDeviceEvent(uint32_t id, const void*, uint32_t, void*) {
     Log("device %p on '%s' LUID %08x:%08x display=%d -> %s", static_cast<void*>(dev), card.name.c_str(), card.luid.HighPart, card.luid.LowPart, card.drivesDisplay ? 1 : 0,
         card.nvidia ? "NVIDIA, ok" : kFsrScaler ? "not NVIDIA, ok for FSR" : "not NVIDIA, ignored");
     if (!card.nvidia && !kFsrScaler) SetStatus("waiting: LS device is not an NVIDIA adapter");
+    else if (kScalerAddon) SetStatus("waiting for Lossless Scaling's NIS pass (Scaling Type: NIS, the game in a window smaller than the screen)");   // once it runs, the upscaler's own line
     else if (!g_engine.IsReady()) SetStatus("waiting for LSFG dispatches");
     // The engine starts from the tap, on the card whose device actually runs LSFG (one card, a hybrid laptop, or either card of a two-card
     // machine), not from these events, which come for every device Lossless Scaling makes.
@@ -1132,6 +1133,13 @@ void FollowModelChoice() {
     Log("the model file is now %s: the engine starts again on it", chosen.empty() ? "the one in Lossless Scaling's folder" : chosen.c_str());
     ScanRequirements();
     RestartEngine();
+}
+
+std::string ScalerEngineText() {
+    if (g_srStarting) return "starting";
+    if (g_sr.IsReady()) return g_nisSeen ? "running" : "ready, waiting for the NIS pass";
+    if (g_sr.IsFailed()) return "failed: " + g_sr.LastError();
+    return g_nisSeen ? "not started (the NIS pass is seen)" : "not started: it starts when Lossless Scaling runs its NIS pass";
 }
 
 } // namespace nr
