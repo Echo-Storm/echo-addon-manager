@@ -1,4 +1,4 @@
-# Fetches the FSR 4 runtime the FSR 3 Upscaler offers as a second choice in the manager's Runtimes list: FSR 4.1.1b INT8 with the RDNA 2
+# Fetches the FSR 4 runtime the FSR Upscaler offers as a second choice in the manager's Runtimes list: FSR 4.1.1b INT8 with the RDNA 2
 # fix, the OptiScaler team's build of AMD's FSR 4 upscaler (their Discord; the GitHub release below is a repost, byte for byte the same
 # file: its SHA-256 matches the one they published). It runs FSR 4 on graphics cards AMD's own FSR 4 does not support.
 #

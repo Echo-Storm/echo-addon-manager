@@ -36,7 +36,7 @@ target_compile_definitions(nr_selftest PRIVATE NR_ADDON_VERSION_TEXT="${CMAKE_MA
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/addon.json)
 add_dependencies(nr_selftest nr_forwarder)
 
-# ---- the addons: DLSS 5 Neural Rendering (DLSS5NR01), the DLSS 4 Upscaler (DLSS4DLAA) and the FSR 3 Upscaler (FSR3UPSC), from the same sources (src/addon/product.h) ----
+# ---- the addons: DLSS 5 Neural Rendering (DLSS5NR01), the DLSS 4 Upscaler (DLSS4DLAA) and the FSR Upscaler (FSR3UPSC), from the same sources (src/addon/product.h) ----
 set(NR_ADDON_SOURCES
     src/addon/addon.cpp src/addon/runtime.cpp src/addon/panel.cpp src/addon/tasks.cpp src/addon/settings.cpp src/addon/log.cpp
     src/addon/screenshot.cpp src/addon/screenshot_pixels.cpp src/addon/hud_editor.cpp src/addon/auto_quality.cpp

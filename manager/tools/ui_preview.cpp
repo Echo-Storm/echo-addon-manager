@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
     AddonInfo a, b, c;
     a.id = "DLSS5NR01"; a.manifest.name = "DLSS 5 Neural Rendering"; a.manifest.version = EAM_VERSION_STRING; a.manifest.author = "Echo-Storm"; a.hModule = (HMODULE)1; a.enabled = true;
     b.id = "DLSS4DLAA"; b.manifest.name = "DLSS 4 Upscaler"; b.manifest.version = EAM_VERSION_STRING; b.manifest.author = "Echo-Storm"; b.enabled = false;
-    c.id = "FSR3UPSC"; c.manifest.name = "FSR 3 Upscaler"; c.manifest.version = EAM_VERSION_STRING; c.manifest.author = "Echo-Storm"; c.hModule = (HMODULE)1; c.enabled = true;
+    c.id = "FSR3UPSC"; c.manifest.name = "FSR Upscaler"; c.manifest.version = EAM_VERSION_STRING; c.manifest.author = "Echo-Storm"; c.hModule = (HMODULE)1; c.enabled = true;
     a.security = b.security = c.security = SecurityVerdict::Trusted;   // as a real install of our own addons shows them
     if (!clean) { b.enabled = true; b.faulted = true; }   // the other scene shows the ERROR state
     ReadSvgIcon(plugins / "icon.svg", a.iconSvg, a.iconSvgView);

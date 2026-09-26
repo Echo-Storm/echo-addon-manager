@@ -353,13 +353,13 @@ def line_error(text):
 
 
 def scenario_fsr_line(ctx, res, text, frame):
-    res.check('the FSR 3 Upscaler runs', 'FSR 3 upscaler ready on its own D3D12 device' in text and 'FSR 3 dispatch failed' not in text)
+    res.check('the FSR Upscaler runs', 'FSR upscaler ready on its own D3D12 device' in text and 'FSR dispatch failed' not in text)
     res.check('...in place of the NIS pass', 'DLSS REPLACED NIS' in text)
     e = line_error(text)
     res.check('a thin swaying line is measured against the true picture', e is not None, '%s levels' % e)
     if e is None:
         return
-    if 'FSR 3 upscaler: stability 0.00' in text:
+    if 'FSR upscaler: stability 0.00' in text:
         ctx['line_error_plain'] = e
     elif ctx.get('line_error_plain') is not None:
         plain = ctx['line_error_plain']
@@ -397,10 +397,10 @@ def scenario_move_4k(ctx, res, text, frame):
 
 
 def scenario_fsr(ctx, res, text, frame):
-    res.check('the FSR 3 Upscaler loads AMD\'s runtime on a D3D12 device of its own', 'FSR 3 upscaler ready on its own D3D12 device' in text)
-    made = re.search(r'FSR 3 upscaler: \d+x\d+ -> \d+x\d+ \(x[0-9.]+\), made in \d+ ms', text)
+    res.check('the FSR Upscaler loads AMD\'s runtime on a D3D12 device of its own', 'FSR upscaler ready on its own D3D12 device' in text)
+    made = re.search(r'FSR upscaler: \d+x\d+ -> \d+x\d+ \(x[0-9.]+\), made in \d+ ms', text)
     res.check('...makes FSR 3 for the NIS pass\'s sizes', made is not None, made.group(0) if made else 'no line')
-    res.check('...with no FSR 3 errors', 'FSR 3 error' not in text and 'FSR 3 dispatch failed' not in text)
+    res.check('...with no FSR 3 errors', 'FSR 3 error' not in text and 'FSR dispatch failed' not in text)
     scenario_scaler_noflow(ctx, res, text, frame)
 
 
@@ -476,7 +476,7 @@ SCENARIOS = [
     ('fsr_4_3', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisvp=1', 'nisW=960', 'nisH=720', 'nisScale=1.5'], scenario_fsr_viewport),
     ('scaler_stable', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'scalerStability=1'], scenario_stable),   # stability at 1 on the slide
     ('dlaa_4k_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'nisW=3840', 'nisH=2160', 'nisScale=1'], scenario_move_4k),   # DLAA at 4K on the sliding picture: the estimate's cost
-    ('fsr_scaler', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_fsr),   # the FSR 3 Upscaler, frame generation off
+    ('fsr_scaler', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_fsr),   # the FSR Upscaler, frame generation off
     ('fsr_move_none', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_fsr_move_none),
     ('fsr_move', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_fsr_move),
     ('fsr_stable', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'scalerStability=1'], scenario_fsr_stable),

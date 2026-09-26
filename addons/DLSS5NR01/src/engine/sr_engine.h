@@ -1,5 +1,5 @@
 // SrEngine: an upscaler on a Direct3D 12 device and queue of our own, on the graphics card Lossless Scaling scales on (scaler11.h is the
-// Lossless Scaling side): NVIDIA DLSS Super Resolution for the DLSS 4 Upscaler, or AMD FSR 3.1 for the FSR 3 Upscaler (Backend). Both get
+// Lossless Scaling side): NVIDIA DLSS Super Resolution for the DLSS 4 Upscaler, or AMD FSR 3.1 for the FSR Upscaler (Backend). Both get
 // the same inputs: the frame, the motion (measured, or frame generation's), a flat depth and the distrust mask.
 //
 // NVIDIA's DLSS code never runs on Lossless Scaling's D3D11 device. Run D3D11 DLSS there crashed Lossless Scaling within seconds, three times,
@@ -66,7 +66,7 @@ private:
     struct FfxState;   // AMD's FidelityFX runtime and its upscaling context (sr_engine.cpp)
     static const int kSlots = 4;
     bool HasFeature() const;
-    const char* Name() const { return m_backend == Backend::Fsr ? "FSR 3" : "DLSS"; }   // for the log
+    const char* Name() const { return m_backend == Backend::Fsr ? "FSR" : "DLSS"; }   // for the log
     bool EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t outH, unsigned preset);
     bool EnsureInputs(uint32_t w, uint32_t h);
     bool EnsureSharpenTarget(uint32_t w, uint32_t h, DXGI_FORMAT fmt);

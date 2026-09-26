@@ -1,4 +1,4 @@
-# Fetches AMD's FidelityFX runtime the FSR 3 Upscaler loads, amd_fidelityfx_dx12.dll (FSR 3.1.4), from AMD's own public repository,
+# Fetches AMD's FidelityFX runtime the FSR Upscaler loads, amd_fidelityfx_dx12.dll (FSR 3.1.4), from AMD's own public repository,
 # https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK (release v1.1.4, its PrebuiltSignedDLL folder), into
 # addons\DLSS5NR01\external\ffx\bin. The build copies it into the FSR addon's fsr folder, and the release ships it there.
 #

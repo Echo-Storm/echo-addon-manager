@@ -204,7 +204,7 @@ inline constexpr const char* kFile       = "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2
 inline constexpr const char* kSave       = "M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7M7 3v4a1 1 0 0 0 1 1h7";
 inline constexpr const char* kPlay       = "M6 3 20 12 6 21Z";
 // The three plugins' own shapes (the same as their icon.svg files): a sparkle (Neural Rendering), a small frame grown into a large one (DLSS 4
-// Upscaler), and the same thrown with motion lines (FSR 3 Upscaler).
+// Upscaler), and the same thrown with motion lines (FSR Upscaler).
 inline constexpr const char* kSparkles   = "M10 3.5 11.9 8.6 17 10.5 11.9 12.4 10 17.5 8.1 12.4 3 10.5 8.1 8.6ZM18.5 15 19.3 17.2 21.5 18 19.3 18.8 18.5 21 17.7 18.8 15.5 18 17.7 17.2ZM19 3v4M17 5h4";
 inline constexpr const char* kUpscale    = "M4 13.5h6.5V20H4ZM13.5 4H20v6.5M20 4 13 11M4 9.5V5a1 1 0 0 1 1-1h4.5M20 14.5V19a1 1 0 0 1-1 1h-4.5";
 inline constexpr const char* kUpscaleFast = "M9.5 9.5H20V20H9.5ZM3 13h3.5M3 16.5h3.5M5 9.5h1.5M4 4h5v5H4ZM9 9l4.5 4.5M13.5 10.5v3h-3";

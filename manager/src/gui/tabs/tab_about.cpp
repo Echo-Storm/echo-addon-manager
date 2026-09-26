@@ -88,8 +88,8 @@ void RenderTabAbout() {
             { eam::ui::icons::kUpscale, "DLSS 4 Upscaler",
               "NVIDIA DLSS in place of Lossless Scaling's NIS scaler: real upscaling (or DLAA at the screen's own size) for games that never had "
               "it, with motion measured from the frames. NVIDIA RTX." },
-            { eam::ui::icons::kUpscaleFast, "FSR 3 Upscaler",
-              "AMD FSR 3 in the same place, on any DirectX 12 graphics card. Both upscalers take 4:3 games too, keep their settings per game, and "
+            { eam::ui::icons::kUpscaleFast, "FSR Upscaler",
+              "AMD FSR (3.1, or FSR 4) in the same place, on any DirectX 12 graphics card. Both upscalers take 4:3 games too, keep their settings per game, and "
               "have Stability and Edge smoothing for older games without anti-aliasing." },
             { eam::ui::icons::kSliders, "Built into the manager",
               "ReShade input passthrough, windowed games and a second monitor, a Performance tab that says what limits the frame rate, a tray "
@@ -144,7 +144,7 @@ void RenderTabAbout() {
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0, S(4)));
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-    ImGui::TextWrapped("AMD FidelityFX: the FSR 3 Upscaler includes AMD's FidelityFX runtime (MIT, AMD-FidelityFX-LICENSE.txt in its folder). AMD, "
+    ImGui::TextWrapped("AMD FidelityFX: the FSR Upscaler includes AMD's FidelityFX runtime (MIT, AMD-FidelityFX-LICENSE.txt in its folder). AMD, "
                        "FidelityFX and FSR are trademarks of Advanced Micro Devices, Inc.; this project is not affiliated with or endorsed by AMD.");
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0, S(4)));

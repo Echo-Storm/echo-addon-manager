@@ -1,11 +1,11 @@
-# The DLSS 4 and FSR 3 Upscalers
+# The DLSS 4 and FSR Upscalers
 
 Two addons, built from Neural Rendering's sources, that take the place of Lossless Scaling's **NIS** scaler with a temporal upscaler:
 
 | Addon | Upscaler | Needs | Comes with |
 |-------|----------|-------|------------|
 | **DLSS 4 Upscaler** (`DLSS4DLAA`) | NVIDIA DLSS Super Resolution (models K and M) | an NVIDIA RTX card | NVIDIA's DLSS runtime 310.9.1 (`dlss\nvngx_dlss.dll`, NVIDIA's licence) |
-| **FSR 3 Upscaler** (`FSR3UPSC`) | AMD FidelityFX Super Resolution 3.1 | any DirectX 12 card (AMD, NVIDIA, Intel) | AMD's FidelityFX runtime (`fsr\amd_fidelityfx_dx12.dll`, FidelityFX SDK v1.1.4, MIT, signed by AMD) |
+| **FSR Upscaler** (`FSR3UPSC`) | AMD FidelityFX Super Resolution 3.1 | any DirectX 12 card (AMD, NVIDIA, Intel) | AMD's FidelityFX runtime (`fsr\amd_fidelityfx_dx12.dll`, FidelityFX SDK v1.1.4, MIT, signed by AMD) |
 
 Both come in the download switched off: switch on the one you want. They were developed and tested with World of Warcraft: Forever and
 Fallout: New Vegas (Tale of Two Wastelands), on an RTX 4070 Ti SUPER.

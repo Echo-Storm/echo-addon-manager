@@ -1,12 +1,12 @@
 <p align="center"><img src="docs/images/banner.svg" alt="Addon Manager for Lossless Scaling" width="100%"></p>
 
-<p align="center"><b>Lossless Scaling, extended.</b><br>DLSS 5 Neural Rendering, DLSS 4 and FSR 3 upscaling for games that never had them, and an addon manager that keeps it all in one window.</p>
+<p align="center"><b>Lossless Scaling, extended.</b><br>DLSS 5 Neural Rendering, DLSS 4 and FSR upscaling for games that never had them, and an addon manager that keeps it all in one window.</p>
 
 <p align="center"><img src="docs/images/addons.png" alt="The manager: the addons at the left, Neural Rendering's panel at the right, the machine's load in the header" width="100%"></p>
 
 **Addon Manager for Lossless Scaling** (LS Addon Manager for short) loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it an
 addon system. It comes with three addons that do what Lossless Scaling alone cannot: **DLSS 5 Neural Rendering** gives any game a new look, and the **DLSS 4** and
-**FSR 3 Upscalers** put a real temporal upscaler in place of Lossless Scaling's NIS scaler, so old games that never had DLSS or FSR get one. Around them, the manager
+**FSR Upscalers** put a real temporal upscaler in place of Lossless Scaling's NIS scaler, so old games that never had DLSS or FSR get one. Around them, the manager
 installs and switches addons, shows the machine's load at a glance, says what limits your frame rate, and backs every setting up. It is free and MIT-licensed, and an
 unofficial project, not affiliated with the Lossless Scaling developers: read the [disclaimer](DISCLAIMER.md) before you install it.
 
@@ -37,7 +37,7 @@ Status: **0.9.4**, getting ready for 1.0 (the [roadmap](ROADMAP.md) says what is
 |---|---|---|---|
 | **DLSS 5 Neural Rendering** | NVIDIA's neural rendering model on every frame Lossless Scaling shows: a new look for any game | NVIDIA RTX, your own model file | on |
 | **DLSS 4 Upscaler** | NVIDIA DLSS in place of Lossless Scaling's NIS scaler: upscaling, or DLAA at the screen's own size | NVIDIA RTX (runtime included) | off |
-| **FSR 3 Upscaler** | AMD FSR 3 in the same place, on any graphics card | any DirectX 12 GPU (runtime included) | off |
+| **FSR Upscaler** | AMD FSR 3.1, or FSR 4, in the same place, on any graphics card | any DirectX 12 GPU (runtime included) | off |
 | **ReShade input passthrough** | Mouse and keyboard reach a ReShade overlay while Lossless Scaling scales the game | ReShade | off |
 | **Windowed mode and second monitor** | Lossless Scaling with a windowed game, or on a second monitor | | off |
 
@@ -62,17 +62,19 @@ Scaling wait for it.
 
 About 2.7 ms plus 1.8 ms per megapixel of model input on an RTX 4070 Ti SUPER (5.2 ms at 1912x1080). [The addon's README](addons/DLSS5NR01/README.md) has the rest.
 
-### DLSS 4 and FSR 3 Upscalers
+### DLSS 4 and FSR Upscalers
 
-<p align="center"><img src="docs/images/upscaler.png" alt="The FSR 3 Upscaler's panel in the manager" width="100%"></p>
+<p align="center"><img src="docs/images/upscaler.png" alt="The FSR Upscaler's panel in the manager" width="100%"></p>
 
-Lossless Scaling scales a game window up to the screen with a spatial scaler. These two addons put a **temporal upscaler** in that place: DLSS or FSR 3 reads several
+Lossless Scaling scales a game window up to the screen with a spatial scaler. These two addons put a **temporal upscaler** in that place: DLSS or FSR reads several
 frames and the motion between them, which gives a steadier, more detailed picture than scaling one frame at a time. Games that never had DLSS or FSR get one, with no
 support from the game: **the addons measure the motion from the frames themselves.** In Lossless Scaling choose **NIS** as the Scaling Type and run the game in a window
 smaller than the screen (for example 2560x1440 on a 4K screen); at the screen's own size they anti-alias instead (DLAA, FSR native AA).
 
 - **DLSS 4 Upscaler:** NVIDIA DLSS Super Resolution, with the choice of NVIDIA's default model (K) or DLSS 4.5's M. NVIDIA RTX.
-- **FSR 3 Upscaler:** AMD FidelityFX Super Resolution 3.1 with AMD's own sharpening (RCAS). Any DirectX 12 graphics card: AMD, NVIDIA or Intel.
+- **FSR Upscaler:** AMD FidelityFX Super Resolution 3.1 with AMD's own sharpening (RCAS). Any DirectX 12 graphics card: AMD, NVIDIA or Intel.
+  FSR 4 (the OptiScaler team's 4.1.1b INT8 build, which runs on cards AMD's own FSR 4 does not) is one click away in the manager's
+  Runtimes list: the + next to FSR, bottom left.
 - **Frame generation on or off**, every frame it presents, real and generated.
 - **4:3 and other window shapes:** a window of another shape than the screen is upscaled into the part of the screen Lossless Scaling puts it in, borders left alone.
 - **Stability:** less shimmer on thin lines, wires and leaves (the upscaler averages the flicker out), while thin things that move stay sharp.
@@ -90,7 +92,7 @@ What they cost on an RTX 4070 Ti SUPER (everything the addon does, the motion me
 | 2560x1440 -> 3840x2160 | about 2.4 ms | about 1.85 ms |
 | 3840x2160 at 1:1 (anti-aliasing) | about 3.2 ms | about 2.2 ms |
 
-**Which one?** On an NVIDIA RTX card try both: DLSS smooths edges better by itself, FSR 3 costs less and keeps text crisper. On any other card, FSR 3. If the game has
+**Which one?** On an NVIDIA RTX card try both: DLSS smooths edges better by itself, FSR 3 costs less and keeps text crisper. On any other card, FSR. If the game has
 anti-aliasing of its own (MSAA), switch it on: it draws what no upscaler can put back, such as wires thinner than a pixel. The [upscalers' guide](addons/DLSS5NR01/docs/upscalers.md)
 covers the settings, what to expect and what to do when something is wrong.
 
@@ -263,7 +265,7 @@ powershell -File tools\ui_preview.ps1                    # the window rendered o
 
 Building the addons from source (not needed to use the release zip) also needs NVIDIA's DLSS SDK headers and static library in `addons/DLSS5NR01/external/ngx`:
 `tools\fetch_ngx_sdk.ps1` fetches them from NVIDIA's public repository after you accept NVIDIA's licence. They are NVIDIA's, under NVIDIA's licence, so they are not in
-this repository; the release carries the parts it needs under NVIDIA's terms (see NOTICE.md). The FSR 3 Upscaler loads AMD's FidelityFX runtime:
+this repository; the release carries the parts it needs under NVIDIA's terms (see NOTICE.md). The FSR Upscaler loads AMD's FidelityFX runtime:
 `tools\fetch_ffx_sdk.ps1` fetches it from AMD's repository and checks it (a pinned SHA-256 and AMD's signature). It is MIT-licensed, like the FidelityFX API headers in
 `addons/DLSS5NR01/third_party/ffx`. The addons' offline test host and its scenario matrix (`tools\run_hosttest_matrix.py`) exercise every path without Lossless Scaling.
 `tools\deploy.ps1 -What all -LsDir <Lossless Scaling folder>` copies a build into a Lossless Scaling folder with backups and refuses to run while Lossless Scaling or
@@ -288,7 +290,7 @@ Addon Manager for Lossless Scaling began as [LosslessProxy](https://github.com/F
 of a proxy `Lossless.dll` with addons, its addon interface (which is why its addons still load here) and the ReShade and Windowed features, which started there as
 addons. The manager's code has since been rewritten; about a tenth of its lines still match the original's, mostly declarations and common idioms
 (`tools/measure_original_share.py` measures it). Neural Rendering began as **andreiday**'s DLSS 5 plugin for LosslessProxy and has been rewritten and extended here;
-fewer than one line in ten still matches theirs. The upscalers run NVIDIA DLSS and AMD FidelityFX Super Resolution 3 (AMD's FidelityFX SDK, MIT); their motion
+fewer than one line in ten still matches theirs. The upscalers run NVIDIA DLSS and AMD FidelityFX Super Resolution (AMD's FidelityFX SDK, MIT; FSR 4 as built by the OptiScaler team); their motion
 measurement, stability and edge smoothing are this project's own. The full list, with licences, is in [NOTICE.md](NOTICE.md). NVIDIA, DLSS, AMD, FidelityFX and FSR
 are trademarks of their owners; this project is not affiliated with or endorsed by them. Lossless Scaling belongs to its author; this project is unofficial.
 

@@ -717,7 +717,7 @@ void OnDeviceEvent(uint32_t id, const void*, uint32_t, void*) {
     const Card card = CardOf(dev);
     { std::lock_guard<std::mutex> lock(g_textMutex); g_cardName = card.name; g_cardDrivesDisplay = card.drivesDisplay; }
     Log("device %p on '%s' LUID %08x:%08x display=%d -> %s", static_cast<void*>(dev), card.name.c_str(), card.luid.HighPart, card.luid.LowPart, card.drivesDisplay ? 1 : 0,
-        card.nvidia ? "NVIDIA, ok" : kFsrScaler ? "not NVIDIA, ok for FSR 3" : "not NVIDIA, ignored");
+        card.nvidia ? "NVIDIA, ok" : kFsrScaler ? "not NVIDIA, ok for FSR" : "not NVIDIA, ignored");
     if (!card.nvidia && !kFsrScaler) SetStatus("waiting: LS device is not an NVIDIA adapter");
     else if (!g_engine.IsReady()) SetStatus("waiting for LSFG dispatches");
     // The engine starts from the tap, on the card whose device actually runs LSFG (one card, a hybrid laptop, or either card of a two-card
@@ -874,7 +874,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     if (!g_srStarting && dev) {
         if (!g_sr.IsReady() && !g_sr.IsFailed()) {
             const Card card = CardOf(dev);
-            if (card.nvidia || kFsrScaler) StartEngineFor(card.luid);   // FSR 3 runs on any card
+            if (card.nvidia || kFsrScaler) StartEngineFor(card.luid);   // FSR runs on any card
             else if (g_nisSeen == 1) SetStatus("waiting: Lossless Scaling's device is not an NVIDIA card");
         } else if (g_sr.IsReady()) {
             if (dev != g_linkDevice) {   // Lossless Scaling's (new) device: the link is made on it, here on its render thread

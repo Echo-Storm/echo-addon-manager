@@ -115,15 +115,15 @@ void DrawPanel() {
               if (!msg.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", msg.c_str()); ImGui::PopStyleColor(); } }
         }
     }
-    else if (kFsrScaler) {   // ---- FSR 3's requirements: any DirectX 12 card, and AMD's runtime, which ships in the addon's fsr folder
+    else if (kFsrScaler) {   // ---- FSR's requirements: any DirectX 12 card, and AMD's runtime, which ships in the addon's fsr folder
         Block("Requirements");
         const std::wstring runtime = g_addonDir + L"\\fsr\\amd_fidelityfx_dx12.dll";
         const bool present = GetFileAttributesW(runtime.c_str()) != INVALID_FILE_ATTRIBUTES;
-        if (present) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kAccent), "AMD's FSR 3 runtime is in place (it comes with this addon).");
-        else ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "AMD's FSR 3 runtime is missing: the addon's fsr folder should hold amd_fidelityfx_dx12.dll. Reinstall the addon.");
-        Note("Works on any graphics card with DirectX 12 (AMD, NVIDIA or Intel). In Lossless Scaling choose NIS as the Scaling Type (FSR 3 takes the place of that pass), "
+        if (present) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kAccent), "AMD's FSR runtime is in place (it comes with this addon).");
+        else ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "AMD's FSR runtime is missing: the addon's fsr folder should hold amd_fidelityfx_dx12.dll. Reinstall the addon.");
+        Note("Works on any graphics card with DirectX 12 (AMD, NVIDIA or Intel). In Lossless Scaling choose NIS as the Scaling Type (FSR takes the place of that pass), "
              "and let the game run in a window smaller than your screen, for example 2560x1440 on a 4K screen; at the screen's own size it anti-aliases instead. "
-             "Frame generation can be on or off. Only one of the FSR 3 and DLSS 4 Upscalers works at a time.");
+             "Frame generation can be on or off. Only one of the FSR and DLSS 4 Upscalers works at a time.");
     }
     else {   // ---- DLAA's requirements: an NVIDIA RTX card, and NVIDIA's runtime, which ships in the addon's dlss folder
         Block("Requirements");
@@ -222,7 +222,7 @@ void DrawPanel() {
         if (ImGui::Checkbox(label.c_str(), &c.enabled)) { changed = true; if (c.enabled) { ClaimFrames(); SwitchOn(); } else ReleaseFrames(); }
         Tip(kScalerAddon
                 ? "Master switch. Off = Lossless Scaling's NIS runs as usual and the upscaler stops.\nTo compare while playing, use the Before / after hotkey instead: it keeps the upscaler running.\n"
-                  "Only one of the DLSS 4 and FSR 3 Upscalers works at a time (switching one on in the addon list switches the other off); either works beside DLSS 5 Neural Rendering."
+                  "Only one of the DLSS 4 and FSR Upscalers works at a time (switching one on in the addon list switches the other off); either works beside DLSS 5 Neural Rendering."
                 : "Master switch. Off = Lossless Scaling runs untouched and the model stops.\nTo compare before and after while playing, use the Before / after hotkey instead: it keeps the model running.");
     }
     ImGui::SameLine(); if (ImGui::SmallButton("Reset history")) g_resetRequested = true;
@@ -275,11 +275,11 @@ void DrawPanel() {
         if (dlaa) {   // the upscaler: where DLSS's motion vectors come from
             const char* sources[] = { "Measured from the frames (any game)", "Lossless Scaling's frame generation", "None" };
             if (ImGui::Combo("Motion", &c.motionSource, sources, 3)) changed = true;
-            Tip(kFsrScaler ? "FSR 3 combines several frames, and needs to know where each pixel was in the frame before; a game with FSR built in tells it. Here:\n"
+            Tip(kFsrScaler ? "FSR combines several frames, and needs to know where each pixel was in the frame before; a game with FSR built in tells it. Here:\n"
                            "Measured from the frames: the upscaler compares each frame with the one before and finds how every part of the picture moved. "
                            "Works with frame generation on or off, in any game. Costs a little GPU time (shown under Upscaling).\n"
                            "Lossless Scaling's frame generation: the motion its frame generation measures (only with frame generation on; coarser, a quarter of the game's size).\n"
-                           "None: FSR 3 assumes nothing moves. Sharp when still, smeared when the camera turns: this is here to compare." :
+                           "None: FSR assumes nothing moves. Sharp when still, smeared when the camera turns: this is here to compare." :
                 "DLSS combines several frames, and needs to know where each pixel was in the frame before; a game with DLSS built in tells it. Here:\n"
                 "Measured from the frames: the upscaler compares each frame with the one before and finds how every part of the picture moved. "
                 "Works with frame generation on or off, in any game. Costs a little GPU time (shown under Upscaling).\n"
@@ -333,7 +333,7 @@ void DrawPanel() {
     if (kScalerAddon && eam::ui::SectionHeader("Upscaling")) {
         const ScalerView v = GetScalerView();
         const char* const U = kUpscalerName;
-        if (v.starting) ImGui::TextDisabled(kFsrScaler ? "Loading AMD's FSR 3 runtime..." : "Loading NVIDIA's DLSS runtime...");
+        if (v.starting) ImGui::TextDisabled(kFsrScaler ? "Loading AMD's FSR runtime..." : "Loading NVIDIA's DLSS runtime...");
         else if (v.failed) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "%s could not run: %s. Lossless Scaling's NIS runs as usual.", U, v.error.c_str());
         else if (!v.nisSeen) ImGui::TextWrapped("Waiting for Lossless Scaling's NIS pass. Choose NIS as the Scaling Type and scale a game that runs in a window smaller than the screen.");
         else if (!v.ready) ImGui::TextDisabled("NIS pass found (%ux%u -> %ux%u); %s is not running yet.", v.inW, v.inH, v.outW, v.outH, U);
@@ -352,8 +352,8 @@ void DrawPanel() {
             if (g_compare.load() == 2) ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kWarn), "Showing Lossless Scaling's NIS for comparison (Before / after hotkey).");
         }
         changed |= SL("Sharpening", &c.p.sharpen, 0.0f, 1.0f, c.p.sharpen <= 0.001f ? "off" : "%.2f");
-        if (kFsrScaler) Tip("FSR 3's own sharpening (AMD's RCAS), part of its upscaling pass; above about 0.6 an extra pass adds more than RCAS can. Lossless Scaling's "
-                            "NIS sharpens too (its Sharpness setting), so without it FSR 3 can look softer next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
+        if (kFsrScaler) Tip("FSR's own sharpening (AMD's RCAS), part of its upscaling pass; above about 0.6 an extra pass adds more than RCAS can. Lossless Scaling's "
+                            "NIS sharpens too (its Sharpness setting), so without it FSR can look softer next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
         else Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond; above about 0.6 its effect is amplified "
                  "past CAS's own maximum. DLSS 4 has no sharpening of its own, while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer "
                  "next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
@@ -363,7 +363,7 @@ void DrawPanel() {
                    "sub-pixel camera shifts, so a line thinner than a pixel flickers from frame to frame; with this up, the motion measurement stops reporting that "
                    "flicker as a place not to trust the history, so %s averages it out over the frames before%s. Off: as before. Try 0.5, then move it while "
                    "you look at a fence or a power line. The game's own anti-aliasing (MSAA) is still what draws thin lines in the first place.",
-                   U, kFsrScaler ? ", and FSR 3 keeps more of its history and reacts less to small changes of shading" : "");
+                   U, kFsrScaler ? ", and FSR keeps more of its history and reacts less to small changes of shading" : "");
           Tip(tip); }
         { const float off = 0.0f; changed |= eam::ui::SliderFloat("Edge smoothing", &c.scalerEdges, 0.0f, 1.0f, c.scalerEdges <= 0.001f ? "off" : "%.2f", 0, &off); }
         Tip("Anti-aliasing along the edges of the upscaled picture: for games without anti-aliasing of their own (stair steps on roofs, fences and "

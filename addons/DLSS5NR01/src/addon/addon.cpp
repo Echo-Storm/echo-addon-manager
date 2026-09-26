@@ -179,7 +179,7 @@ EAM_EXPORT const char* GetAddonVersion() { return "0.9.4"; }
 EAM_EXPORT const char* GetAddonAuthor() { return "Echo-Storm"; }
 EAM_EXPORT const char* GetAddonDescription() {
     return kFsrScaler
-        ? "Upscales with AMD FidelityFX Super Resolution 3 in place of Lossless Scaling's NIS scaler, on any graphics card, with the motion measured from the frames. AMD's FSR 3 runtime is included."
+        ? "Upscales with AMD FidelityFX Super Resolution in place of Lossless Scaling's NIS scaler, on any graphics card, with the motion measured from the frames: AMD's FSR 3.1, or FSR 4 (OptiScaler's build) from the Runtimes list. AMD's FSR runtime is included."
         : kScalerAddon
         ? "Upscales with NVIDIA DLSS Super Resolution in place of Lossless Scaling's NIS scaler, on every frame it presents, real and generated. NVIDIA's DLSS runtime is included."
         : "Runs NVIDIA DLSS 5 Neural Rendering on Lossless Scaling's real frames on the display GPU and applies the result to every presented frame, without ever making LS wait. Needs your own copy of nvngx_dlssnr.dll (not included, never downloaded).";

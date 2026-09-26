@@ -4,7 +4,7 @@ This is AMD's FSR 4 upscaler (AMD FidelityFX Upscaler Library 4.1.1.2740, copyri
 OptiScaler team so it runs on graphics cards AMD's own FSR 4 does not support. Because it was changed, it is not signed. Thanks to
 them for it.
 
-The FSR 3 Upscaler ships AMD's signed FSR 3.1.4 and uses it unless you choose this one: in LS Addon Manager, the + next to FSR in the
+The FSR Upscaler ships AMD's signed FSR 3.1.4 and uses it unless you choose this one: in LS Addon Manager, the + next to FSR in the
 Runtimes list (bottom left). Switching back is one click there too.
 
 SHA-256 0dd77d9c78d1ef9bc330cf4697ab3ffe24bc1aa7850e4130263dc922107fbd75

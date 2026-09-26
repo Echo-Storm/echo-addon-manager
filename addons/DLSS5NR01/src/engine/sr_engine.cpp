@@ -148,7 +148,7 @@ std::function<void(const char*)> g_ffxLog;
 void FfxMessage(uint32_t type, const wchar_t* message) {
     if (!g_ffxLog || !message) return;
     char text[512]; WideCharToMultiByte(CP_UTF8, 0, message, -1, text, sizeof text, nullptr, nullptr);
-    char line[560]; snprintf(line, sizeof line, "FSR 3 %s: %s", type == FFX_API_MESSAGE_TYPE_ERROR ? "error" : "warning", text);
+    char line[560]; snprintf(line, sizeof line, "FSR %s: %s", type == FFX_API_MESSAGE_TYPE_ERROR ? "error" : "warning", text);
     g_ffxLog(line);
 }
 
@@ -259,12 +259,12 @@ bool SrEngine::Init(const LUID& card, const std::wstring& dataPath, const std::w
         m_ffx = new FfxState;
         const std::wstring path = runtimeDir + L"\\amd_fidelityfx_dx12.dll";
         m_ffx->module = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-        if (!m_ffx->module) { Fail("AMD's FSR 3 runtime could not be loaded from %ls (error %lu)", path.c_str(), GetLastError()); return false; }
+        if (!m_ffx->module) { Fail("AMD's FSR runtime could not be loaded from %ls (error %lu)", path.c_str(), GetLastError()); return false; }
         ffxLoadFunctions(&m_ffx->fn, m_ffx->module);
-        if (!m_ffx->fn.CreateContext || !m_ffx->fn.DestroyContext || !m_ffx->fn.Dispatch) { Fail("AMD's FSR 3 runtime lacks the FidelityFX API"); return false; }
+        if (!m_ffx->fn.CreateContext || !m_ffx->fn.DestroyContext || !m_ffx->fn.Dispatch) { Fail("AMD's FSR runtime lacks the FidelityFX API"); return false; }
         g_ffxLog = [this](const char* m) { Log("%s", m); };
         m_ready = true;
-        Log("FSR 3 upscaler ready on its own D3D12 device (runtime from %ls)", runtimeDir.c_str());
+        Log("FSR upscaler ready on its own D3D12 device (runtime from %ls)", runtimeDir.c_str());
         return true;
     }
 
@@ -463,11 +463,11 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
         desc.maxRenderSize = { inW, inH }; desc.maxUpscaleSize = { outW, outH }; desc.fpMessage = FfxMessage;
         const ffxReturnCode_t rc = m_ffx->fn.CreateContext(&m_ffx->context, &desc.header, nullptr);
         QueryPerformanceCounter(&b);
-        if (rc != FFX_API_RETURN_OK || !m_ffx->context) { m_ffx->context = nullptr; Fail("FSR 3 could not make its upscaling context (code %u)", rc); return false; }
+        if (rc != FFX_API_RETURN_OK || !m_ffx->context) { m_ffx->context = nullptr; Fail("FSR could not make its upscaling context (code %u)", rc); return false; }
         m_inW = inW; m_inH = inH; m_outW = outW; m_outH = outH; m_preset = preset;
         m_ffxStability = -1.0f;   // a new context has AMD's defaults
         m_buildMs = (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
-        Log("FSR 3 upscaler: %ux%u -> %ux%u (x%.2f), made in %.0f ms", inW, inH, outW, outH, ratio, m_buildMs);
+        Log("FSR upscaler: %ux%u -> %ux%u (x%.2f), made in %.0f ms", inW, inH, outW, outH, ratio, m_buildMs);
         // which upscaler the runtime chose (a newer runtime can hold FSR 4 as well as FSR 3), and what else it holds
         {
             ffxQueryGetProviderVersion used{}; used.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
@@ -536,7 +536,7 @@ void SrEngine::ConfigureFsrStability(float s) {
     m_ffxStability = s;
     if (std::abs(s - m_loggedStability) >= 0.05f || (s == 0.0f) != (m_loggedStability == 0.0f)) {   // not every step of a slider being dragged
         m_loggedStability = s;
-        Log("FSR 3 upscaler: stability %.2f: velocity factor %.2f, shading change %.2f, accumulation per frame %.3f, disocclusion accumulation %.3f%s", s,
+        Log("FSR upscaler: stability %.2f: velocity factor %.2f, shading change %.2f, accumulation per frame %.3f, disocclusion accumulation %.3f%s", s,
             keys[0].value, keys[1].value, keys[2].value, keys[3].value, ok ? "" : " (FSR refused some of them)");
     }
 }
@@ -645,7 +645,7 @@ bool SrEngine::Run(ID3D12Resource* in, uint32_t inW, uint32_t inH, DXGI_FORMAT i
         d.cameraNear = 0.1f; d.cameraFar = 1000.0f; d.cameraFovAngleVertical = 1.0f; d.viewSpaceToMetersFactor = 1.0f;   // the depth is flat anyway
         d.flags = FFX_UPSCALE_FLAG_NON_LINEAR_COLOR_SRGB;   // the frame as the game shows it (gamma-encoded)
         const ffxReturnCode_t rc = m_ffx->fn.Dispatch(&m_ffx->context, &d.header);
-        if (rc != FFX_API_RETURN_OK) { evaluated = false; snprintf(evalError, sizeof evalError, "FSR 3 dispatch failed (code %u)", rc); }
+        if (rc != FFX_API_RETURN_OK) { evaluated = false; snprintf(evalError, sizeof evalError, "FSR dispatch failed (code %u)", rc); }
     }
     auto* p = static_cast<NVSDK_NGX_Parameter*>(m_params);
     if (!fsr) {

@@ -12,7 +12,7 @@
   you say you accept NVIDIA's licence.
 - Internet access at configure time: CMake fetches Dear ImGui (the docking branch commit that
   matches the layout compiled into the manager).
-- For the FSR 3 Upscaler: AMD's FidelityFX runtime in `external/ffx/bin`.
+- For the FSR Upscaler: AMD's FidelityFX runtime in `external/ffx/bin`.
   `powershell -File tools\fetch_ffx_sdk.ps1` fetches `amd_fidelityfx_dx12.dll` from AMD's repository (FidelityFX SDK v1.1.4, pinned,
   checked by SHA-256 and AMD's signature); the build copies it into `build\Release\fsr`. Without it the FSR addon builds but cannot run.
   The FidelityFX API headers (MIT) are in `third_party/ffx`.

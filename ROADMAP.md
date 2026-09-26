@@ -46,7 +46,7 @@ What it has to do (and what it must never do):
 
 ## Done in 0.9: the upscalers
 
-- **DLSS 4 Upscaler** and **FSR 3 Upscaler**: NVIDIA DLSS Super Resolution or AMD FSR 3.1 in place of Lossless Scaling's NIS pass, on a
+- **DLSS 4 Upscaler** and **FSR Upscaler**: NVIDIA DLSS Super Resolution or AMD FSR 3.1 in place of Lossless Scaling's NIS pass, on a
   Direct3D 12 device of their own, with DLAA / native anti-aliasing when the game already fills the screen.
 - **Motion measured from the frames** (this project's own estimator), with a distrust mask where it cannot be trusted, so the upscalers work
   in any game, with frame generation on or off.
