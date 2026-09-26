@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.4 (not released yet)
+## 0.9.4 (2026-09-25)
 
 The step toward 1.0: a finished interface, the upscalers out of preview, and the documentation rewritten around what comes with it.
 
