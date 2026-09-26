@@ -7,8 +7,8 @@ Two addons, built from Neural Rendering's sources, that take the place of Lossle
 | **DLSS 4 Upscaler** (`DLSS4DLAA`) | NVIDIA DLSS Super Resolution (models K and M) | an NVIDIA RTX card | NVIDIA's DLSS runtime 310.9.1 (`dlss\nvngx_dlss.dll`, NVIDIA's licence) |
 | **FSR 3 Upscaler** (`FSR3UPSC`) | AMD FidelityFX Super Resolution 3.1 | any DirectX 12 card (AMD, NVIDIA, Intel) | AMD's FidelityFX runtime (`fsr\amd_fidelityfx_dx12.dll`, FidelityFX SDK v1.1.4, MIT, signed by AMD) |
 
-Both are a **preview** (0.9.1, work in progress): they come in the download switched off, and so far they were developed and tested with
-World of Warcraft: Forever only, on an RTX 4070 Ti SUPER.
+Both come in the download switched off: switch on the one you want. They were developed and tested with World of Warcraft: Forever and
+Fallout: New Vegas (Tale of Two Wastelands), on an RTX 4070 Ti SUPER.
 
 A temporal upscaler builds each picture from several frames, so it has to know where every pixel was in the frame before. A game with DLSS or
 FSR built in tells it; Lossless Scaling does not. These addons **measure that motion from the frames themselves**, so they work in any game
@@ -27,8 +27,11 @@ Lossless Scaling can scale, with frame generation on or off, and need nothing fr
 4. Frame generation can be on or off.
 5. Scale the game as usual. The addon's panel (Upscaling) shows `DLSS upscales 2560x1440 -> 3840x2160 (x1.50) ...` (or `FSR 3 upscales ...`) once it runs.
 
-In-game settings that help: a cheap post-process anti-aliasing (CMAA2 or FXAA) smooths edges before the upscaler sees them; heavy
-multisampling (MSAA 4x/8x) costs a lot and adds little here; keep the game's own render scale at 100% so it does not upscale first.
+In-game settings that help: the game's own **multisampling** (MSAA) if it has one. It draws what no upscaler can put back, such as wires and
+fences thinner than a pixel; in Fallout: New Vegas 8x (`iMultiSample=8`) made a large difference, and a game held back by its processor
+has the graphics card to spare for it. A post-process anti-aliasing (FXAA, CMAA) adds little: both upscalers rebuild edges their own way
+(the addon's **Edge smoothing**, after the upscaler, is there for games with no anti-aliasing at all). Keep the game's own render scale at
+100% so it does not upscale first.
 
 ## Settings (the addon's panel)
 

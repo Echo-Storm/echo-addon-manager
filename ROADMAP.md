@@ -3,7 +3,7 @@
 What 1.0 should mean: someone who has never seen this project can **install it, keep it up to date, understand what it does and does not do, and get help**, without
 editing files by hand, and the promises it makes (the addon API, the settings file, safety) are stable. This page is honest about where each part stands.
 
-Status on 2026-09-24, at version 0.9.1 (the current work is on `main`).
+Status on 2026-09-25, at version 0.9.4 (the current work is on `main`).
 
 | # | For 1.0 | State | Notes |
 |---|---------|-------|-------|
@@ -11,11 +11,13 @@ Status on 2026-09-24, at version 0.9.1 (the current work is on `main`).
 | 2 | **An update check** | **Done** (0.5.0) | Once a day, on by default, off in *Settings > Updates*; never downloads or installs; the only network access. |
 | 3 | **A frozen, documented addon API** | **Done** on `main` | The API is at 1.0.0, documented (`docs/addon-authors.md`), with a written compatibility promise (`docs/api-compatibility.md`: what will and will not change before 2.0) and a sample addon (`examples/SampleAddon`) that builds against the SDK and is tested against the real manager. |
 | 4 | **Every shipped feature checked in real use** | **Needs you** | Neural Rendering, the window, the tray and hotkey, and the exit path are checked live. Not yet: ReShade passthrough (hotkey and auto-click) and Windowed mode (the virtual display after a restart) have only passed offline tests. A short live try settles both. |
-| 5 | **More than one game** | **Needs you** | Everything was developed and tested with World of Warcraft: Forever (the beta). A few other games, each with a line in the docs, would make the "tested with" note honest for more than one title. |
+| 5 | **More than one game** | **Two so far** | World of Warcraft: Forever (the beta) and Fallout: New Vegas (Tale of Two Wastelands), with Neural Rendering and both upscalers. A 4:3 game and one with busy foliage would round it off. |
 | 6 | **Signed files** | Not before 1.0 | Decided: the files stay unsigned until after 1.0. SmartScreen's warning and the way past it are explained in the README. |
 | 7 | **Help when something goes wrong** | **Done** on `main` | A troubleshooting table in the README, a questions-and-answers page (`docs/faq.md`), the diagnostics zip and the log. More entries will come from real questions. |
 | 8 | **Crash safety** | Done | Exit-path tests, isolated addon calls, the compatibility test in its own process, atomic settings writes. |
 | 9 | **Model compatibility data** | **Done** on `main`, needs data | The self-test writes a shareable report (`--report`, and an *Open the compatibility report* button) and `docs/model-compatibility.md` is the table. It has one row (the maintainer's card); more come from other people's reports. |
+| 11 | **A finished interface** | **Done** (0.9.4) | The header with the machine's load on every tab, a slim addon list with each addon's icon and live status, icons for the features and the plugins (addons can ship an `icon.svg`), a "What comes with it" page, and screenshots rendered from the real window. |
+| 12 | **The upscalers out of preview** | **Done** (0.9.4) | No longer marked work in progress; still off until switched on. Stability, edge smoothing, settings per game and 4:3 windows since 0.9.1. |
 | 10 | **Automated builds** | **Done** on `main` (green on GitHub) | `.github/workflows/build.yml` runs `tools/ci.ps1` (manager, installer and sample addon from a clean checkout, and the tests that need no GPU) on every push and pull request. Neural Rendering needs NVIDIA's SDK and the window tests need a desktop, so those stay on the maintainer's machine. |
 
 ## The installer, in detail
@@ -42,22 +44,21 @@ What it has to do (and what it must never do):
 - Addon API 1.2 (images for addon panels), and two `addon.json` keys: `conflicts` and `wip`.
 - The version shown moved to 0.8.
 
-## Done in 0.9: the upscalers (work in progress)
+## Done in 0.9: the upscalers
 
 - **DLSS 4 Upscaler** and **FSR 3 Upscaler**: NVIDIA DLSS Super Resolution or AMD FSR 3.1 in place of Lossless Scaling's NIS pass, on a
   Direct3D 12 device of their own, with DLAA / native anti-aliasing when the game already fills the screen.
 - **Motion measured from the frames** (this project's own estimator), with a distrust mask where it cannot be trusted, so the upscalers work
   in any game, with frame generation on or off.
 - The black screen with frame generation off found and fixed (the capture is a keyed-mutex texture that a plain copy read as black).
-- Tried in World of Warcraft: Forever (1440p -> 4K, and 4K DLAA). What is left before they leave "work in progress":
-  - **More games.** New Vegas first (where the "moving vs still" softness was first seen), then a game with foliage and busy motion, which
-    will tell DLSS and FSR apart better than World of Warcraft does.
+- Tried in World of Warcraft: Forever (1440p -> 4K, and 4K DLAA) and Fallout: New Vegas (1080p -> 4K, frame generation on and off).
+- Since 0.9.1: a GPU wait instead of a repeated picture, Stability (and swaying wires kept sharp), Edge smoothing, settings per game, and
+  windows of another shape than the screen (4:3 games: the upscalers read NIS's viewports).
+- 0.9.4 took them out of preview. Still open:
+  - **A real 4:3 game**, to confirm what the test host shows.
   - **Text and HUD.** A game's HUD is drawn into the captured frame, so the upscaler sees it; DLSS softens thin text a little (FSR 3 less).
     A game with DLSS built in draws its HUD after upscaling. Options: areas that keep NIS's picture (drawn like Neural Rendering's HUD areas),
-    or finding the HUD automatically, which would be an addon of its own.
-  - **Windows of another shape than the screen** (4:3 games): done after 0.9.1 (the upscalers read NIS's viewports); to confirm in a real
-    4:3 game.
-  - Then: drop the WIP label (0.9.1 ships them as a preview, switched off), and a user-guide chapter.
+    or finding the HUD automatically, which would be an addon of its own. On hold.
 
 ## Ideas for after 1.0
 

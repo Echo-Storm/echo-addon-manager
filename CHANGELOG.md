@@ -1,6 +1,32 @@
 # Changelog
 
-## Unreleased
+## 0.9.4 (not released yet)
+
+The step toward 1.0: a finished interface, the upscalers out of preview, and the documentation rewritten around what comes with it.
+
+- **A header on every tab**: the logo, the name and the version at the left; at the right a live readout of the machine (the graphics
+  card's load and memory, system memory, the processor), so its state is seen at a glance. Memory turns amber past 80% and red past 93%;
+  hovering shows the card's name, temperature, power and clocks. RAM and processor are read on demand (two system calls a second at most);
+  the card as before, through NVIDIA's driver library. The header stays put while a long tab scrolls.
+- **A slim addon list** (about a quarter of the window, 220 to 280 px): one compact row per addon with its icon and state dot, the name in
+  Segoe UI Semibold, its live status (or version and author) under it, and a smaller switch; the search box and the install buttons sit at
+  its top. The detail pane shows the addon's icon and a larger name.
+- **Icons.** Addons can ship an `icon.svg`: the manager draws its shapes in its own colours at any size (accent when on, grey when off).
+  Ours do: a sparkle for Neural Rendering, a small frame grown into a large one for the DLSS 4 Upscaler, the same with motion lines for
+  FSR 3. The Features tab's cards have icons too (a keyboard, a monitor). Core test covers the reading of an `icon.svg`.
+- **Tabs read right on a panel.** The selected tab took the panel's colour, so inside the addon's pane it vanished and the other tab looked
+  selected; unselected tabs now have no fill and the selected one a light fill under the accent line, on any background.
+- **About: "What comes with it"**, the three addons and the manager's built-in features in a few lines each, and the AMD FidelityFX credit.
+- **The DLSS 4 and FSR 3 Upscalers are out of preview**: "(WIP)" is gone from their names, manifests, panels and install notes (they still
+  arrive switched off). Their panel no longer says turning one on switches Neural Rendering off: they take the NIS pass and work beside it.
+  The dead `kWip` switch is gone.
+- **The README rewritten** around what is in it: a section per addon with every feature, costs and which upscaler to pick, the built-in
+  features, and what the manager does; new screenshots of the real window (header, list, each addon's own panel), rendered by
+  `tools/ui_preview.ps1`, which now renders the window at 1100x740 with the addons' own panels loaded from their DLLs. The upscalers' guide
+  corrected: the game's MSAA helps (8x made a large difference in Fallout: New Vegas); a post-process AA before the upscaler does not.
+- Version 0.9.4 (manager, all three addons).
+
+The work below was done after 0.9.1 and is part of 0.9.4.
 
 - **Stability no longer smears swaying wires.** Test host `nisline=1`: a thin line swaying sideways over a still background (a wire in
   the wind), measured against the true picture near it (scenarios `fsr_line`, `fsr_line_stable`). The motion there was measured right

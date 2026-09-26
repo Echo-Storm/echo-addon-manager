@@ -11,7 +11,7 @@ addons\
   MyAddon\
     addon.json       manifest
     MyAddon.dll      the addon
-    icon.png         optional, shown on the addon's card
+    icon.svg         optional, shown in the addon list: its shapes, drawn in the manager's colours at any size (or icon.png, a picture)
 ```
 
 ## The smallest addon
@@ -53,7 +53,10 @@ EAM_EXPORT const char* GetAddonDescription() { return "Does something useful."; 
 
 `renamed_from` (optional) lists folder names the addon used to have: on the first start under its new name the manager moves the settings saved under an old name to
 the new one, and hides the old folders. `min_host_version` is compared with the **addon API** version (below), not with the manager's release number. An addon that needs a newer
-API than the running manager provides is not loaded, and its card says why. Optional keys: `"dll"` (a DLL name other than the folder's) and `"icon"`.
+API than the running manager provides is not loaded, and its card says why. Optional keys: `"dll"` (a DLL name other than the folder's) and `"icon"` (a file name other than `icon.svg` or `icon.png`). An `icon.svg` is drawn,
+not shown as a picture: the manager takes the `d="..."` of each `<path>` (and the width of the `viewBox`, 24 by default), ignores colours, and
+strokes the shapes in its accent colour when the addon is on and in grey when it is off, like its own icons. Line icons on a 24 x 24 grid in
+the manner of [Lucide](https://lucide.dev) fit best.
 
 `conflicts` (optional) lists the ids of addons that cannot run beside this one, for example two that work on the same frames. It is enough for one
 of the two to name the other. Turning either on in the manager turns the other off (a notice says so), and if both are on at start-up, the first

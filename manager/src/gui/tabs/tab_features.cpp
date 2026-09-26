@@ -1,5 +1,6 @@
 #include "tab_features.h"
 #include "../gui_scale.h"
+#include "../gui_style.h"
 #include "../widgets/toggle_switch.h"
 #include "../widgets/tooltip.h"
 #include "../../features/features.h"
@@ -35,10 +36,24 @@ void Card(int index) {
 
     const float switchWidth = ImGui::GetFrameHeight() * 1.8f * 0.8f;
     const float rowTop = ImGui::GetCursorPosY();
-    const float textWidth = ImGui::GetContentRegionAvail().x - switchWidth - S(24);
+    const float icon = S(36.0f);
+    const float textWidth = ImGui::GetContentRegionAvail().x - switchWidth - icon - S(36);
+
+    {   // the feature's icon, on a tile like an addon's
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        draw->AddRectFilled(at, ImVec2(at.x + icon, at.y + icon), U(kPanelAlt), S(4.0f));
+        draw->AddRect(at, ImVec2(at.x + icon, at.y + icon), U(on ? kAccentDim : kBorderBright), S(4.0f));
+        const char* shape = std::string(info.id).find("ReShade") != std::string::npos ? eam::ui::icons::kKeyboard : eam::ui::icons::kMonitor;
+        eam::ui::svg::Draw(draw, shape, ImVec2(at.x + icon * 0.19f, at.y + icon * 0.19f), icon * 0.62f, U(on ? kAccent : kMuted), 1.7f);
+        ImGui::Dummy(ImVec2(icon, icon));
+        ImGui::SameLine(0, S(12));
+    }
 
     ImGui::BeginGroup();
+    if (ImFont* title = TitleFont()) ImGui::PushFont(title, 0.0f);
     ImGui::Text("%s", info.title);
+    if (TitleFont()) ImGui::PopFont();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textWidth);
     ImGui::TextDisabled("%s", info.summary);
     ImGui::PopTextWrapPos();

@@ -208,6 +208,8 @@ inline constexpr const char* kPlay       = "M6 3 20 12 6 21Z";
 inline constexpr const char* kSparkles   = "M10 3.5 11.9 8.6 17 10.5 11.9 12.4 10 17.5 8.1 12.4 3 10.5 8.1 8.6ZM18.5 15 19.3 17.2 21.5 18 19.3 18.8 18.5 21 17.7 18.8 15.5 18 17.7 17.2ZM19 3v4M17 5h4";
 inline constexpr const char* kUpscale    = "M4 13.5h6.5V20H4ZM13.5 4H20v6.5M20 4 13 11M4 9.5V5a1 1 0 0 1 1-1h4.5M20 14.5V19a1 1 0 0 1-1 1h-4.5";
 inline constexpr const char* kUpscaleFast = "M9.5 9.5H20V20H9.5ZM3 13h3.5M3 16.5h3.5M5 9.5h1.5M4 4h5v5H4ZM9 9l4.5 4.5M13.5 10.5v3h-3";
+inline constexpr const char* kKeyboard   = "M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2ZM6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8";
+inline constexpr const char* kMonitor    = "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 21h8M12 17v4";
 inline constexpr const char* kEye        = "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z";
 } // namespace icons
 

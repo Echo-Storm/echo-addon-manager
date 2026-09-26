@@ -6,8 +6,7 @@
 > then press **Test compatibility** in the addon's panel.
 
 > [!NOTE]
-> **Tested with World of Warcraft: Forever.** This project was developed and tested against **World of Warcraft: Forever** (the beta; it runs as `WowB.exe`), on Lossless Scaling 3.2.2.0, Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested. DLSS 5 Neural Rendering in particular has only been
-> tried in World of Warcraft: Forever.
+> **Tested with World of Warcraft: Forever and Fallout: New Vegas.** This project was developed and tested against **World of Warcraft: Forever** (the beta; it runs as `WowB.exe`) and **Fallout: New Vegas** (Tale of Two Wastelands), on Lossless Scaling 3.2.2.0, Windows 11 and an RTX 4070 Ti SUPER. Other games and setups are untested.
 
 An addon for LS Addon Manager, the addon manager for Lossless Scaling, that runs NVIDIA DLSS 5
 Neural Rendering (DLSSNR) on the frames Lossless Scaling captures and applies the result to every
@@ -108,7 +107,7 @@ not lost; none of them is promised.
 
 - **Auto model resolution: done in 0.8.0** (*Auto: keep the model within a time budget*). Room to grow: a budget per game,
   and "keep a share of the GPU free" as well as a model time.
-- **The DLSS 4 and FSR 3 Upscalers** (0.9.1, work in progress) are built from these sources as two more addons: NVIDIA DLSS or AMD
+- **The DLSS 4 and FSR 3 Upscalers** are built from these sources as two more addons: NVIDIA DLSS or AMD
   FSR 3.1 in place of Lossless Scaling's NIS scaler, with motion measured from the frames. See [docs/upscalers.md](docs/upscalers.md).
   (They began as DLSS 4 DLAA on the captured frame, which changed nothing visible; [research](../../docs/dlss-4.5-research.md).)
 - One distribution with one look for the three addons (Neural Rendering, ReShade input passthrough, Windowed mode): done inside
