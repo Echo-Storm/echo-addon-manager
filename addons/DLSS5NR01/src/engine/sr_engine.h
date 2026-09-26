@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <atomic>
 #include <functional>
+#include <mutex>
 #include <string>
 #include "engine/flow_estimator.h"
 
@@ -32,7 +33,7 @@ public:
     bool Shutdown();
     bool IsReady() const { return m_ready; }
     bool IsFailed() const { return m_failed; }
-    const std::string& Provider() const { return m_provider; }   // FSR: the upscaler the runtime chose ("3.1.4", "4.1.1 ..."), once running
+    std::string Provider() const { std::lock_guard<std::mutex> lock(m_providerMutex); return m_provider; }   // FSR: the upscaler the runtime chose ("3.1.4", "4.1.1b"), once running
     void ClearFailure() { m_failed = false; m_error.clear(); }   // after Shutdown: the next Init may try again (another runtime file)
     const std::string& LastError() const { return m_error; }
 
@@ -79,7 +80,7 @@ private:
 
     LogFn m_log;
     bool m_ready = false, m_failed = false;
-    std::string m_provider;
+    std::string m_provider; mutable std::mutex m_providerMutex;   // set on the render thread, read by the panel
     std::string m_error;
     ID3D12Device* m_dev = nullptr;
     ID3D12CommandQueue* m_queue = nullptr;

@@ -338,7 +338,8 @@ void DrawPanel() {
         else if (!v.nisSeen) ImGui::TextWrapped("Waiting for Lossless Scaling's NIS pass. Choose NIS as the Scaling Type and scale a game that runs in a window smaller than the screen.");
         else if (!v.ready) ImGui::TextDisabled("NIS pass found (%ux%u -> %ux%u); %s is not running yet.", v.inW, v.inH, v.outW, v.outH, U);
         else {
-            ImGui::TextWrapped("%s upscales %ux%u -> %ux%u (x%.2f) in place of NIS: %.2f ms a frame on the GPU (motion %.2f ms of it), %llu frames so far%s.", U, v.inW, v.inH,
+            const std::string running = v.provider.empty() ? std::string(U) : std::string(U) + " " + v.provider;   // "FSR 4.1.1b"
+            ImGui::TextWrapped("%s upscales %ux%u -> %ux%u (x%.2f) in place of NIS: %.2f ms a frame on the GPU (motion %.2f ms of it), %llu frames so far%s.", running.c_str(), v.inW, v.inH,
                                v.outW, v.outH, v.inW ? (float)v.outW / v.inW : 0.0f, v.gpuMs, v.motionMs, (unsigned long long)v.runs,
                                v.perFrame > 1 ? " (real and generated frames alike)" : "");
             if (v.second.valid) {
@@ -357,7 +358,11 @@ void DrawPanel() {
         else Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond; above about 0.6 its effect is amplified "
                  "past CAS's own maximum. DLSS 4 has no sharpening of its own, while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer "
                  "next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
+        // FSR 4 keeps its history its own way and takes none of FSR 3.1's tuning (nor the mask the slider widens): the slider would do nothing
+        const bool fsr4 = kFsrScaler && GetScalerView().provider.rfind("4", 0) == 0;
+        if (fsr4) ImGui::BeginDisabled();
         { const float off = 0.0f; changed |= eam::ui::SliderFloat("Stability", &c.scalerStability, 0.0f, 1.0f, c.scalerStability <= 0.001f ? "off" : "%.2f", 0, &off); }
+        if (fsr4) { ImGui::EndDisabled(); Note("FSR 4 handles stability by itself: this slider is for FSR 3.1."); }
         { char tip[768];
           snprintf(tip, sizeof tip, "Less shimmer on thin lines, wires and leaves, at the cost of more trailing behind what moves. The game gives the upscaler no "
                    "sub-pixel camera shifts, so a line thinner than a pixel flickers from frame to frame; with this up, the motion measurement stops reporting that "

@@ -963,6 +963,7 @@ ScalerView GetScalerView() {
     v.inW = g_scaleInW; v.inH = g_scaleInH; v.outW = g_scaleOutW; v.outH = g_scaleOutH;
     v.gpuMs = v.ready ? g_sr.GpuMs() : 0; v.motionMs = v.ready ? g_sr.MotionMs() : 0; v.runs = g_upscaled; v.nisSeen = g_nisSeen; v.perFrame = g_nisPerFrame;
     { std::lock_guard<std::mutex> lock(g_textMutex); v.second = g_scalerSecond; }
+    if (v.ready) v.provider = g_sr.Provider();
     return v;
 }
 
@@ -982,6 +983,7 @@ void StopScaler() {
     QueryPerformanceCounter(&b);
     const bool clean = g_sr.Shutdown();   // our own device (and NVIDIA's or AMD's runtime); left for the process's exit if the GPU is stuck
     QueryPerformanceCounter(&c);
+    Log("%s upscaler: %.2f ms a frame on the GPU at the end (motion %.2f ms of it)", kUpscalerName, g_sr.GpuMs(), g_sr.MotionMs());
     Log("%s upscaler stopped: the link in %.0f ms, the engine in %.0f ms%s", kUpscalerName, (b.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart,
         (c.QuadPart - b.QuadPart) * 1000.0 / f.QuadPart, clean ? "" : " (the GPU had not finished: its teardown is left for Lossless Scaling's exit)");
 }

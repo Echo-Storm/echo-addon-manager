@@ -17,6 +17,14 @@
   - **The log says what runs:** which upscaler the runtime chose and what else it holds, for example "runs 4.1.1b (it holds: 4.1.1b,
     3.1.5, 2.3.4)".
   - **Fetching it:** `tools/fetch_fsr4.ps1` fetches it and checks its SHA-256.
+- **FSR, as AMD's SDK 2.3 asks:** the upscaling context is made with the non-linear colour flag (our frames are gamma-encoded) and with the
+  API version header FSR 4 runtimes expect.
+  - **Which FSR runs:** the panel names it, for example "FSR 4.1.1b upscales...".
+  - **Stability under FSR 4:** the slider is greyed out with a note, because FSR 4 keeps its history its own way and takes none of FSR
+    3.1's tuning.
+  - **Tried and left out** (test host): auto exposure, and OptiScaler's tuned FSR 3.1 values. The latter put a swaying wire 10.4 levels
+    off against our 8.8.
+  - **FSR 4 against 3.1.4** on the sliding picture: 11.1 levels off against 14.2.
 - **DLSS model E** (DLSS 3's CNN model) as a third choice beside K and M: a user reports K and M soften a still picture here.
 - **Tests:** matrix scenarios `fsr_runtime_switch` and `dlss_runtime_switch` switch the runtime mid-run (the host test's `nisswitch=`).
 

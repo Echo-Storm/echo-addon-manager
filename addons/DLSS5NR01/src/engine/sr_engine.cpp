@@ -458,8 +458,15 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
         WaitIdle();
         SafeRelease(m_depthUpload);
         ffxCreateBackendDX12Desc backendDesc{}; backendDesc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_DX12; backendDesc.device = m_dev;
-        ffxCreateContextDescUpscale desc{}; desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE; desc.header.pNext = &backendDesc.header;
-        desc.flags = 0;   // LDR colour; motion at the game's size; no jitter, no inverted or infinite depth
+        // SDK 2.x's runtimes (FSR 4) ask for the API version the program was built against; an older runtime passes over it. Its type and
+        // value are FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE_VERSION and FFX_UPSCALER_VERSION 4.1.1, from AMD's ffx_upscale.h of SDK 2.3.
+        struct VersionDesc { ffxCreateContextDescHeader header; uint32_t version; } versionDesc{};
+        versionDesc.header.type = 0x0001000bu; versionDesc.version = (4u << 22) | (1u << 12) | 1u; versionDesc.header.pNext = &backendDesc.header;
+        ffxCreateContextDescUpscale desc{}; desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE; desc.header.pNext = &versionDesc.header;
+        // gamma-encoded colour (the frame as the game shows it: AMD asks for this flag with the dispatch's sRGB flag, FSR 4 above all);
+        // motion at the game's size; no jitter, no inverted or infinite depth. Auto exposure and AMD's own tuning of OptiScaler's were tried
+        // (test host, 2026-09-26): no better, and OptiScaler's values put a swaying wire 10.4 levels off against our 8.8.
+        desc.flags = FFX_UPSCALE_ENABLE_NON_LINEAR_COLORSPACE;
         desc.maxRenderSize = { inW, inH }; desc.maxUpscaleSize = { outW, outH }; desc.fpMessage = FfxMessage;
         const ffxReturnCode_t rc = m_ffx->fn.CreateContext(&m_ffx->context, &desc.header, nullptr);
         QueryPerformanceCounter(&b);
@@ -480,7 +487,7 @@ bool SrEngine::EnsureFeature(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t
                 if (m_ffx->fn.Query(nullptr, &all.header) == FFX_API_RETURN_OK)
                     for (uint64_t i = 0; i < count && i < 8; ++i) if (names[i]) offered += (offered.empty() ? "" : ", ") + std::string(names[i]);
             }
-            m_provider = known ? used.versionName : "";
+            { std::lock_guard<std::mutex> lock(m_providerMutex); m_provider = known ? used.versionName : ""; }
             Log("FSR upscaler: the runtime runs %s%s%s%s", known ? used.versionName : "(it does not say which version)", offered.empty() ? "" : " (it holds: ",
                 offered.c_str(), offered.empty() ? "" : ")");
         }
@@ -528,6 +535,7 @@ void SrEngine::ConfigureFsrStability(float s) {
         { FFX_API_CONFIGURE_UPSCALE_KEY_FMINDISOCCLUSIONACCUMULATION, -0.333f + 0.6f * s, "disocclusion accumulation" },
     };
     bool ok = true;
+    // (FSR 4 takes none of these: it keeps its history its own way. The same scenes scored the same at any stability, 2026-09-26.)
     for (const auto& k : keys) {
         float value = k.value;
         ffxConfigureDescUpscaleKeyValue d{}; d.header.type = FFX_API_CONFIGURE_DESC_TYPE_UPSCALE_KEYVALUE; d.key = k.key; d.ptr = &value;
