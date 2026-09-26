@@ -25,7 +25,7 @@
   - **Tried and left out** (test host): auto exposure, and OptiScaler's tuned FSR 3.1 values. The latter put a swaying wire 10.4 levels
     off against our 8.8.
   - **FSR 4 against 3.1.4** on the sliding picture: 11.1 levels off against 14.2.
-- **Brightness, contrast and gamma in the DLSS 4 and FSR Upscalers.** They use the same maths as Neural Rendering's Picture controls
+- **Vibrance, saturation, shadows, highlights, brightness, contrast and gamma in the DLSS 4 and FSR Upscalers.** They use the same maths as Neural Rendering's Picture controls
   and are kept per game. They're applied to the frame on its way to the upscaler, in the pass that already copies it, so they cost
   nothing extra. While DLSS 5 Neural Rendering is on, its Picture section is in charge and these three grey out with a note, so the tone
   is never applied twice. Matrix scenarios `scaler_tone` and `scaler_tone_nr_on`.

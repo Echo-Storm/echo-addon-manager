@@ -151,6 +151,14 @@ def scenario_tone(ctx, res, text, frame):
         res.check('...brighter by about 0.15 (38 levels)', 25.0 < off < 45.0, '%.2f levels off' % off)
 
 
+def scenario_colour(ctx, res, text, frame):
+    # the upscalers' saturation at 0 on the frame before it is upscaled: the picture is grey (its neighbour-to-neighbour detail, colour
+    # included, falls from about 1.3 to about 0.4) and it still replaces NIS's
+    m = re.search(r'\[check-nis\] .*?: ([0-9.]+)% of the output .*? detail ([0-9.]+)', text)
+    res.check("the upscaled picture replaces NIS's", m is not None and float(m.group(1)) < 1.0, m.group(0)[12:] if m else 'no check-nis line')
+    res.check('...and it is grey (saturation 0)', m is not None and float(m.group(2)) < 0.7, 'detail %s' % (m.group(2) if m else '?'))
+
+
 def scenario_runtime_switch(ctx, res, text, frame):
     # the runtime file chosen in the manager's Runtimes list changes while the upscaler runs: it must start again on the new file and go on
     # replacing NIS (an FSR runtime tells which version it runs)
@@ -495,6 +503,7 @@ SCENARIOS = [
     ('fsr_move', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_fsr_move),
     ('fsr_stable', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'scalerStability=1'], scenario_fsr_stable),
     ('scaler_tone', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'sharpen=0', 'brightness=0.15'], scenario_tone),   # brightness before the upscaler
+    ('scaler_colour', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'sharpen=0', 'saturation=0'], scenario_colour),   # colour before FSR
     ('scaler_tone_nr_on', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'sharpen=0', 'brightness=0.15', '_enabled=1'], scenario_tone),   # ...left to NR
     ('fsr_runtime_switch', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisswitch=fsrRuntime=@FSR4@'], scenario_runtime_switch),   # the Runtimes list's +
     ('dlss_runtime_switch', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisswitch=dlssRuntime=@DLSSCOPY@'], scenario_runtime_switch),

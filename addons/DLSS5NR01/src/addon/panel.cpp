@@ -394,9 +394,17 @@ void DrawPanel() {
             "wires). It finds where the brightness steps, which way the edge runs and how far, and blends across it by the part of a pixel the true "
             "edge would cover. Costs a fraction of a millisecond. It also softens text a little. If the game has anti-aliasing (MSAA), that is "
             "better: use this where it has none.");
-        {   // brightness, contrast and gamma: on the frame before it is upscaled; Neural Rendering's own take over while it is on
+        {   // the picture controls: on the frame before it is upscaled; Neural Rendering's own take over while it is on
             const bool nrOn = NeuralRenderingOn();
             if (nrOn) ImGui::BeginDisabled();
+            { const float d = 0.0f; changed |= eam::ui::SliderFloat("Vibrance", &c.p.vibrance, 0.0f, 1.0f, c.p.vibrance <= 0.001f ? "off" : "%.2f", 0, &d); }
+            Tip("Lifts muted colours much more than vivid ones, so skin and already-strong colours are not pushed further: a natural colour boost.");
+            { const float d = 1.0f; changed |= eam::ui::SliderFloat("Saturation", &c.p.saturation, 0.0f, 2.0f, std::abs(c.p.saturation - 1.0f) < 0.005f ? "unchanged" : "%.2f", 0, &d); }
+            Tip("More colour everywhere (above 1) or less (below 1, 0 is black and white).");
+            { const float d = 0.0f; changed |= eam::ui::SliderFloat("Shadows", &c.p.shadows, -1.0f, 1.0f, std::abs(c.p.shadows) < 0.005f ? "unchanged" : "%+.2f", 0, &d); }
+            Tip("Lifts (right) or deepens (left) the dark parts only: see into a dark interior or a night without greying the rest.");
+            { const float d = 0.0f; changed |= eam::ui::SliderFloat("Highlights", &c.p.highlights, -1.0f, 1.0f, std::abs(c.p.highlights) < 0.005f ? "unchanged" : "%+.2f", 0, &d); }
+            Tip("Tames (left) or brightens (right) the bright parts only: a blown-out sky or snow gets detail back.");
             { const float d = 0.0f; changed |= eam::ui::SliderFloat("Brightness", &c.p.brightness, -0.3f, 0.3f, "%+.2f", 0, &d); }
             Tip("Lifts or lowers the whole picture, as a monitor's brightness does. For a game that is too dark (or too bright) to see into.");
             { const float d = 1.0f; changed |= eam::ui::SliderFloat("Contrast", &c.p.contrast, 0.5f, 1.5f, "%.2f", 0, &d); }
@@ -404,12 +412,12 @@ void DrawPanel() {
             { const float d = 1.0f; changed |= eam::ui::SliderFloat("Gamma", &c.p.gamma, 0.5f, 2.0f, "%.2f", 0, &d); }
             Tip("Above 1 brightens the mid-tones and leaves black and white where they are: dark corners get visible without washing out the "
                 "sky. Below 1 darkens them.");
-            if (nrOn) { ImGui::EndDisabled(); Note("DLSS 5 Neural Rendering is on: its Picture section sets brightness, contrast and gamma now."); }
+            if (nrOn) { ImGui::EndDisabled(); Note("DLSS 5 Neural Rendering is on: its Picture section sets these now."); }
         }
         {
             std::string game; { std::lock_guard<std::mutex> lk(g_settingsMutex); game = g_scalerGame; }
             if (ImGui::Checkbox("Keep these settings per game", &c.scalerPerGame)) changed = true;
-            Tip("On (the default): sharpening, stability, edge smoothing, brightness, contrast and gamma, the DLSS model and the motion are kept for each game, and come back when "
+            Tip("On (the default): sharpening, stability, edge smoothing, the colour and tone controls, the DLSS model and the motion are kept for each game, and come back when "
                 "that game takes focus. A change made here counts for the game played last.");
             if (c.scalerPerGame) {
                 ImGui::SameLine();

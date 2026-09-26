@@ -905,7 +905,12 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
                 { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; handoff = g_config.scalerHandoff; motion = g_config.motionSource;
                   gpuWait = g_config.scalerGpuWait; stability = g_config.scalerStability; edges = g_config.scalerEdges; }
                 g_sr.SetStability(stability); g_sr.SetEdgeSmoothing(edges);
-                if (NeuralRenderingOnNow()) g_link.SetTone(0.0f, 1.0f, 1.0f); else g_link.SetTone(p.brightness, p.contrast, p.gamma);
+                ScalerLink::Picture picture;   // at the defaults while Neural Rendering is on (its own Picture controls act on the shown picture)
+                if (!NeuralRenderingOnNow()) {
+                    picture.brightness = p.brightness; picture.contrast = p.contrast; picture.gamma = p.gamma; picture.shadows = p.shadows;
+                    picture.highlights = p.highlights; picture.saturation = p.saturation; picture.vibrance = p.vibrance;
+                }
+                g_link.SetPicture(picture);
                 uint32_t fw = 0, fh = 0;
                 ID3D11Resource* flow = motion == 1 ? g_tap.NewestFlow(fw, fh) : nullptr;
                 const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;

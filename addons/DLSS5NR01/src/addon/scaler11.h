@@ -60,11 +60,15 @@ public:
     // estimate: the engine measures the motion from the frames (flow unused).
     // gpuWait: when the engine has not finished a newer picture than the one shown last, Lossless Scaling's queue waits on the GPU for the
     // next one rather than show the same picture again (the CPU never waits).
-    // Brightness, contrast and gamma on the frame before it is upscaled (0, 1, 1 = unchanged: then the pass only copies).
-    void SetTone(float brightness, float contrast, float gamma) {
-        m_brightness = brightness; m_contrast = contrast; m_gamma = gamma;
-        m_toneOn = std::abs(brightness) > 0.0005f || std::abs(contrast - 1.0f) > 0.002f || std::abs(gamma - 1.0f) > 0.002f;
-    }
+    // The picture controls on the frame before it is upscaled (all at their defaults: the pass only copies).
+    struct Picture {
+        float brightness = 0, contrast = 1, gamma = 1, shadows = 0, highlights = 0, saturation = 1, vibrance = 0;
+        bool Neutral() const {
+            return std::abs(brightness) < 0.0005f && std::abs(contrast - 1.0f) < 0.002f && std::abs(gamma - 1.0f) < 0.002f && std::abs(shadows) < 0.005f &&
+                   std::abs(highlights) < 0.005f && std::abs(saturation - 1.0f) < 0.002f && vibrance < 0.002f;
+        }
+    };
+    void SetPicture(const Picture& p) { m_picture = p; }
     bool Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset,
                  float sharpen, bool reset, Handoff handoff = Handoff::Late, bool gpuWait = true);
 
@@ -78,7 +82,7 @@ public:
     Counters Count() const { return m_count; }
 
 private:
-    float m_brightness = 0.0f, m_contrast = 1.0f, m_gamma = 1.0f; bool m_toneOn = false;
+    Picture m_picture;
     struct Shared { ID3D11Texture2D* d3d11 = nullptr; ID3D12Resource* d3d12 = nullptr; uint32_t w = 0, h = 0; DXGI_FORMAT fmt = DXGI_FORMAT_UNKNOWN; void Release(); };
     struct Fence { ID3D11Fence* d3d11 = nullptr; ID3D12Fence* d3d12 = nullptr; void Release(); };
     bool Fit(Shared& t, uint32_t w, uint32_t h, DXGI_FORMAT fmt, bool engineWrites, const char* name);

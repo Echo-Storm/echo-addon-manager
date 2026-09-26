@@ -45,20 +45,31 @@ struct SavedBindings {
 };
 
 // The grab pass: the frame, read the way NIS reads it (through the pass's t0 view), written into the shared frame texture; from the input
-// viewport's corner on (0, 0 for the whole frame). With tone set, brightness, contrast and gamma are applied on the way, as Neural
-// Rendering's Picture controls do them (compose11.cpp's Tone): the upscaler then takes the game as brighter or darker, at the small size.
+// viewport's corner on (0, 0 for the whole frame). With the picture controls set, they are applied on the way, as Neural Rendering's
+// Picture controls do them (compose11.cpp: Tone, then TonalRanges, then Colour): the upscaler takes the game as it then looks, at the small
+// size, so they cost next to nothing.
 const char* const kGrabHlsl = R"HLSL(
 Texture2D<float4>   tFrame : register(t0);
 RWTexture2D<float4> uOut   : register(u0);
-cbuffer C : register(b0) { uint2 origin; uint tone; float brightness; float contrast; float gamma; float2 unused; };
+cbuffer C : register(b0) {
+    uint2 origin; uint tone; float brightness;
+    float contrast; float gamma; float shadows; float highlights;
+    float saturation; float vibrance; float2 unused;
+};
+static const float3 kLuma = float3(0.299, 0.587, 0.114);
 [numthreads(8, 8, 1)]
 void CSGrab(uint3 id : SV_DispatchThreadID) {
     uint w, h; uOut.GetDimensions(w, h);
     if (id.x >= w || id.y >= h) return;
     float4 c = tFrame.Load(int3(id.xy + origin, 0));
     if (tone != 0u) {
-        c.rgb = saturate((c.rgb - 0.5) * contrast + 0.5 + brightness);
+        c.rgb = saturate((c.rgb - 0.5) * contrast + 0.5 + brightness);                  // tone, as a monitor's controls
         c.rgb = pow(max(c.rgb, 1e-5), 1.0 / max(gamma, 0.05));
+        float l = dot(c.rgb, kLuma);                                                     // shadows fade out by 0.55 luma, highlights in from 0.45
+        c.rgb = saturate(c.rgb + (shadows * (1.0 - smoothstep(0.0, 0.55, l)) + highlights * smoothstep(0.45, 1.0, l)) * 0.25);
+        l = dot(c.rgb, kLuma);                                                           // saturation; vibrance only where colour is muted
+        const float spread = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+        c.rgb = saturate(l + (c.rgb - l) * (saturation + vibrance * (1.0 - saturate(spread))));
     }
     uOut[id.xy] = c;
 }
@@ -221,7 +232,7 @@ bool ScalerLink::MakeGrabShader() {
     const HRESULT hr = m_dev->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &m_grab);
     code->Release();
     if (FAILED(hr)) { Log("%s upscaler: the grab shader could not be made: 0x%08x", kUpscalerName, (unsigned)hr); return false; }
-    D3D11_BUFFER_DESC cb{}; cb.ByteWidth = 32; cb.Usage = D3D11_USAGE_DYNAMIC; cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER; cb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    D3D11_BUFFER_DESC cb{}; cb.ByteWidth = 48; cb.Usage = D3D11_USAGE_DYNAMIC; cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER; cb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     if (FAILED(m_dev->CreateBuffer(&cb, nullptr, &m_grabOrigin))) { Log("%s upscaler: the grab's constants could not be made", kUpscalerName); return false; }
     return true;
 }
@@ -340,9 +351,10 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
         ID3D11Buffer* nisConstants = nullptr; m_ctx->CSGetConstantBuffers(0, 1, &nisConstants);
         D3D11_MAPPED_SUBRESOURCE mapped{};
         if (SUCCEEDED(m_ctx->Map(m_grabOrigin, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
-            struct { uint32_t x, y, tone; float brightness, contrast, gamma, unused[2]; } constants = { pass.inX, pass.inY, m_toneOn ? 1u : 0u,
-                                                                                                  m_brightness, m_contrast, m_gamma, { 0, 0 } };
-            static_assert(sizeof constants == 32, "the grab's cbuffer");
+            struct { uint32_t x, y, tone; float brightness, contrast, gamma, shadows, highlights, saturation, vibrance, unused[2]; } constants = {
+                pass.inX, pass.inY, m_picture.Neutral() ? 0u : 1u, m_picture.brightness, m_picture.contrast, m_picture.gamma,
+                m_picture.shadows, m_picture.highlights, m_picture.saturation, m_picture.vibrance, { 0, 0 } };
+            static_assert(sizeof constants == 48, "the grab's cbuffer");
             memcpy(mapped.pData, &constants, sizeof constants); m_ctx->Unmap(m_grabOrigin, 0);
         }
         m_ctx->CSSetShader(m_grab, nullptr, 0);
