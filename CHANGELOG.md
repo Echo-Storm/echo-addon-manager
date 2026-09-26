@@ -25,6 +25,13 @@
   - **Tried and left out** (test host): auto exposure, and OptiScaler's tuned FSR 3.1 values. The latter put a swaying wire 10.4 levels
     off against our 8.8.
   - **FSR 4 against 3.1.4** on the sliding picture: 11.1 levels off against 14.2.
+- **Brightness, contrast and gamma in the DLSS 4 and FSR Upscalers.** They use the same maths as Neural Rendering's Picture controls
+  and are kept per game. They're applied to the frame on its way to the upscaler, in the pass that already copies it, so they cost
+  nothing extra. While DLSS 5 Neural Rendering is on, its Picture section is in charge and these three grey out with a note, so the tone
+  is never applied twice. Matrix scenarios `scaler_tone` and `scaler_tone_nr_on`.
+- **"FSR version" in the FSR Upscaler's panel** (and "DLSS version" in the DLSS 4 Upscaler's), right under the Enable switch. It is the
+  same choice as the + in the manager's Runtimes list, and switching takes a second while the game runs.
+- **Fixed:** the Runtimes list's lines clashed with the addon cards' ImGui IDs ("2 visible items with conflicting ID").
 - **DLSS model E** (DLSS 3's CNN model) as a third choice beside K and M: a user reports K and M soften a still picture here.
 - **Tests:** matrix scenarios `fsr_runtime_switch` and `dlss_runtime_switch` switch the runtime mid-run (the host test's `nisswitch=`).
 

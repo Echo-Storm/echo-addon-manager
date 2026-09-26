@@ -238,6 +238,25 @@ void DrawPanel() {
             Note("%s is on now. Turning this on switches it off: only one of the two works on the frames at a time.", ProductNameOf(owner.c_str()));
     }
     bool modelChanged = false;
+    if (kScalerAddon)
+    {   // which FSR (or DLSS) runs: the same choice as the + beside it in the manager's Runtimes list
+        static std::vector<RuntimeChoice> choices; static ULONGLONG listedAt = 0;
+        if (!listedAt || GetTickCount64() - listedAt > 3000) { choices = RuntimeChoices(); listedAt = GetTickCount64(); }
+        const std::wstring chosen = ChosenRuntimeFile();
+        int current = 0;
+        for (size_t i = 1; i < choices.size(); ++i) if (_wcsicmp(choices[i].path.c_str(), chosen.c_str()) == 0) current = (int)i;
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 18.0f);
+        if (!choices.empty() && ImGui::BeginCombo(kFsrScaler ? "FSR version" : "DLSS version", choices[current].name.c_str())) {
+            for (size_t i = 0; i < choices.size(); ++i)
+                if (ImGui::Selectable(choices[i].name.c_str(), (int)i == current) && (int)i != current) ChooseRuntimeFile(choices[i].path);
+            ImGui::EndCombo();
+        }
+        Tip(kFsrScaler ? "Which FSR runs. AMD's FSR 3.1.4 comes with the addon and runs on any card. FSR 4 is AMD's newer, machine-learning upscaler: "
+                         "sharper and steadier in motion, and heavier; the OptiScaler team's build runs it on cards AMD's own does not (it is not signed). "
+                         "Switching takes a second while the game runs. More files: the + next to FSR in the manager's Runtimes list (bottom left)."
+                       : "Which DLSS runtime runs: the one that comes with the addon, or one added with the + next to DLSS in the manager's Runtimes list "
+                         "(bottom left). Switching takes a moment while the game runs.");
+    }
     if (dlaa && !kFsrScaler) {
         int preset = c.dlaaPreset == 13 ? 1 : c.dlaaPreset == 5 ? 2 : 0;
         const char* presets[] = { "NVIDIA's default (K, DLSS 4)", "M (DLSS 4.5, second-generation transformer)", "E (DLSS 3, the older CNN model)" };
@@ -375,10 +394,22 @@ void DrawPanel() {
             "wires). It finds where the brightness steps, which way the edge runs and how far, and blends across it by the part of a pixel the true "
             "edge would cover. Costs a fraction of a millisecond. It also softens text a little. If the game has anti-aliasing (MSAA), that is "
             "better: use this where it has none.");
+        {   // brightness, contrast and gamma: on the frame before it is upscaled; Neural Rendering's own take over while it is on
+            const bool nrOn = NeuralRenderingOn();
+            if (nrOn) ImGui::BeginDisabled();
+            { const float d = 0.0f; changed |= eam::ui::SliderFloat("Brightness", &c.p.brightness, -0.3f, 0.3f, "%+.2f", 0, &d); }
+            Tip("Lifts or lowers the whole picture, as a monitor's brightness does. For a game that is too dark (or too bright) to see into.");
+            { const float d = 1.0f; changed |= eam::ui::SliderFloat("Contrast", &c.p.contrast, 0.5f, 1.5f, "%.2f", 0, &d); }
+            Tip("Spreads the tones apart (above 1) or draws them together (below 1), around mid-grey.");
+            { const float d = 1.0f; changed |= eam::ui::SliderFloat("Gamma", &c.p.gamma, 0.5f, 2.0f, "%.2f", 0, &d); }
+            Tip("Above 1 brightens the mid-tones and leaves black and white where they are: dark corners get visible without washing out the "
+                "sky. Below 1 darkens them.");
+            if (nrOn) { ImGui::EndDisabled(); Note("DLSS 5 Neural Rendering is on: its Picture section sets brightness, contrast and gamma now."); }
+        }
         {
             std::string game; { std::lock_guard<std::mutex> lk(g_settingsMutex); game = g_scalerGame; }
             if (ImGui::Checkbox("Keep these settings per game", &c.scalerPerGame)) changed = true;
-            Tip("On (the default): sharpening, stability, edge smoothing, the DLSS model and the motion are kept for each game, and come back when "
+            Tip("On (the default): sharpening, stability, edge smoothing, brightness, contrast and gamma, the DLSS model and the motion are kept for each game, and come back when "
                 "that game takes focus. A change made here counts for the game played last.");
             if (c.scalerPerGame) {
                 ImGui::SameLine();

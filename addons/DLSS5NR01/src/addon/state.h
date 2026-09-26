@@ -94,7 +94,14 @@ struct ScalerView { bool starting = false, ready = false, failed = false; std::s
                     double gpuMs = 0, motionMs = 0; uint64_t runs = 0, nisSeen = 0; uint32_t perFrame = 0; ScalerSecond second;
                     std::string provider; };   // FSR: the upscaler the runtime chose ("3.1.4", "4.1.1b")
 ScalerView GetScalerView();
-void StopScaler();   // the frame path's device state, as at a device change                      // on the card the frames come from
+void StopScaler();
+bool NeuralRenderingOn();
+// The upscalers' runtime files to choose from (the panel's version list): the shipped one first (path empty), then those in the addon's
+// runtimes\<FSR|DLSS> folder, named by the ABOUT.txt beside them or their version. Chosen: the file in use (empty: the shipped one).
+struct RuntimeChoice { std::wstring path; std::string name; };
+std::vector<RuntimeChoice> RuntimeChoices();
+std::wstring ChosenRuntimeFile();
+void ChooseRuntimeFile(const std::wstring& path);   // sets the setting the Runtimes list sets; the engine follows it   // the upscalers: Neural Rendering is on too (its Picture controls are in charge of the tone then)   // the frame path's device state, as at a device change                      // on the card the frames come from
 void OnDeviceEvent(uint32_t id, const void* data, uint32_t size, void* user);
 bool OnPass(uint32_t x, uint32_t y, uint32_t z, void* user);   // the manager's pre-dispatch callback
 std::string PassText(const DispatchSig& sig);                    // the views of a pass, for the log and the panel

@@ -137,6 +137,20 @@ def scenario_record_replay(ctx, res, text, frame):
     res.check('...and pictures of it written', len(glob.glob(os.path.join(out, 'replay_*.bmp'))) > 0)
 
 
+def scenario_tone(ctx, res, text, frame):
+    # the upscalers' brightness (+0.15) on the frame before it is upscaled: the picture replaces NIS's and is brighter; with Neural Rendering
+    # on (the manager's switch for it, _enabled=1 here) the upscaler leaves the tone to it and the picture is as without
+    m = re.search(r'\[check-nis\] .*?: ([0-9.]+)% of the output is the fake NIS pass.s magenta, average colour off by ([0-9.]+) levels', text)
+    res.check('the upscaled picture replaces NIS\'s', m is not None and float(m.group(1)) < 1.0, m.group(0)[12:] if m else 'no check-nis line')
+    if not m:
+        return
+    off = float(m.group(2))
+    if '_enabled=1' in ctx['keys']:
+        res.check('...with Neural Rendering on, the tone is left to it (the colour as without)', off < 3.0, '%.2f levels off' % off)
+    else:
+        res.check('...brighter by about 0.15 (38 levels)', 25.0 < off < 45.0, '%.2f levels off' % off)
+
+
 def scenario_runtime_switch(ctx, res, text, frame):
     # the runtime file chosen in the manager's Runtimes list changes while the upscaler runs: it must start again on the new file and go on
     # replacing NIS (an FSR runtime tells which version it runs)
@@ -480,6 +494,8 @@ SCENARIOS = [
     ('fsr_move_none', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_fsr_move_none),
     ('fsr_move', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_fsr_move),
     ('fsr_stable', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'scalerStability=1'], scenario_fsr_stable),
+    ('scaler_tone', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'sharpen=0', 'brightness=0.15'], scenario_tone),   # brightness before the upscaler
+    ('scaler_tone_nr_on', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'sharpen=0', 'brightness=0.15', '_enabled=1'], scenario_tone),   # ...left to NR
     ('fsr_runtime_switch', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisswitch=fsrRuntime=@FSR4@'], scenario_runtime_switch),   # the Runtimes list's +
     ('dlss_runtime_switch', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisswitch=dlssRuntime=@DLSSCOPY@'], scenario_runtime_switch),
     ('scaler_unload', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'unload=1'], scenario_unload),   # switched off while running, then a new device

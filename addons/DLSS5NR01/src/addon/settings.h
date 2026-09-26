@@ -16,7 +16,7 @@ struct IHost;
 namespace nr {
 
 // The upscalers' picture settings as kept for one game (Config::scalerGames).
-struct ScalerProfile { float sharpen = 0.5f, stability = 0.0f, edges = 0.0f; unsigned preset = 0; int motion = 0; };
+struct ScalerProfile { float sharpen = 0.5f, stability = 0.0f, edges = 0.0f; unsigned preset = 0; int motion = 0; float brightness = 0.0f, contrast = 1.0f, gamma = 1.0f; };
 ScalerProfile ProfileOf(const struct Config& c);
 void ApplyProfile(struct Config& c, const ScalerProfile& p);
 // Keeps c's picture settings as game exe's own (added, or replacing what it had).

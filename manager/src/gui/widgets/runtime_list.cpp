@@ -35,6 +35,7 @@ RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows, int open
     ImGui::PushStyleColor(ImGuiCol_Separator, th::V(th::kBorder)); ImGui::Separator(); ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.2f));
     ui::SectionLabel("Runtimes");
+    ImGui::PushID("##runtimes");   // its lines are numbered from 0 like the addon cards above them in the same window: their own ID scope
     ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.15f));
     for (int i = 0; i < (int)rows.size(); ++i) {
         const RuntimeFile& r = rows[i];
@@ -167,6 +168,7 @@ RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows, int open
         }
         ImGui::PopID();
     }
+    ImGui::PopID();
     measured = ImGui::GetCursorPosY() - top;
     return action;
 }

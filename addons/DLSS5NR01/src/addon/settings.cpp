@@ -188,8 +188,10 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.gameAuto = flag("gameAuto", true);
     c.scalerPerGame = flag("scalerPerGame", true);
     for (const std::string& exe : SplitList(text("scalerGameList"))) {
-        ScalerProfile p; float sharpen = 0, stability = 0, edges = 0; unsigned preset = 0; int motion = 0;
-        if (sscanf_s(text("scalerGame." + exe).c_str(), "%f,%f,%f,%u,%d", &sharpen, &stability, &edges, &preset, &motion) != 5) continue;
+        ScalerProfile p; float sharpen = 0, stability = 0, edges = 0, brightness = 0, contrast = 1, gamma = 1; unsigned preset = 0; int motion = 0;
+        const int read = sscanf_s(text("scalerGame." + exe).c_str(), "%f,%f,%f,%u,%d,%f,%f,%f", &sharpen, &stability, &edges, &preset, &motion, &brightness, &contrast, &gamma);
+        if (read != 5 && read != 8) continue;   // 5: saved before brightness, contrast and gamma came (they stay unchanged)
+        p.brightness = std::clamp(brightness, -0.3f, 0.3f); p.contrast = std::clamp(contrast, 0.5f, 1.5f); p.gamma = std::clamp(gamma, 0.5f, 2.0f);
         p.sharpen = std::clamp(sharpen, 0.0f, 1.0f); p.stability = std::clamp(stability, 0.0f, 1.0f); p.edges = std::clamp(edges, 0.0f, 1.0f);
         p.preset = std::min(preset, 15u); p.motion = std::clamp(motion, 0, 2);
         c.scalerGames.push_back({ exe, p });
@@ -237,7 +239,7 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
     {
         std::vector<std::string> scalerExes;
         for (const auto& [exe, p] : c.scalerGames) {
-            char v[96]; snprintf(v, sizeof v, "%g,%g,%g,%u,%d", p.sharpen, p.stability, p.edges, p.preset, p.motion);
+            char v[160]; snprintf(v, sizeof v, "%g,%g,%g,%u,%d,%g,%g,%g", p.sharpen, p.stability, p.edges, p.preset, p.motion, p.brightness, p.contrast, p.gamma);
             scalerExes.push_back(exe); put("scalerGame." + exe, v);
         }
         put("scalerGameList", JoinList(scalerExes));
@@ -259,11 +261,13 @@ void ForgetGame(IHost* host, const char* id, const std::string& exe) { if (host)
 
 ScalerProfile ProfileOf(const Config& c) {
     ScalerProfile p; p.sharpen = c.p.sharpen; p.stability = c.scalerStability; p.edges = c.scalerEdges; p.preset = c.dlaaPreset; p.motion = c.motionSource;
+    p.brightness = c.p.brightness; p.contrast = c.p.contrast; p.gamma = c.p.gamma;
     return p;
 }
 
 void ApplyProfile(Config& c, const ScalerProfile& p) {
     c.p.sharpen = p.sharpen; c.scalerStability = p.stability; c.scalerEdges = p.edges; c.dlaaPreset = p.preset; c.motionSource = p.motion;
+    c.p.brightness = p.brightness; c.p.contrast = p.contrast; c.p.gamma = p.gamma;
 }
 
 void KeepForGame(Config& c, const std::string& exe) {

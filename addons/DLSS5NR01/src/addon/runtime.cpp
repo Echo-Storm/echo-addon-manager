@@ -17,6 +17,7 @@
 #include "engine/sr_engine.h"
 #include <windows.h>
 #include <shlobj.h>
+#pragma comment(lib, "version.lib")
 #include <d3d11.h>
 #include <dxgi.h>
 #include <algorithm>
@@ -805,6 +806,19 @@ void FollowRuntimeChoice() {
     g_srRuntimeDir.clear();
 }
 
+// Whether Neural Rendering is on (switched on in the manager, and its own switch on): then its Picture controls act on the shown picture,
+// after the upscaler, and the upscalers' brightness, contrast and gamma stand aside so the picture is not changed twice. Read every second.
+bool NeuralRenderingOnNow() {   // (the panel's thread and the render thread both ask: the answer is kept in atomics)
+    static std::atomic<ULONGLONG> checkedAt{ 0 }; static std::atomic<bool> on{ false };
+    const ULONGLONG now = GetTickCount64();
+    if (checkedAt && now - checkedAt < 1000) return on;
+    checkedAt = now;
+    if (!g_host) return on = false;
+    const std::string managerSwitch = g_host->GetConfig("DLSS5NR01", "_enabled", "");
+    const bool enabled = managerSwitch.empty() ? GetModuleHandleW(L"DLSS5NR01.dll") != nullptr : managerSwitch == "1";
+    return on = enabled && std::string(g_host->GetConfig("DLSS5NR01", "enabled", "1")) == "1";
+}
+
 void StartEngineFor(const LUID& card) {   // the engine's own device only: safe on a thread of its own
     // Once NVIDIA's or AMD's runtime has run in this process, this DLL stays loaded until Lossless Scaling closes: their code keeps state
     // that points into ours (NGX's library is linked in), and a teardown left for the exit must not find freed code. Switching the addon off
@@ -891,6 +905,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
                 { std::lock_guard<std::mutex> settings(g_settingsMutex); p = g_config.p; preset = g_config.dlaaPreset; handoff = g_config.scalerHandoff; motion = g_config.motionSource;
                   gpuWait = g_config.scalerGpuWait; stability = g_config.scalerStability; edges = g_config.scalerEdges; }
                 g_sr.SetStability(stability); g_sr.SetEdgeSmoothing(edges);
+                if (NeuralRenderingOnNow()) g_link.SetTone(0.0f, 1.0f, 1.0f); else g_link.SetTone(p.brightness, p.contrast, p.gamma);
                 uint32_t fw = 0, fh = 0;
                 ID3D11Resource* flow = motion == 1 ? g_tap.NewestFlow(fw, fh) : nullptr;
                 const float fraction = g_nisPerFrame > 1 ? 1.0f / g_nisPerFrame : 1.0f;
@@ -1038,6 +1053,70 @@ void SaveRecording() {
     std::string game;
     { std::lock_guard<std::mutex> lock(g_textMutex); game = g_focusExe; }
     if (!g_recorder.Save(RecordFolder(), game)) Log("recorder: nothing saved (%s)", g_recorder.GetStatus().saving ? "a save is running" : "nothing recorded yet");
+}
+
+bool NeuralRenderingOn() { return NeuralRenderingOnNow(); }
+
+namespace {
+std::string Narrow(const std::wstring& w) {
+    const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    std::string s(n > 0 ? n : 0, '\0');
+    if (n > 0) WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), s.data(), n, nullptr, nullptr);
+    return s;
+}
+std::string FileVersion(const std::wstring& path) {
+    DWORD handle = 0; const DWORD size = GetFileVersionInfoSizeW(path.c_str(), &handle);
+    if (!size) return {};
+    std::vector<unsigned char> data(size); VS_FIXEDFILEINFO* fixed = nullptr; UINT len = 0;
+    if (!GetFileVersionInfoW(path.c_str(), 0, size, data.data()) || !VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&fixed), &len) || !fixed) return {};
+    char text[32]; snprintf(text, sizeof text, "%u.%u.%u", HIWORD(fixed->dwFileVersionMS), LOWORD(fixed->dwFileVersionMS), HIWORD(fixed->dwFileVersionLS));
+    return text;
+}
+const wchar_t* RuntimeFileName() { return kFsrScaler ? L"amd_fidelityfx_dx12.dll" : L"nvngx_dlss.dll"; }
+const char* RuntimeKey() { return kFsrScaler ? "fsrRuntime" : "dlssRuntime"; }
+} // namespace
+
+std::vector<RuntimeChoice> RuntimeChoices() {
+    std::vector<RuntimeChoice> list;
+    if (!kScalerAddon) return list;
+    const std::wstring shipped = g_addonDir + (kFsrScaler ? L"\\fsr\\" : L"\\dlss\\") + RuntimeFileName();
+    const std::string shippedVersion = kFsrScaler ? std::string("3.1.4") : FileVersion(shipped);
+    list.push_back({ L"", std::string(kFsrScaler ? "FSR " : "DLSS ") + shippedVersion + (kFsrScaler ? " (AMD, shipped)" : " (NVIDIA, shipped)") });
+    WIN32_FIND_DATAW found{};
+    const std::wstring folder = g_addonDir + L"\\runtimes\\" + (kFsrScaler ? L"FSR" : L"DLSS");
+    const HANDLE h = FindFirstFileW((folder + L"\\*").c_str(), &found);
+    if (h == INVALID_HANDLE_VALUE) return list;
+    do {
+        if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || found.cFileName[0] == L'.') continue;
+        const std::wstring dir = folder + L"\\" + found.cFileName, file = dir + L"\\" + RuntimeFileName();
+        if (GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+        std::string name;
+        if (FILE* about = _wfopen((dir + L"\\ABOUT.txt").c_str(), L"rb")) {   // its own name: the first line
+            char line[128] = {};
+            if (fgets(line, sizeof line, about)) { name = line; while (!name.empty() && (name.back() == '\n' || name.back() == '\r' || name.back() == ' ')) name.pop_back(); }
+            fclose(about);
+            if (name.size() >= 3 && (unsigned char)name[0] == 0xEF) name.erase(0, 3);
+        }
+        if (name.empty()) name = std::string(kFsrScaler ? "FSR " : "DLSS ") + FileVersion(file) + " (" + Narrow(found.cFileName) + ")";
+        list.push_back({ file, name });
+    } while (FindNextFileW(h, &found));
+    FindClose(h);
+    return list;
+}
+
+std::wstring ChosenRuntimeFile() {
+    const std::string chosen = g_host ? g_host->GetConfig(kAddonId, RuntimeKey(), "") : "";
+    std::wstring w(chosen.size(), L'\0');
+    w.resize(std::max(0, MultiByteToWideChar(CP_UTF8, 0, chosen.c_str(), (int)chosen.size(), w.data(), (int)w.size())));
+    for (wchar_t& ch : w) if (ch == L'/') ch = L'\\';
+    return w;
+}
+
+void ChooseRuntimeFile(const std::wstring& path) {
+    if (!g_host) return;
+    g_host->SetConfig(kAddonId, RuntimeKey(), Narrow(path).c_str());
+    g_host->SaveConfig();
+    Log("%s upscaler: runtime chosen in the panel: %s", kUpscalerName, path.empty() ? "the shipped one" : Narrow(path).c_str());
 }
 
 } // namespace nr

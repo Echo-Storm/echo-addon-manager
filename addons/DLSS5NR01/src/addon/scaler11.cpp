@@ -45,15 +45,22 @@ struct SavedBindings {
 };
 
 // The grab pass: the frame, read the way NIS reads it (through the pass's t0 view), written into the shared frame texture; from the input
-// viewport's corner on (0, 0 for the whole frame).
+// viewport's corner on (0, 0 for the whole frame). With tone set, brightness, contrast and gamma are applied on the way, as Neural
+// Rendering's Picture controls do them (compose11.cpp's Tone): the upscaler then takes the game as brighter or darker, at the small size.
 const char* const kGrabHlsl = R"HLSL(
 Texture2D<float4>   tFrame : register(t0);
 RWTexture2D<float4> uOut   : register(u0);
-cbuffer C : register(b0) { uint2 origin; uint2 unused; };
+cbuffer C : register(b0) { uint2 origin; uint tone; float brightness; float contrast; float gamma; float2 unused; };
 [numthreads(8, 8, 1)]
 void CSGrab(uint3 id : SV_DispatchThreadID) {
     uint w, h; uOut.GetDimensions(w, h);
-    if (id.x < w && id.y < h) uOut[id.xy] = tFrame.Load(int3(id.xy + origin, 0));
+    if (id.x >= w || id.y >= h) return;
+    float4 c = tFrame.Load(int3(id.xy + origin, 0));
+    if (tone != 0u) {
+        c.rgb = saturate((c.rgb - 0.5) * contrast + 0.5 + brightness);
+        c.rgb = pow(max(c.rgb, 1e-5), 1.0 / max(gamma, 0.05));
+    }
+    uOut[id.xy] = c;
 }
 )HLSL";
 
@@ -214,7 +221,7 @@ bool ScalerLink::MakeGrabShader() {
     const HRESULT hr = m_dev->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &m_grab);
     code->Release();
     if (FAILED(hr)) { Log("%s upscaler: the grab shader could not be made: 0x%08x", kUpscalerName, (unsigned)hr); return false; }
-    D3D11_BUFFER_DESC cb{}; cb.ByteWidth = 16; cb.Usage = D3D11_USAGE_DYNAMIC; cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER; cb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    D3D11_BUFFER_DESC cb{}; cb.ByteWidth = 32; cb.Usage = D3D11_USAGE_DYNAMIC; cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER; cb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     if (FAILED(m_dev->CreateBuffer(&cb, nullptr, &m_grabOrigin))) { Log("%s upscaler: the grab's constants could not be made", kUpscalerName); return false; }
     return true;
 }
@@ -333,7 +340,10 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
         ID3D11Buffer* nisConstants = nullptr; m_ctx->CSGetConstantBuffers(0, 1, &nisConstants);
         D3D11_MAPPED_SUBRESOURCE mapped{};
         if (SUCCEEDED(m_ctx->Map(m_grabOrigin, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
-            const uint32_t origin[4] = { pass.inX, pass.inY, 0, 0 }; memcpy(mapped.pData, origin, sizeof origin); m_ctx->Unmap(m_grabOrigin, 0);
+            struct { uint32_t x, y, tone; float brightness, contrast, gamma, unused[2]; } constants = { pass.inX, pass.inY, m_toneOn ? 1u : 0u,
+                                                                                                  m_brightness, m_contrast, m_gamma, { 0, 0 } };
+            static_assert(sizeof constants == 32, "the grab's cbuffer");
+            memcpy(mapped.pData, &constants, sizeof constants); m_ctx->Unmap(m_grabOrigin, 0);
         }
         m_ctx->CSSetShader(m_grab, nullptr, 0);
         m_ctx->CSSetShaderResources(0, 1, &frame);
