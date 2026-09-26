@@ -31,6 +31,16 @@ struct AddonManifest {
     bool wip = false;                        // work in progress: listed, but it cannot be switched on and is never loaded
     bool enabledByDefault = true;            // false: a newly installed addon stays off until the person switches it on
     std::vector<std::string> tags;
+    // "runtimes": files the addon runs on that are not its own (NVIDIA's DLSS, AMD's FidelityFX, a model file), listed at the bottom of the
+    // addon list with their version and signature (runtime_files.h)
+    struct Runtime {
+        std::string name;            // "FSR"
+        std::string file;            // relative to the addon's folder, or "{ls}/..." for Lossless Scaling's folder
+        std::string configKey;       // an addon setting that holds the file's path when the person chose one ("snippetPath")
+        std::string shippedSha256;   // the file the addon ships with, and the version to show for it
+        std::string shippedLabel;
+    };
+    std::vector<Runtime> runtimes;
     bool parsed = false;                     // addon.json was found and was valid
 };
 

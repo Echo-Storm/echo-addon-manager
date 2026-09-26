@@ -11,5 +11,12 @@
     "dlss",
     "upscaling"
   ],
-  "enabled_by_default": false
+  "enabled_by_default": false,
+  "runtimes": [
+    {
+      "name": "DLSS",
+      "file": "dlss/nvngx_dlss.dll",
+      "shipped_sha256": "3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983"
+    }
+  ]
 }

@@ -239,11 +239,14 @@ void DrawPanel() {
     }
     bool modelChanged = false;
     if (dlaa && !kFsrScaler) {
-        int preset = c.dlaaPreset == 13 ? 1 : 0;
-        const char* presets[] = { "NVIDIA's default (K, DLSS 4)", "M (DLSS 4.5, second-generation transformer)" };
-        if (ImGui::Combo("DLSS model", &preset, presets, 2)) { c.dlaaPreset = preset == 1 ? 13u : 0u; changed = true; modelChanged = true; }
+        int preset = c.dlaaPreset == 13 ? 1 : c.dlaaPreset == 5 ? 2 : 0;
+        const char* presets[] = { "NVIDIA's default (K, DLSS 4)", "M (DLSS 4.5, second-generation transformer)", "E (DLSS 3, the older CNN model)" };
+        static const unsigned kPresetOf[] = { 0u, 13u, 5u };
+        if (ImGui::Combo("DLSS model", &preset, presets, 3)) { c.dlaaPreset = kPresetOf[preset]; changed = true; modelChanged = true; }
         Tip("Which DLSS model runs. K is NVIDIA's default for DLAA. M is DLSS 4.5's newer model: sharper and steadier in motion in games, and much heavier "
-            "(about three times K's time). Compare them with the Before / after hotkey. Changing it restarts the engine.\n"
+            "(about three times K's time). E is DLSS 3's CNN model: lighter, and it keeps a still picture crisp where K and M can soften it here (users "
+            "report it: Lossless Scaling's frames have no camera jitter, which those models expect). Compare them with the Before / after hotkey. "
+            "Changing it restarts the engine.\n"
             "Lossless Scaling gives DLAA no camera jitter and no depth, so it smooths and steadies edges and shimmer but cannot add detail beyond the frame's own, as it does in a game that supports DLSS.");
     }
 

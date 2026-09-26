@@ -45,6 +45,14 @@ bool ReadManifest(const std::filesystem::path& file, AddonManifest& out, std::st
     if (const auto it = doc.find("wip"); it != doc.end() && it->is_boolean()) out.wip = it->get<bool>();
     if (const auto it = doc.find("enabled_by_default"); it != doc.end() && it->is_boolean()) out.enabledByDefault = it->get<bool>();
     TakeList(doc, "tags", out.tags);
+    if (const auto it = doc.find("runtimes"); it != doc.end() && it->is_array())
+        for (const Json& item : *it) {
+            if (!item.is_object()) continue;
+            AddonManifest::Runtime r;
+            TakeText(item, "name", r.name); TakeText(item, "file", r.file); TakeText(item, "config_key", r.configKey);
+            TakeText(item, "shipped_sha256", r.shippedSha256); TakeText(item, "shipped_label", r.shippedLabel);
+            if (!r.name.empty() && !r.file.empty()) out.runtimes.push_back(r);
+        }
     out.parsed = true;
     return true;
 }

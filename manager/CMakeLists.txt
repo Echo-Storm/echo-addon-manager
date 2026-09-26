@@ -38,6 +38,7 @@ set(CORE_SOURCES
 set(ADDON_SOURCES
     src/addon/addon_manager.cpp
     src/addon/addon_manifest.cpp
+    src/addon/runtime_files.cpp
     src/addon/addon_discovery.cpp
     src/addon/addon_runtime.cpp
     src/addon/addon_security.cpp
@@ -93,6 +94,7 @@ set(GUI_SOURCES
     src/gui/widgets/toggle_switch.cpp
     src/gui/widgets/toast.cpp
     src/gui/widgets/addon_card.cpp
+    src/gui/widgets/runtime_list.cpp
     src/gui/widgets/status_bar.cpp
     src/gui/widgets/header_bar.cpp
     src/gui/widgets/empty_state.cpp
@@ -164,11 +166,14 @@ add_executable(eam_uipreview EXCLUDE_FROM_ALL
     src/gui/widgets/toggle_switch.cpp
     src/gui/widgets/toast.cpp
     src/gui/widgets/addon_card.cpp
+    src/gui/widgets/runtime_list.cpp
     src/gui/widgets/status_bar.cpp
     src/gui/widgets/header_bar.cpp
     src/host/system_stats.cpp
     src/addon/addon_discovery.cpp
     src/addon/addon_manifest.cpp
+    src/addon/runtime_files.cpp
+    src/addon/addon_security.cpp
     src/gui/widgets/empty_state.cpp
     src/gui/window/status_text.cpp
     src/update/update_check.cpp
@@ -204,7 +209,7 @@ target_include_directories(eam_uipreview PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include
     ${minhook_SOURCE_DIR}/include
 )
-target_link_libraries(eam_uipreview d3d11 dxgi d3dcompiler minhook)
+target_link_libraries(eam_uipreview d3d11 dxgi d3dcompiler bcrypt minhook)
 
 # Offline test of installing addons from a folder / zip / dll: cmake --build . --config Release --target eam_installtest
 add_executable(eam_installtest EXCLUDE_FROM_ALL tools/install_test.cpp src/addon/addon_install.cpp src/host/metrics.cpp src/host/gpu_stats.cpp src/config/settings_backup.cpp src/diag/diagnostics.cpp)

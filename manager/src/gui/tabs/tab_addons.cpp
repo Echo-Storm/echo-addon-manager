@@ -7,6 +7,7 @@
 #include "../widgets/addon_card.h"
 #include "../widgets/toast.h"
 #include "../widgets/empty_state.h"
+#include "../widgets/runtime_list.h"
 #include "../widgets/tooltip.h"
 #include "../widgets/toggle_switch.h"
 #include "imgui.h"
@@ -14,6 +15,7 @@
 #include <cctype>
 #include <cfloat>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -476,6 +478,19 @@ void RenderTabAddons(AddonManager* manager) {
             SelectAddon(addons[i]);
         if (toggled) ApplyToggle(manager, i, addons[i].enabled);
         ImGui::Dummy(ImVec2(0, S(1)));
+    }
+    // the runtime files the addons use, at the bottom of the list (right under the addons when they fill it)
+    {
+        const std::wstring lsDir = std::filesystem::path(manager->GetAddonsPath()).parent_path().wstring();
+        const std::vector<RuntimeFile> runtimes = RuntimeFiles(addons, lsDir, [](const std::string& id, const std::string& key) {
+            return ConfigManager::Instance().Get(id, key, "");
+        });
+        if (!runtimes.empty()) {
+            const widgets::RuntimeAction act = widgets::RuntimeListAtBottom(runtimes);
+            if (act.kind != widgets::RuntimeAction::None)
+                widgets::ToastShow(act.kind == widgets::RuntimeAction::Choose ? "Choosing another runtime file comes in the next step (this is the preview of the list)."
+                                                                              : "Going back to the shipped file comes in the next step.", widgets::ToastType::Info, 5.0f);
+        }
     }
     ImGui::EndChild();
 

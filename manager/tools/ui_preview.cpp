@@ -18,6 +18,8 @@
 #include "src/gui/gui_scale.h"
 #include "src/gui/widgets/toggle_switch.h"
 #include "src/gui/widgets/addon_card.h"
+#include "src/gui/widgets/runtime_list.h"
+#include "src/addon/addon_manifest.h"
 #include "src/gui/widgets/toast.h"
 #include "src/gui/widgets/status_bar.h"
 #include "src/gui/widgets/header_bar.h"
@@ -118,6 +120,27 @@ int main(int argc, char** argv) {
     ReadSvgIcon(plugins / "icon.svg", a.iconSvg, a.iconSvgView);
     ReadSvgIcon(plugins / "products" / "DLSS4DLAA" / "icon.svg", b.iconSvg, b.iconSvgView);
     ReadSvgIcon(plugins / "products" / "FSR3UPSC" / "icon.svg", c.iconSvg, c.iconSvgView);
+    // the runtimes, as the repository's addon.json files list them, read from the install in D:\Utilities\Lossless Scaling (as the real
+    // list reads them: version, signature, SHA-256). EAM_PREVIEW_FSR=<file>: that file as the FSR runtime (only read, never loaded)
+    const std::wstring lsDir = L"D:\\Utilities\\Lossless Scaling";
+    { AddonManifest m; if (ReadManifest(plugins / "addon.json", m)) a.manifest.runtimes = m.runtimes; }
+    { AddonManifest m; if (ReadManifest(plugins / "products" / "DLSS4DLAA" / "addon.json", m)) b.manifest.runtimes = m.runtimes; }
+    { AddonManifest m; if (ReadManifest(plugins / "products" / "FSR3UPSC" / "addon.json", m)) c.manifest.runtimes = m.runtimes; }
+    a.dllPath = lsDir + L"\\addons\\DLSS5NR01\\DLSS5NR01.dll";
+    b.dllPath = lsDir + L"\\addons\\DLSS4DLAA\\DLSS4DLAA.dll";
+    c.dllPath = lsDir + L"\\addons\\FSR3UPSC\\FSR3UPSC.dll";
+    {
+        char* v = nullptr; size_t n = 0; _dupenv_s(&v, &n, "EAM_PREVIEW_FSR");
+        if (v && *v && !c.manifest.runtimes.empty()) c.manifest.runtimes[0].file = v;
+        free(v);
+    }
+    const std::vector<AddonInfo> runtimeAddons = { a, b, c };
+    auto noConfig = [](const std::string&, const std::string&) { return std::string(); };
+    for (int i = 0; i < 100; ++i) {   // the files are read on a thread of their own: wait for them, so the picture shows what they are
+        const std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir, noConfig);
+        if (std::all_of(rows.begin(), rows.end(), [](const RuntimeFile& r) { return r.read || !r.exists; })) break;
+        Sleep(100);
+    }
 
     float model = 0.5f, sharpen = 0.0f, vib = 1.2f, blend = 0.72f, gamma = 1.0f; int passes = 1, grain = 2; bool sw = true, sw2 = false; int sel = 0;
     const float dModel = 0.35f, dSharpen = 0.0f, dVib = 0.0f, dBlend = 1.0f, dGamma = 1.0f; const int dPasses = 1, dGrain = 1;
@@ -209,6 +232,10 @@ int main(int argc, char** argv) {
             ImGui::PushStyleColor(ImGuiCol_Separator, eam::ui::theme::V(eam::ui::theme::kBorder)); ImGui::Separator(); ImGui::PopStyleColor();
             ImGui::Dummy(ImVec2(0, S(4)));
             for (int i = 0; i < 3; ++i) { widgets::AddonCard(*list[i], i, i == selected); ImGui::Dummy(ImVec2(0, S(1))); }
+            {   // as tab_addons.cpp: the runtimes at the bottom of the list
+                const std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir, noConfig);
+                widgets::RuntimeListAtBottom(rows);
+            }
             ImGui::EndChild();
             ImGui::SameLine();
             ImGui::BeginChild("AddonDetail", ImVec2(0, -1), true);
