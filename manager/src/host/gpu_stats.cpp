@@ -88,6 +88,7 @@ bool GpuStats::SampleOnce() {
 void GpuStats::InjectForPreview(const Snapshot& s) {
     std::lock_guard<std::mutex> lk(m_mutex);
     m_snap = s; m_snap.ok = true; m_takenAtMs = NowMs();
+    m_started = true;   // a preview's numbers stay: the sampler is never started over them
 }
 
 void GpuStats::Run() {

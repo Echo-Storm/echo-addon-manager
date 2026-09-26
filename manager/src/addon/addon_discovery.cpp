@@ -5,6 +5,10 @@
 #include <cwctype>
 #include <system_error>
 #include <windows.h>
+#include <cstdio>
+#include <cwchar>
+#include <fstream>
+#include <sstream>
 
 namespace fs = std::filesystem;
 
@@ -54,7 +58,7 @@ fs::path PickIcon(const fs::path& folder, const AddonManifest& manifest) {
         const fs::path named = folder / manifest.icon;
         if (IsFile(named)) return named;
     }
-    for (const wchar_t* name : { L"icon.png", L"icon.jpg", L"icon.jpeg", L"icon.bmp" }) {
+    for (const wchar_t* name : { L"icon.svg", L"icon.png", L"icon.jpg", L"icon.jpeg", L"icon.bmp" }) {
         const fs::path guess = folder / name;
         if (IsFile(guess)) return guess;
     }
@@ -62,6 +66,30 @@ fs::path PickIcon(const fs::path& folder, const AddonManifest& manifest) {
 }
 
 } // namespace
+
+// A vector icon: the d="..." of every path in the file (in order), and the width of its viewBox (24 when it has none). Colours and other
+// attributes are left out: the manager draws the shapes in its own colours, like its built-in icons.
+bool ReadSvgIcon(const fs::path& file, std::vector<std::string>& paths, float& view) {
+    std::ifstream in(file, std::ios::binary);
+    if (!in) return false;
+    std::stringstream buffer; buffer << in.rdbuf();
+    const std::string text = buffer.str();
+    if (text.size() > 64 * 1024) return false;   // an icon, not a picture
+    view = 24.0f;
+    if (const size_t vb = text.find("viewBox=\""); vb != std::string::npos) {
+        float x = 0, y = 0, w = 0, h = 0;
+        if (sscanf_s(text.c_str() + vb + 9, "%f %f %f %f", &x, &y, &w, &h) == 4 && w > 0) view = w;
+    }
+    for (size_t at = text.find("<path"); at != std::string::npos; at = text.find("<path", at + 5)) {
+        const size_t end = text.find('>', at);
+        const size_t d = text.find(" d=\"", at);
+        if (d == std::string::npos || (end != std::string::npos && d > end)) continue;
+        const size_t close = text.find('"', d + 4);
+        if (close == std::string::npos) break;
+        paths.push_back(text.substr(d + 4, close - d - 4));
+    }
+    return !paths.empty();
+}
 
 bool DiscoverAddon(const fs::path& folder, AddonInfo& info) {
     info.folderName = folder.filename().wstring();
@@ -82,7 +110,11 @@ bool DiscoverAddon(const fs::path& folder, AddonInfo& info) {
     if (!ini.empty()) info.configPath = ini.wstring();
 
     const fs::path icon = PickIcon(folder, info.manifest);
-    if (!icon.empty()) info.iconPath = icon.wstring();
+    if (!icon.empty() && _wcsicmp(icon.extension().c_str(), L".svg") == 0) {
+        if (!ReadSvgIcon(icon, info.iconSvg, info.iconSvgView)) LOG_WARN("AddonManager", "The icon of '%s' has no shapes the manager can draw", info.id.c_str());
+    } else if (!icon.empty()) {
+        info.iconPath = icon.wstring();
+    }
     return true;
 }
 

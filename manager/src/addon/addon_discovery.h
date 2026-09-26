@@ -2,6 +2,7 @@
 #include "addon_info.h"
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace eam {
 
@@ -12,5 +13,9 @@ std::string WideToUtf8(const std::wstring& text);
 // manifest names, else <folder>.dll, else the first .dll in the folder. Returns false when there is no DLL, which means it is not an addon.
 // The user's switch and the security verdict are not decided here.
 bool DiscoverAddon(const std::filesystem::path& folder, AddonInfo& info);
+
+// A vector icon (icon.svg): the d="..." of each of its paths, in order, and the width of its viewBox (24 without one). False when it has
+// no paths (or is too big to be an icon).
+bool ReadSvgIcon(const std::filesystem::path& file, std::vector<std::string>& paths, float& view);
 
 } // namespace eam

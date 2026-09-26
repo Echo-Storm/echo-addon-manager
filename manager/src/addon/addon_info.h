@@ -67,6 +67,9 @@ struct AddonInfo {
     // its icon
     std::wstring iconPath;
     ID3D11ShaderResourceView* iconTexture = nullptr;   // released by the manager
+    // or a vector icon (icon.svg): the path data of its shapes, drawn in the theme's colours at any size; iconSvgView is its viewBox width
+    std::vector<std::string> iconSvg;
+    float iconSvgView = 24.0f;
 
     // the window's per-addon state
     bool showSettings = false;

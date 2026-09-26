@@ -13,12 +13,12 @@ param(
 $root = Split-Path $PSScriptRoot -Parent   # the repository folder
 $items = @{
     host     = @{ Src = "$root\manager\build\Release\Lossless.dll"; Dst = "$LsDir\Lossless.dll"; Extra = @("$root\manager\manager-icon.ico", "$root\manager\manager-icon.png") }
-    nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_dlss5nr01.dll", "$root\addons\DLSS5NR01\build\Release\nr_selftest.exe", "$root\addons\DLSS5NR01\addon.json",
+    nr       = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS5NR01.dll"; Dst = "$LsDir\addons\DLSS5NR01\DLSS5NR01.dll"; Extra = @("$root\addons\DLSS5NR01\build\Release\nvngx.dll_dlss5nr01.dll", "$root\addons\DLSS5NR01\build\Release\nr_selftest.exe", "$root\addons\DLSS5NR01\addon.json", "$root\addons\DLSS5NR01\icon.svg",
                   @{ Src = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; Rel = 'NVIDIA-LICENSE.txt' }) }
-    dlaa     = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS4DLAA.dll"; Dst = "$LsDir\addons\DLSS4DLAA\DLSS4DLAA.dll"; Extra = @("$root\addons\DLSS5NR01\products\DLSS4DLAA\addon.json",
+    dlaa     = @{ Src = "$root\addons\DLSS5NR01\build\Release\DLSS4DLAA.dll"; Dst = "$LsDir\addons\DLSS4DLAA\DLSS4DLAA.dll"; Extra = @("$root\addons\DLSS5NR01\products\DLSS4DLAA\addon.json", "$root\addons\DLSS5NR01\products\DLSS4DLAA\icon.svg",
                   @{ Src = "$root\addons\DLSS5NR01\build\Release\dlss\nvngx_dlss.dll"; Rel = 'dlss\nvngx_dlss.dll' }, @{ Src = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; Rel = 'NVIDIA-LICENSE.txt' },
                   @{ Src = "$root\addons\DLSS5NR01\LICENSE"; Rel = 'LICENSE.txt' }) }
-    fsr      = @{ Src = "$root\addons\DLSS5NR01\build\Release\FSR3UPSC.dll"; Dst = "$LsDir\addons\FSR3UPSC\FSR3UPSC.dll"; Extra = @("$root\addons\DLSS5NR01\products\FSR3UPSC\addon.json",
+    fsr      = @{ Src = "$root\addons\DLSS5NR01\build\Release\FSR3UPSC.dll"; Dst = "$LsDir\addons\FSR3UPSC\FSR3UPSC.dll"; Extra = @("$root\addons\DLSS5NR01\products\FSR3UPSC\addon.json", "$root\addons\DLSS5NR01\products\FSR3UPSC\icon.svg",
                   @{ Src = "$root\addons\DLSS5NR01\build\Release\fsr\amd_fidelityfx_dx12.dll"; Rel = 'fsr\amd_fidelityfx_dx12.dll' },
                   @{ Src = "$root\addons\DLSS5NR01\third_party\ffx\LICENSE.txt"; Rel = 'AMD-FidelityFX-LICENSE.txt' },
                   @{ Src = "$root\addons\DLSS5NR01\LICENSE"; Rel = 'LICENSE.txt' }) }

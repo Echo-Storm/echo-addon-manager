@@ -39,7 +39,7 @@ public:
 
     // For tests: take one sample on the calling thread.
     bool SampleOnce();
-    // For offline previews: pretend the GPU reported this.
+    // For offline previews: pretend the GPU reported this (and never sample the real one from then on).
     void InjectForPreview(const Snapshot& s);
 
 private:

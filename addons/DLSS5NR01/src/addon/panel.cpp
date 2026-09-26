@@ -219,13 +219,7 @@ void DrawPanel() {
     const bool dlaa = kScalerAddon;
     {
         const std::string label = std::string("Enable ") + kProductName;
-        if (kWip) {
-            Note("Work in progress, switched off for now. On a captured frame DLSS gets no camera jitter and no depth from the game, and in testing "
-                 "(World of Warcraft at 4K) it changed nothing visible while costing 3 to 4 ms of GPU time a frame. It stays off until a way around that is found.");
-            ImGui::BeginDisabled();
-        }
         if (ImGui::Checkbox(label.c_str(), &c.enabled)) { changed = true; if (c.enabled) { ClaimFrames(); SwitchOn(); } else ReleaseFrames(); }
-        if (kWip) ImGui::EndDisabled();
         Tip(kScalerAddon
                 ? "Master switch. Off = Lossless Scaling's NIS runs as usual and the upscaler stops.\nTo compare while playing, use the Before / after hotkey instead: it keeps the upscaler running.\n"
                   "Only one of the DLSS 4 and FSR 3 Upscalers works at a time (switching one on in the addon list switches the other off); either works beside DLSS 5 Neural Rendering."
@@ -238,7 +232,7 @@ void DrawPanel() {
         const float was = c.p.workingScale; const NrParams keep = c.p; c.p = ProductDefaults(); c.p.hudCount = keep.hudCount; memcpy(c.p.hud, keep.hud, sizeof c.p.hud); c.p.hudFeather = keep.hudFeather; c.lsFirst = true; changed = true; if (c.p.workingScale != was) createChanged = true;
     }
     Tip("Put the look and quality sliders back to this addon's defaults. Your presets, hotkeys and the advanced settings are not touched.");
-    {   // the other addon of the pair
+    if (!kScalerAddon) {   // the other addon of the pair (the upscalers take the NIS pass and work beside Neural Rendering)
         const std::string owner = FrameOwner();
         if (!owner.empty() && owner != kAddonId)
             Note("%s is on now. Turning this on switches it off: only one of the two works on the frames at a time.", ProductNameOf(owner.c_str()));

@@ -19,7 +19,7 @@ float MoveToward(float from, float to, float step) {
 
 } // namespace
 
-bool ToggleSwitch(const char* id, bool* value) {
+bool ToggleSwitch(const char* id, bool* value, float size) {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (window->SkipItems) return false;
 
@@ -27,7 +27,7 @@ bool ToggleSwitch(const char* id, bool* value) {
     const ImGuiID key = window->GetID(id);
 
     // The pill is 1.8 times as wide as it is tall, and as tall as most of a text row, so it follows the display scale.
-    const float height = ImGui::GetFrameHeight() * 0.8f;
+    const float height = ImGui::GetFrameHeight() * 0.8f * size;
     const float width = height * 1.8f;
     const float radius = height * 0.5f;
 

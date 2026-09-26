@@ -17,6 +17,7 @@ void SetupModernStyle() {
 
 static float g_uiScale = 1.0f;
 static ImFont* g_monoFont = nullptr;
+static ImFont* g_titleFont = nullptr;   // Segoe UI Semibold: the header's title and the addon names
 
 float UiScale() { return g_uiScale; }
 void SetUiScale(float scale) {
@@ -56,6 +57,9 @@ void LoadUiFonts(const std::string& uiFontPath, const std::string& monoFontPath)
     if (!ui) ui = io.Fonts->AddFontDefault();
     io.FontDefault = ui;
 
+    g_titleFont = TryAddFont(io, fontsDir + "seguisb.ttf");
+    if (!g_titleFont) g_titleFont = ui;
+
     g_monoFont = TryAddFont(io, monoFontPath);
     for (const char* name : { "CascadiaMono.ttf", "consola.ttf", "cour.ttf" }) {
         if (g_monoFont) break;
@@ -64,5 +68,6 @@ void LoadUiFonts(const std::string& uiFontPath, const std::string& monoFontPath)
 }
 
 ImFont* MonoFont() { return g_monoFont; }
+ImFont* TitleFont() { return g_titleFont; }
 
 } // namespace eam

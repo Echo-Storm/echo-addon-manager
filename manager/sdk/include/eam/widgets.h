@@ -112,12 +112,14 @@ inline void ApplyStyle(ImGuiStyle& style) {
     colors[ImGuiCol_FrameBgActive]   = ImVec4(0.190f, 0.190f, 0.190f, 1.0f);
 
     // Tabs: dim text-on-dark with a green selected state (the reference apps underline the selected tab in green)
-    colors[ImGuiCol_Tab]                = V(kBg);
-    colors[ImGuiCol_TabHovered]         = V(kPanel);
-    colors[ImGuiCol_TabSelected]        = V(kPanel);
+    // Unselected tabs have no fill and the selected one a light one with the accent line on top, so it reads the same on the window's
+    // background and on a panel's (the selected tab used to take the panel colour, and vanished on a panel)
+    colors[ImGuiCol_Tab]                = V(kBg, 0.0f);
+    colors[ImGuiCol_TabHovered]         = V(kButtonHover);
+    colors[ImGuiCol_TabSelected]        = V(kButton);
     colors[ImGuiCol_TabSelectedOverline]= V(kAccent);
-    colors[ImGuiCol_TabDimmed]          = V(kBg);
-    colors[ImGuiCol_TabDimmedSelected]  = V(kPanel);
+    colors[ImGuiCol_TabDimmed]          = V(kBg, 0.0f);
+    colors[ImGuiCol_TabDimmedSelected]  = V(kButton);
     colors[ImGuiCol_TabDimmedSelectedOverline] = V(kAccentDim);
 
     // Accent elements

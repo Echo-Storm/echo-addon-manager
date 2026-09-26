@@ -6,7 +6,7 @@
 param(
     [string]$Version = '',
     [switch]$SkipBuild,
-    [switch]$IncludeWip   # also package addons marked work in progress (the DLSS 4 and FSR 3 Upscalers)
+    [switch]$IncludeWip   # also package addons marked work in progress (none are now)
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -52,7 +52,7 @@ foreach ($a in $addons) {
     New-Item -ItemType Directory -Force $dst | Out-Null
     foreach ($f in $a.Files) { Copy-Item "$($a.Bin)\$f" $dst }
     Copy-Item "$($a.Dir)\addon.json" $dst
-    if (Test-Path "$($a.Dir)\icon.png") { Copy-Item "$($a.Dir)\icon.png" $dst }
+    foreach ($icon in 'icon.svg', 'icon.png') { if (Test-Path "$($a.Dir)\$icon") { Copy-Item "$($a.Dir)\$icon" $dst } }
     if (Test-Path "$($a.Dir)\LICENSE") { Copy-Item "$($a.Dir)\LICENSE" "$dst\LICENSE.txt" }
     if ($a.Extra) { foreach ($extra in $a.Extra.Keys) { Need $a.Extra[$extra] "$extra for $($a.Id) (run tools\$(if ($a.Id -eq 'FSR3UPSC') { 'fetch_ffx_sdk.ps1' } else { 'fetch_ngx_sdk.ps1' }))"; New-Item -ItemType Directory -Force (Split-Path "$dst\$extra") | Out-Null; Copy-Item $a.Extra[$extra] "$dst\$extra" } }
     $included += $a.Id
@@ -144,10 +144,10 @@ Install by hand (Lossless Scaling 3.2.2.0 was the tested version)
 5. DLSS 5 Neural Rendering also needs nvngx_dlssnr.dll next to LosslessScaling.exe. It is not included and this project does not say where to
    find it. ReShade input passthrough and Windowed mode are built into the manager (its Features tab); they arrive switched off.
    If you used the old separate ReShade or Windowed addon folders, the manager ignores them; you can remove them.
-6. Preview (work in progress): the DLSS 4 Upscaler (NVIDIA RTX) and the FSR 3 Upscaler (any DirectX 12 graphics card) take the place of
-   Lossless Scaling's NIS scaler with DLSS or FSR 3, using motion they measure from the frames. They arrive switched off: switch one on in
-   the addon list (only one of the two runs at a time), choose NIS as the Scaling Type in Lossless Scaling, and run the game in a window
-   smaller than the screen (for example 2560x1440 on a 4K screen). Tried in World of Warcraft: Forever only so far.
+6. The DLSS 4 Upscaler (NVIDIA RTX) and the FSR 3 Upscaler (any DirectX 12 graphics card) take the place of Lossless Scaling's NIS
+   scaler with DLSS or FSR 3, using motion they measure from the frames. They arrive switched off: switch one on in the addon list (only
+   one of the two runs at a time), choose NIS as the Scaling Type in Lossless Scaling, and run the game in a window smaller than the
+   screen (for example 2560x1440 on a 4K screen); at the screen's own size they anti-alias. 4:3 windows work too.
    Guide: https://github.com/Echo-Storm/ls-addon-manager/blob/main/addons/DLSS5NR01/docs/upscalers.md
 
 Updating: close Lossless Scaling and copy the new files over the old ones. Your settings (addons\config.json) carry over.

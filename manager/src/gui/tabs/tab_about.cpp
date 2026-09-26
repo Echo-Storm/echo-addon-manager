@@ -1,5 +1,6 @@
 #include "tab_about.h"
 #include "../gui_scale.h"
+#include "../gui_style.h"
 #include "../widgets/status_bar.h"
 #include "../../update/update_check.h"
 #include "../../../sdk/include/eam/version.h"
@@ -65,7 +66,7 @@ void RenderTabAbout() {
         }
     }
     ImGui::Dummy(ImVec2(0, S(6)));
-    CenteredText("An addon manager for Lossless Scaling: shaders, behaviour, and anything else an addon adds.", true);
+    CenteredText("Lossless Scaling, extended: neural rendering, DLSS and FSR upscaling, and anything else an addon adds.", true);
 
     // support
     ImGui::Dummy(ImVec2(0, S(16)));
@@ -75,7 +76,47 @@ void RenderTabAbout() {
         widgets::OpenKofi();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("If this is useful, a Ko-fi helps a lot. Opens your browser.");
 
+    // what comes with it: the three plugins and what is built into the manager
     ImGui::Dummy(ImVec2(0, S(18)));
+    eam::ui::SectionLabel("What comes with it");
+    {
+        struct Item { const char* icon; const char* name; const char* what; };
+        const Item items[] = {
+            { eam::ui::icons::kSparkles, "DLSS 5 Neural Rendering",
+              "NVIDIA's neural rendering model on every frame Lossless Scaling shows, real and generated: a new look for any game, with its own "
+              "motion measurement, saved looks and a look per game. NVIDIA RTX; needs your own copy of the model file." },
+            { eam::ui::icons::kUpscale, "DLSS 4 Upscaler",
+              "NVIDIA DLSS in place of Lossless Scaling's NIS scaler: real upscaling (or DLAA at the screen's own size) for games that never had "
+              "it, with motion measured from the frames. NVIDIA RTX." },
+            { eam::ui::icons::kUpscaleFast, "FSR 3 Upscaler",
+              "AMD FSR 3 in the same place, on any DirectX 12 graphics card. Both upscalers take 4:3 games too, keep their settings per game, and "
+              "have Stability and Edge smoothing for older games without anti-aliasing." },
+            { eam::ui::icons::kSliders, "Built into the manager",
+              "ReShade input passthrough, windowed games and a second monitor, a Performance tab that says what limits the frame rate, a tray "
+              "icon and hotkey, a one-file installer that repairs itself after a Lossless Scaling update, and an update check." },
+        };
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float icon = S(30.0f);
+        for (const Item& it : items) {
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            dl->AddRectFilled(at, ImVec2(at.x + icon, at.y + icon), eam::ui::theme::U(eam::ui::theme::kPanelAlt), S(4.0f));
+            dl->AddRect(at, ImVec2(at.x + icon, at.y + icon), eam::ui::theme::U(eam::ui::theme::kAccentDim), S(4.0f));
+            eam::ui::svg::Draw(dl, it.icon, ImVec2(at.x + icon * 0.19f, at.y + icon * 0.19f), icon * 0.62f, eam::ui::theme::U(eam::ui::theme::kAccent), 1.7f);
+            ImGui::Dummy(ImVec2(icon, icon));
+            ImGui::SameLine(0, S(12));
+            ImGui::BeginGroup();
+            if (ImFont* title = TitleFont()) ImGui::PushFont(title, 0.0f);
+            ImGui::TextUnformatted(it.name);
+            if (TitleFont()) ImGui::PopFont();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+            ImGui::TextWrapped("%s", it.what);
+            ImGui::PopStyleColor();
+            ImGui::EndGroup();
+            ImGui::Dummy(ImVec2(0, S(6)));
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0, S(14)));
     eam::ui::SectionLabel("Build");
     ImGui::TextDisabled("Addon API");   ImGui::SameLine(S(120)); ImGui::Text("v%s", EAM_API_VERSION_STRING);
     ImGui::TextDisabled("ImGui");        ImGui::SameLine(S(120)); ImGui::Text("%s", ImGui::GetVersion());
@@ -100,6 +141,11 @@ void RenderTabAbout() {
     ImGui::TextWrapped("NVIDIA DLSS: the Neural Rendering addon uses NVIDIA DLSS technology and includes NVIDIA's NGX SDK and DLSS runtime under "
                        "NVIDIA's RTX SDKs licence (NVIDIA-LICENSE.txt in its folder). NVIDIA, the NVIDIA logo and DLSS are trademarks of NVIDIA "
                        "Corporation. This project is not affiliated with or endorsed by NVIDIA.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0, S(4)));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+    ImGui::TextWrapped("AMD FidelityFX: the FSR 3 Upscaler includes AMD's FidelityFX runtime (MIT, AMD-FidelityFX-LICENSE.txt in its folder). AMD, "
+                       "FidelityFX and FSR are trademarks of Advanced Micro Devices, Inc.; this project is not affiliated with or endorsed by AMD.");
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0, S(4)));
     ImGui::TextDisabled("Also: Dear ImGui and nlohmann/json (MIT), stb_image (public domain), MinHook (BSD, used by Windowed mode).");

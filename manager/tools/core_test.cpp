@@ -698,6 +698,7 @@ int main(int argc, char** argv) {
     fs::copy_file(ExeDir() / "eam_testaddon.dll", beta / "other.dll");
     WriteFile(beta / "pic.jpg", "x");
     const fs::path gamma = MakeAddon(A, "gamma", "zzz.dll");                                   // no manifest, DLL not named after the folder
+    WriteFile(gamma / "icon.svg", R"(<svg viewBox="0 0 48 48"><!-- a vector icon --><path d="M4 4h40v40H4Z" stroke="red"/><path fill="none" d="M10 24h28"/></svg>)");
     MakeAddon(A, "newer", "newer.dll", R"({"min_host_version":"9.0.0"})");                     // needs a much newer manager
     MakeAddon(A, "minok", "minok.dll", R"({"min_host_version":"1.0.0"})");
     MakeAddon(A, "mingarbage", "mingarbage.dll", R"({"min_host_version":"abc"})");             // unreadable: must not block
@@ -752,6 +753,8 @@ int main(int argc, char** argv) {
         AddonInfo* g = Find(mgr, "gamma");
         Check("with no manifest and no matching name, the first DLL found is used", g && fs::path(g->dllPath).filename() == "zzz.dll");
         Check("with no manifest the display name is the folder name", g && g->GetDisplayName() == "gamma" && !g->manifest.parsed);
+        Check("an icon.svg is read as shapes: every path, its viewBox width, and no picture file", g && g->iconSvg.size() == 2 && g->iconSvg[1] == "M10 24h28" &&
+              g->iconSvgView == 48.0f && g->iconPath.empty());
         AddonInfo* bj = Find(mgr, "badjson");
         Check("a broken addon.json does not hide the addon", bj && !bj->manifest.parsed);
         Check("dependencies are listed before what needs them", IndexOf(mgr, "dep_a") >= 0 && IndexOf(mgr, "dep_a") < IndexOf(mgr, "dep_b"));

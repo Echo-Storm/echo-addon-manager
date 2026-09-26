@@ -7,6 +7,7 @@
 #include "../tabs/tab_performance.h"
 #include "../tabs/tab_settings.h"
 #include "../widgets/status_bar.h"
+#include "../widgets/header_bar.h"
 #include "../../addon/addon_manager.h"
 #include "../../host/metrics.h"
 #include "../../update/update_check.h"
@@ -61,7 +62,9 @@ void RenderMainFrame(AddonManager* manager, bool& bringAddonsForward) {
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
                  ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    // everything but the status bar along the bottom
+    // the header, fixed; then everything but the status bar along the bottom, which scrolls when a tab is long
+    widgets::HeaderBar();
+    ImGui::Dummy(ImVec2(0, 4));
     ImGui::BeginChild("##content", ImVec2(0, -widgets::StatusBarHeight() - 2.0f), false, ImGuiWindowFlags_NoBackground);
     RenderTabs(manager, bringAddonsForward);
     ImGui::EndChild();

@@ -2,6 +2,7 @@
 #include "toggle_switch.h"
 #include "tooltip.h"
 #include "../gui_scale.h"
+#include "../gui_style.h"
 #include "../../host/metrics.h"
 #include "eam/widgets.h"
 #include <cstdio>
@@ -47,8 +48,11 @@ const float* LiveColour(int level) {
     }
 }
 
-// The addon's own icon, or a package glyph on a dark tile when it ships none (vector, so it stays crisp at any scale).
-void DrawIcon(ImDrawList* draw, ImVec2 at, float size, const AddonInfo& a) {
+} // namespace
+
+// The addon's own icon (a picture, or the shapes of its icon.svg drawn in the theme's colours), or a package glyph when it ships none;
+// on a dark tile, so every icon sits the same way.
+void DrawAddonIcon(ImDrawList* draw, ImVec2 at, float size, const AddonInfo& a, bool lit) {
     using namespace eam::ui::theme;
     const ImVec2 bottomRight(at.x + size, at.y + size);
     if (a.iconTexture) {
@@ -56,12 +60,18 @@ void DrawIcon(ImDrawList* draw, ImVec2 at, float size, const AddonInfo& a) {
         return;
     }
     draw->AddRectFilled(at, bottomRight, U(kPanelAlt), S(4.0f));
-    draw->AddRect(at, bottomRight, U(kBorderBright), S(4.0f), 0, 1.0f);
-    const float glyph = size * 0.60f, inset = (size - glyph) * 0.5f;
-    eam::ui::svg::Draw(draw, eam::ui::icons::kPackage, ImVec2(at.x + inset, at.y + inset), glyph, U(kAccent), 1.7f);
+    draw->AddRect(at, bottomRight, U(lit ? kAccentDim : kBorderBright), S(4.0f), 0, 1.0f);
+    const float glyph = size * 0.62f, inset = (size - glyph) * 0.5f;
+    const ImU32 colour = U(lit ? kAccent : kMuted);
+    if (!a.iconSvg.empty())
+        for (const std::string& d : a.iconSvg) eam::ui::svg::Draw(draw, d.c_str(), ImVec2(at.x + inset, at.y + inset), glyph, colour, 1.7f, 0, a.iconSvgView);
+    else
+        eam::ui::svg::Draw(draw, eam::ui::icons::kPackage, ImVec2(at.x + inset, at.y + inset), glyph, colour, 1.7f);
 }
 
-void DrawChip(const Chip& chip) {
+namespace {
+
+[[maybe_unused]] void DrawChip(const Chip& chip) {
     ImGui::SameLine(0, S(8));
     const ImVec2 at = ImGui::GetCursorScreenPos(), text = ImGui::CalcTextSize(chip.text);
     const float padX = S(6), padY = S(1);
@@ -83,55 +93,64 @@ std::string SwitchTooltip(const AddonInfo& a) {
 
 } // namespace
 
+// One row of the sidebar: the icon (with its state dot), the name, and under it what needs saying (a problem, the addon's live status, or
+// its version and author), with the switch at the right. The selected row is tinted and marked with a bar of the accent colour.
 bool AddonCard(AddonInfo& addon, int index, bool isSelected, bool* toggled) {
     using namespace eam::ui::theme;
     bool clicked = false;
     if (toggled) *toggled = false;
     ImGui::PushID(index);
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, V(isSelected ? kRowHover : kPanel));
-    ImGui::PushStyleColor(ImGuiCol_Border, V(isSelected ? kAccentDim : kBorder));
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(4.0f));
-
-    const Metrics::Status live = Metrics::Instance().GetStatus(addon.id);   // the addon's own one-line status, if it reports one
-    const float cardHeight = S(70.0f) + (live.text.empty() ? 0.0f : S(20.0f));
-    ImGui::BeginChild("Card", ImVec2(-1, cardHeight), true);
-
+    const float rowHeight = S(54.0f);
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x;
+    const ImVec2 end(at.x + width, at.y + rowHeight);
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    const ImVec2 corner = ImGui::GetCursorScreenPos();
-    const float iconSize = S(40.0f);
-    const float textIndent = iconSize + S(10);
+    const bool hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && ImGui::IsMouseHoveringRect(at, end);
+    if (isSelected || hovered) draw->AddRectFilled(at, end, U(isSelected ? kRowHover : kPanelAlt), S(4.0f));
+    if (isSelected) draw->AddRectFilled(at, ImVec2(at.x + S(3), end.y), U(kAccent), S(1.5f));
 
-    DrawIcon(draw, corner, iconSize, addon);
-    const ImVec2 dot(corner.x + iconSize - S(4), corner.y + iconSize - S(4));
-    draw->AddCircleFilled(dot, S(5.0f), DotColour(addon));
-    draw->AddCircle(dot, S(5.0f), IM_COL32(0, 0, 0, 150), 12, 1.0f);
+    // icon and state dot
+    const float icon = S(32.0f), pad = S(10.0f);
+    const ImVec2 iconAt(at.x + pad, at.y + (rowHeight - icon) * 0.5f);
+    DrawAddonIcon(draw, iconAt, icon, addon, addon.enabled);
+    const ImVec2 dot(iconAt.x + icon - S(3), iconAt.y + icon - S(3));
+    draw->AddCircleFilled(dot, S(4.5f), DotColour(addon));
+    draw->AddCircle(dot, S(4.5f), U(isSelected ? kRowHover : kBg), 12, S(1.5f));
 
-    // name, chip, version and author, then the live status, all to the right of the icon
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + textIndent);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(4));
-    const float rowTop = ImGui::GetCursorPosY();
-    ImGui::Text("%s", addon.GetDisplayName().c_str());
-    if (const Chip chip = ChipFor(addon); chip.text) DrawChip(chip);
+    // the switch, at the right
+    const float switchScale = 0.85f;
+    const float switchH = ImGui::GetFrameHeight() * 0.8f * switchScale, switchW = switchH * 1.8f;
+    const float textLeft = iconAt.x + icon + S(10), textRight = end.x - switchW - S(14);
 
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + textIndent);
-    ImGui::TextDisabled("v%s  |  %s", addon.GetDisplayVersion().c_str(), addon.GetDisplayAuthor().c_str());
-    if (!live.text.empty()) {
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + textIndent);
-        ImGui::PushStyleColor(ImGuiCol_Text, V(LiveColour(live.level)));
-        ImGui::TextUnformatted(live.text.c_str());
-        ImGui::PopStyleColor();
-    }
+    // the name, and the line under it
+    ImFont* title = TitleFont();
+    const float nameSize = ImGui::GetFontSize(), smallSize = ImGui::GetFontSize() * 0.86f;
+    const float nameY = at.y + rowHeight * 0.5f - nameSize - S(1);
+    const float lineY = at.y + rowHeight * 0.5f + S(2);
+    const ImVec4 clip(textLeft, at.y, textRight, end.y);
+    draw->AddText(title ? title : ImGui::GetFont(), nameSize, ImVec2(textLeft, nameY), U(addon.enabled ? kText : kMuted), addon.GetDisplayName().c_str(), nullptr, 0.0f, &clip);
+    std::string second; ImU32 secondColour = U(kMuted);
+    const Metrics::Status live = Metrics::Instance().GetStatus(addon.id);   // the addon's own one-line status, if it reports one
+    if (const Chip chip = ChipFor(addon); chip.text) { second = chip.text; secondColour = chip.colour; }
+    else if (!live.text.empty() && addon.enabled) { second = live.text; secondColour = U(LiveColour(live.level)); }
+    else second = "v" + addon.GetDisplayVersion() + "  \xc2\xb7  " + addon.GetDisplayAuthor();
+    std::string shown = second;   // cut to fit, with an ellipsis
+    const float room = textRight - textLeft;
+    while (shown.size() > 4 && ImGui::GetFont()->CalcTextSizeA(smallSize, FLT_MAX, 0.0f, shown.c_str()).x > room) shown = shown.substr(0, shown.size() - 5) + "...";
+    draw->AddText(ImGui::GetFont(), smallSize, ImVec2(textLeft, lineY), secondColour, shown.c_str(), nullptr, 0.0f, &clip);
 
-    // the switch, at the right edge
-    const float switchWidth = ImGui::GetFrameHeight() * 1.8f * 0.8f;
-    ImGui::SameLine(ImGui::GetWindowWidth() - switchWidth - S(15));
-    ImGui::SetCursorPosY(rowTop + S(5));
+    // the whole row selects; the switch sits on top of it
+    ImGui::SetCursorScreenPos(at);
+    ImGui::InvisibleButton("##row", ImVec2(width - switchW - S(12), rowHeight));
+    if (ImGui::IsItemClicked()) clicked = true;
+    if (shown != second) Tip(second.c_str());
+    ImGui::SetCursorScreenPos(ImVec2(end.x - switchW - S(10), at.y + (rowHeight - switchH) * 0.5f));
     char switchId[32];
     snprintf(switchId, sizeof switchId, "##toggle_%d", index);
     bool on = addon.enabled;
     if (addon.manifest.wip) ImGui::BeginDisabled();
-    if (ToggleSwitch(switchId, &on)) {
+    if (ToggleSwitch(switchId, &on, switchScale)) {
         addon.enabled = on;
         if (toggled) *toggled = true;
         clicked = true;
@@ -139,11 +158,8 @@ bool AddonCard(AddonInfo& addon, int index, bool isSelected, bool* toggled) {
     if (addon.manifest.wip) ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled)) Tip(SwitchTooltip(addon).c_str());
 
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) clicked = true;   // anywhere on the card selects it
-
-    ImGui::EndChild();
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(2);
+    ImGui::SetCursorScreenPos(ImVec2(at.x, end.y));
+    ImGui::Dummy(ImVec2(width, 0));
     ImGui::PopID();
     return clicked;
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(LSAddonManager VERSION 0.9.1)
+project(LSAddonManager VERSION 0.9.4)
 enable_language(RC)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -67,6 +67,7 @@ set(HOST_SOURCES
     src/host/host_impl.cpp
     src/host/metrics.cpp
     src/host/gpu_stats.cpp
+    src/host/system_stats.cpp
 )
 
 set(CONFIG_SOURCES
@@ -93,6 +94,7 @@ set(GUI_SOURCES
     src/gui/widgets/toast.cpp
     src/gui/widgets/addon_card.cpp
     src/gui/widgets/status_bar.cpp
+    src/gui/widgets/header_bar.cpp
     src/gui/widgets/empty_state.cpp
     src/gui/widgets/file_dialog.cpp
     src/gui/window/chrome.cpp
@@ -163,6 +165,10 @@ add_executable(eam_uipreview EXCLUDE_FROM_ALL
     src/gui/widgets/toast.cpp
     src/gui/widgets/addon_card.cpp
     src/gui/widgets/status_bar.cpp
+    src/gui/widgets/header_bar.cpp
+    src/host/system_stats.cpp
+    src/addon/addon_discovery.cpp
+    src/addon/addon_manifest.cpp
     src/gui/widgets/empty_state.cpp
     src/gui/window/status_text.cpp
     src/update/update_check.cpp

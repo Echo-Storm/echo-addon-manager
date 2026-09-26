@@ -1,8 +1,8 @@
 {
-  "name": "FSR 3 Upscaler (WIP)",
-  "version": "0.9.1",
+  "name": "FSR 3 Upscaler",
+  "version": "0.9.4",
   "author": "Echo-Storm",
-  "description": "Preview (work in progress), off until you switch it on. Upscales with AMD FidelityFX Super Resolution 3 in place of Lossless Scaling's NIS scaler, on any graphics card, with the motion measured from the frames: choose NIS as the Scaling Type and run the game in a window smaller than the screen (at the screen's own size it anti-aliases). AMD's FSR 3 runtime is included. Only one of the FSR 3 and DLSS 4 Upscalers works at a time.",
+  "description": "Off until you switch it on. Upscales with AMD FidelityFX Super Resolution 3 in place of Lossless Scaling's NIS scaler, on any graphics card, with the motion measured from the frames: choose NIS as the Scaling Type and run the game in a window smaller than the screen (at the screen's own size it anti-aliases). AMD's FSR 3 runtime is included. Only one of the FSR 3 and DLSS 4 Upscalers works at a time.",
   "min_host_version": "1.2.0",
   "dependencies": [],
   "conflicts": [

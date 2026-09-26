@@ -10,6 +10,8 @@
 #include <map>
 #include <filesystem>
 #include <vector>
+#include <functional>
+#include <algorithm>
 #include "imgui.h"
 #include "tools/ui_shot.h"
 #include "src/gui/gui_style.h"
@@ -18,6 +20,9 @@
 #include "src/gui/widgets/addon_card.h"
 #include "src/gui/widgets/toast.h"
 #include "src/gui/widgets/status_bar.h"
+#include "src/gui/widgets/header_bar.h"
+#include "src/host/system_stats.h"
+#include "src/addon/addon_discovery.h"
 #include "src/gui/widgets/empty_state.h"
 #include "src/gui/window/status_text.h"
 #include "src/gui/tabs/tab_about.h"
@@ -47,6 +52,8 @@ static void Shell(const char* active, const std::string& status, const std::func
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
     ImGui::Begin("##Main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+    widgets::HeaderBar();
+    ImGui::Dummy(ImVec2(0, 4));
     ImGui::BeginChild("##content", ImVec2(0, -widgets::StatusBarHeight() - 2.0f), false, ImGuiWindowFlags_NoBackground);
     if (ImGui::BeginTabBar("##MainTabs")) {
         for (const char* t : { "Addons", "Features", "Performance", "Settings", "Logs", "About" }) {
@@ -67,7 +74,7 @@ struct FakeHost : IHost {
     const char* GetConfig(const char* id, const char* k, const char* d) override { auto it = cfg.find(std::string(id) + "/" + k); return it == cfg.end() ? d : it->second.c_str(); }
     void SetConfig(const char* id, const char* k, const char* v) override { cfg[std::string(id) + "/" + k] = v; }
     void SaveConfig() override {}
-    uint32_t GetHostVersion() override { return 0x10000; }
+    uint32_t GetHostVersion() override { return EAM_API_VERSION_INT; }
     void SubscribeEvent(uint32_t, EamEventCallback, void*) override {}
     void UnsubscribeEvent(uint32_t, EamEventCallback) override {}
     void PublishEvent(uint32_t, const void*, uint32_t) override {}
@@ -92,21 +99,30 @@ int main(int argc, char** argv) {
     ApplyUiScale(scale);
 
     UiShot shot;
-    const int W = (int)(620 * scale), H = (int)(1000 * scale);
+    const int W = (int)(1100 * scale), H = (int)(740 * scale);   // a window of a realistic size (the README's screenshots)
     if (!shot.Init(W, H)) { printf("device init failed\n"); return 1; }
 
     // EAM_PREVIEW_CLEAN=1 draws the tidy scene used for the README screenshots: no toast, only the first addon on, no error chips.
     char* cleanEnv = nullptr; size_t cleanLen = 0; _dupenv_s(&cleanEnv, &cleanLen, "EAM_PREVIEW_CLEAN");
     const bool clean = cleanEnv != nullptr; free(cleanEnv);
+    // the three plugins as a real install has them, with their own icon.svg files from the repository (tools\..\addons\DLSS5NR01)
+    std::filesystem::path root;
+    { wchar_t exe[MAX_PATH]; GetModuleFileNameW(nullptr, exe, MAX_PATH); root = std::filesystem::path(exe).parent_path().parent_path().parent_path().parent_path(); }
+    const std::filesystem::path plugins = root / "addons" / "DLSS5NR01";
     AddonInfo a, b, c;
-    a.id = "DLSS5NR01"; a.manifest.name = "DLSS 5 Neural Rendering"; a.manifest.version = "0.9.1"; a.manifest.author = "Echo-Storm"; a.hModule = (HMODULE)1; a.enabled = true;
-    b.id = "sample-a"; b.manifest.name = "Sample addon A"; b.manifest.version = "1.0.0"; b.manifest.author = "Someone"; b.enabled = !clean; b.capabilities = clean ? 0 : EAM_CAP_REQUIRES_RESTART;   // enabled, needs a restart
-    c.id = "sample-b"; c.manifest.name = "Sample addon B"; c.manifest.version = "1.0.0"; c.manifest.author = "Someone else"; c.enabled = !clean; c.faulted = !clean;   // shows the ERROR chip
+    a.id = "DLSS5NR01"; a.manifest.name = "DLSS 5 Neural Rendering"; a.manifest.version = EAM_VERSION_STRING; a.manifest.author = "Echo-Storm"; a.hModule = (HMODULE)1; a.enabled = true;
+    b.id = "DLSS4DLAA"; b.manifest.name = "DLSS 4 Upscaler"; b.manifest.version = EAM_VERSION_STRING; b.manifest.author = "Echo-Storm"; b.enabled = false;
+    c.id = "FSR3UPSC"; c.manifest.name = "FSR 3 Upscaler"; c.manifest.version = EAM_VERSION_STRING; c.manifest.author = "Echo-Storm"; c.hModule = (HMODULE)1; c.enabled = true;
+    a.security = b.security = c.security = SecurityVerdict::Trusted;   // as a real install of our own addons shows them
+    if (!clean) { b.enabled = true; b.faulted = true; }   // the other scene shows the ERROR state
+    ReadSvgIcon(plugins / "icon.svg", a.iconSvg, a.iconSvgView);
+    ReadSvgIcon(plugins / "products" / "DLSS4DLAA" / "icon.svg", b.iconSvg, b.iconSvgView);
+    ReadSvgIcon(plugins / "products" / "FSR3UPSC" / "icon.svg", c.iconSvg, c.iconSvgView);
 
     float model = 0.5f, sharpen = 0.0f, vib = 1.2f, blend = 0.72f, gamma = 1.0f; int passes = 1, grain = 2; bool sw = true, sw2 = false; int sel = 0;
     const float dModel = 0.35f, dSharpen = 0.0f, dVib = 0.0f, dBlend = 1.0f, dGamma = 1.0f; const int dPasses = 1, dGrain = 1;
     if (!clean) widgets::ToastShow("Installed 'Cool Addon' (switched off). Turn it on with its switch.", widgets::ToastType::Success, 1000.0f);
-    const std::string status = window::StatusCounts(clean ? 1 : 3, 1);   // the tidy scene has just Neural Rendering, as a real install does
+    const std::string status = window::StatusCounts(3, 2);
 
     // live data for the cards and the Performance tab: 20 s of a game near 60 fps with a few hitches, a model at ~6.6 ms, a GPU at its cap
     {
@@ -128,25 +144,97 @@ int main(int argc, char** argv) {
             M.PublishAt("system", "gpu_util", u > 100 ? 100 : u, "%", t);
             M.PublishAt("system", "gpu_power_w", 281.0f + (rnd() - 0.5f) * 4.0f, "W", t);
         }
-        M.SetStatus("DLSS5NR01", "Running, model 6.6 ms, keeps up 99%", 1);
+        M.SetStatus("DLSS5NR01", "Running, model 5.2 ms, keeps up 99%", 1);
+        M.SetStatus("FSR3UPSC", "FSR 3 1920x1080 -> 3840x2160, 1.6 ms", 1);
+        SystemStats::Snapshot sys; sys.ok = true; sys.cpuPercent = 23; sys.ramUsedMB = 18841; sys.ramTotalMB = 32703;
+        SystemStats::Instance().InjectForPreview(sys);
         GpuStats::Snapshot g; g.name = "NVIDIA GeForce RTX 4070 Ti SUPER"; g.driver = "616.92"; g.deviceCount = 1; g.utilGpu = 97; g.utilMem = 44;
         g.clockGraphics = 2610; g.clockMem = 10501; g.tempC = 68; g.powerW = 283.4; g.powerLimitW = 285.0; g.vramUsedMB = 13132; g.vramTotalMB = 16376; g.throttle = 0x4;
         GpuStats::Instance().InjectForPreview(g);
     }
 
-    // 1. Addons tab
-    shot.Frame([&] {
+    // the addon panels (each DLL given on the command line), keyed by file name without .dll
+    std::map<std::string, std::function<void()>> panels;
+    static FakeHost host;
+    // Neural Rendering's model file, where a real install keeps it (the panel then shows its requirements met); nothing is loaded from it here
+    if (GetFileAttributesW(L"D:\\Utilities\\Lossless Scaling\\nvngx_dlssnr.dll") != INVALID_FILE_ATTRIBUTES)
+        host.cfg["DLSS5NR01/snippetPath"] = "D:\\Utilities\\Lossless Scaling\\nvngx_dlssnr.dll";
+    for (int i = 3; i < argc; ++i) {
+        HMODULE h = LoadLibraryA(argv[i]);
+        if (!h) { printf("cannot load %s (error %lu)\n", argv[i], GetLastError()); continue; }
+        using Init_t = void (*)(IHost*, ImGuiContext*, void*, void*, void*); using Void_t = void (*)();
+        auto init = (Init_t)GetProcAddress(h, "AddonInitialize"); auto render = (Void_t)GetProcAddress(h, "AddonRenderSettings");
+        if (!init || !render) { printf("%s has no panel exports\n", argv[i]); continue; }
+        ImGuiMemAllocFunc af; ImGuiMemFreeFunc ff; void* ud; ImGui::GetAllocatorFunctions(&af, &ff, &ud);
+        init(&host, ImGui::GetCurrentContext(), (void*)af, (void*)ff, ud);
+        std::string base = argv[i]; const size_t sl = base.find_last_of("/\\"); if (sl != std::string::npos) base = base.substr(sl + 1);
+        if (base.size() > 4) base = base.substr(0, base.size() - 4);
+        panels[base] = render;
+    }
+
+    // 1. Addons tab: the slim list at the left, the selected addon at the right with its own panel (as tab_addons.cpp lays it out)
+    char search[64] = {};
+    auto addonsTab = [&](int selected) {
+        AddonInfo* list[3] = { &a, &b, &c };
+        AddonInfo& chosen = *list[selected];
         Shell("Addons", status, [&] {
             ImGui::Dummy(ImVec2(0, 5));
+            const float avail = ImGui::GetContentRegionAvail().x;
+            const float listWidth = std::clamp(avail * 0.26f, S(220.0f), S(280.0f));
+            ImGui::BeginChild("AddonList", ImVec2(listWidth, -1), false);
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputTextWithHint("##addon_search", "Search (Ctrl+F)", search, sizeof search);
+            ImGui::Dummy(ImVec2(0, S(2)));
             eam::ui::Button("Install addon", eam::ui::icons::kDownload, eam::ui::ButtonKind::Primary); ImGui::SameLine();
-            eam::ui::Button("Open addons folder", eam::ui::icons::kFolder);
-            ImGui::Dummy(ImVec2(0, 6));
-            if (widgets::AddonCard(a, 0, sel == 0)) sel = 0;
-            if (!clean && widgets::AddonCard(b, 1, sel == 1)) sel = 1;
-            if (!clean && widgets::AddonCard(c, 2, sel == 2)) sel = 2;
+            eam::ui::IconButton("##open_folder", eam::ui::icons::kFolder, ImGui::GetFrameHeight());
+            ImGui::Dummy(ImVec2(0, S(6)));
+            ImGui::PushStyleColor(ImGuiCol_Separator, eam::ui::theme::V(eam::ui::theme::kBorder)); ImGui::Separator(); ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0, S(4)));
+            for (int i = 0; i < 3; ++i) { widgets::AddonCard(*list[i], i, i == selected); ImGui::Dummy(ImVec2(0, S(1))); }
+            ImGui::EndChild();
+            ImGui::SameLine();
+            ImGui::BeginChild("AddonDetail", ImVec2(0, -1), true);
+            const float iconSize = S(44.0f);
+            widgets::DrawAddonIcon(ImGui::GetWindowDrawList(), ImGui::GetCursorScreenPos(), iconSize, chosen, chosen.enabled);
+            ImGui::Dummy(ImVec2(iconSize, iconSize)); ImGui::SameLine(0, S(12));
+            ImGui::BeginGroup();
+            if (ImFont* t = TitleFont()) ImGui::PushFont(t, ImGui::GetStyle().FontSizeBase * 1.2f);
+            ImGui::TextUnformatted(chosen.manifest.name.c_str());
+            if (TitleFont()) ImGui::PopFont();
+            ImGui::TextDisabled("v%s  \xc2\xb7  %s", chosen.manifest.version.c_str(), chosen.manifest.author.c_str());
+            ImGui::EndGroup();
+            const float switchWidth = ImGui::GetFrameHeight() * 0.8f * 1.8f;
+            ImGui::SameLine(ImGui::GetWindowWidth() - switchWidth - ImGui::GetStyle().WindowPadding.x - S(4));
+            bool on = chosen.enabled; widgets::ToggleSwitch("##detail_enable", &on);
+            ImGui::Dummy(ImVec2(0, S(2)));
+            ImGui::TextDisabled("Status"); ImGui::SameLine();
+            ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kAccent), "Loaded"); ImGui::SameLine(0, S(24));
+            ImGui::TextDisabled("Security"); ImGui::SameLine();
+            ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kAccent), "Trusted");
+            {
+                const float rw = ImGui::CalcTextSize("Remove").x + ImGui::GetFontSize() * 3.2f;
+                ImGui::SameLine(ImGui::GetWindowWidth() - rw - ImGui::GetStyle().WindowPadding.x - S(4));
+                eam::ui::Button("Remove", eam::ui::icons::kTrash, eam::ui::ButtonKind::Danger);
+            }
+            ImGui::Dummy(ImVec2(0, S(4)));
+            if (ImGui::BeginTabBar("##detail_tabs")) {
+                if (ImGui::BeginTabItem("Settings", nullptr, ImGuiTabItemFlags_SetSelected)) {
+                    ImGui::BeginChild("##addon_settings", ImVec2(0, 0), false);
+                    auto it = panels.find(chosen.id);
+                    if (it != panels.end()) it->second(); else ImGui::TextDisabled("(its panel was not given to the preview)");
+                    ImGui::EndChild();
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Overview")) ImGui::EndTabItem();
+                ImGui::EndTabBar();
+            }
+            ImGui::EndChild();
         });
-    }, 12);
+    };
+    shot.Frame([&] { addonsTab(0); }, 12);
     shot.Save((out + "/preview_addons.bmp").c_str());
+    shot.Frame([&] { addonsTab(2); }, 12);
+    shot.Save((out + "/preview_upscaler.bmp").c_str());
 
     // 1b. The Remove confirmation over the Addons tab, and the empty state
     shot.Frame([&] {
@@ -272,27 +360,6 @@ int main(int argc, char** argv) {
         shot.Save((out + "/preview_logs.bmp").c_str());
     }
 
-    for (int i = 3; i < argc; ++i) {   // addon panels
-        HMODULE h = LoadLibraryA(argv[i]);
-        if (!h) { printf("cannot load %s (error %lu)\n", argv[i], GetLastError()); continue; }
-        using Init_t = void (*)(IHost*, ImGuiContext*, void*, void*, void*); using Void_t = void (*)(); using Str_t = const char* (*)();
-        auto init = (Init_t)GetProcAddress(h, "AddonInitialize"); auto render = (Void_t)GetProcAddress(h, "AddonRenderSettings"); auto name = (Str_t)GetProcAddress(h, "GetAddonName");
-        auto shut = (Void_t)GetProcAddress(h, "AddonShutdown");
-        if (!init || !render) { printf("%s has no panel exports\n", argv[i]); continue; }
-        static FakeHost host;
-        ImGuiMemAllocFunc af; ImGuiMemFreeFunc ff; void* ud; ImGui::GetAllocatorFunctions(&af, &ff, &ud);
-        init(&host, ImGui::GetCurrentContext(), (void*)af, (void*)ff, ud);
-        const std::string title = name ? name() : "addon";
-        shot.Frame([&] {
-            ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-            ImGui::Begin("##addon", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-            eam::ui::SectionLabel(title.c_str()); render(); ImGui::End();
-        }, 12);
-        std::string base = argv[i]; const size_t sl = base.find_last_of("/\\"); if (sl != std::string::npos) base = base.substr(sl + 1);
-        const std::string file = out + "/preview_" + base + ".bmp";
-        printf("%s -> %s: %s\n", title.c_str(), file.c_str(), shot.Save(file.c_str()) ? "written" : "FAILED");
-        if (shut) shut();
-    }
     shot.Shutdown();
     printf("wrote previews to %s\n", out.c_str());
     return 0;

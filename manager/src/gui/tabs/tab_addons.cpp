@@ -290,15 +290,16 @@ static void RenderConfigPane(const AddonInfo& addon) {
 }
 
 static void RenderDetail(AddonManager* manager, AddonInfo& addon, int index) {
-    // Header: icon, name / version / author, enable switch on the right.
+    // Header: icon, name (larger), version and author, then the addon's own description; the switch on the right.
     const float iconSize = S(44.0f);
-    if (addon.iconTexture) {
-        ImGui::Image((ImTextureID)addon.iconTexture, ImVec2(iconSize, iconSize));
-        ImGui::SameLine();
-    }
+    widgets::DrawAddonIcon(ImGui::GetWindowDrawList(), ImGui::GetCursorScreenPos(), iconSize, addon, addon.enabled);
+    ImGui::Dummy(ImVec2(iconSize, iconSize));
+    ImGui::SameLine(0, S(12));
     ImGui::BeginGroup();
-    ImGui::Text("%s", addon.GetDisplayName().c_str());
-    ImGui::TextDisabled("v%s  |  %s", addon.GetDisplayVersion().c_str(), addon.GetDisplayAuthor().c_str());
+    if (ImFont* title = TitleFont()) ImGui::PushFont(title, ImGui::GetStyle().FontSizeBase * 1.2f);
+    ImGui::TextUnformatted(addon.GetDisplayName().c_str());
+    if (TitleFont()) ImGui::PopFont();
+    ImGui::TextDisabled("v%s  \xc2\xb7  %s", addon.GetDisplayVersion().c_str(), addon.GetDisplayAuthor().c_str());
     ImGui::EndGroup();
 
     const float switchWidth = ImGui::GetFrameHeight() * 0.8f * 1.8f;
@@ -391,14 +392,20 @@ void RenderTabAddons(AddonManager* manager) {
     };
     int sel = resolveSelection();
 
+    // Sidebar (left, slim): the search box, the install buttons and the addons, one row each; the detail pane takes the rest.
+    const float avail = ImGui::GetContentRegionAvail().x;
+    const float listWidth = std::clamp(avail * 0.26f, S(220.0f), S(280.0f));
+    ImGui::BeginChild("AddonList", ImVec2(listWidth, -1), false);
+
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F)) ImGui::SetKeyboardFocusHere();   // Ctrl+F: jump to the search box
     ImGui::SetNextItemWidth(-1);
-    ImGui::InputTextWithHint("##addon_search", "Search addons... (Ctrl+F)", s_searchBuffer, sizeof(s_searchBuffer));
+    ImGui::InputTextWithHint("##addon_search", "Search (Ctrl+F)", s_searchBuffer, sizeof(s_searchBuffer));
     widgets::Tip("Filter the list by name, author or tag.");
     ImGui::Dummy(ImVec2(0, S(2)));
 
     if (eam::ui::Button("Install addon", eam::ui::icons::kDownload, eam::ui::ButtonKind::Primary)) ImGui::OpenPopup("##install_menu");
-    widgets::Tip("Add an addon from a folder, a .zip or a .dll. It is copied into the addons folder and installed switched off.");
+    widgets::Tip("Add an addon from a folder, a .zip or a .dll. It is copied into the addons folder and installed switched off. "
+                 "Dropping one onto this window works too.");
     if (ImGui::BeginPopup("##install_menu")) {
         std::wstring picked;
         if (ImGui::Selectable("From a folder...") && PickPath(true, picked)) { s_installSource = picked; s_askInstall = true; }
@@ -406,7 +413,7 @@ void RenderTabAddons(AddonManager* manager) {
         ImGui::EndPopup();
     }
     ImGui::SameLine();
-    if (eam::ui::Button("Open addons folder", eam::ui::icons::kFolder)) ShellExecuteW(nullptr, L"open", manager->GetAddonsPath().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (eam::ui::IconButton("##open_folder", eam::ui::icons::kFolder, ImGui::GetFrameHeight())) ShellExecuteW(nullptr, L"open", manager->GetAddonsPath().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     widgets::Tip("Open the folder the addons live in, to remove or update one by hand.");
 
     if (s_askInstall) { ImGui::OpenPopup("Install addon"); s_askInstall = false; }
@@ -454,13 +461,11 @@ void RenderTabAddons(AddonManager* manager) {
         }
         ImGui::EndPopup();
     }
+    ImGui::Dummy(ImVec2(0, S(6)));
+    ImGui::PushStyleColor(ImGuiCol_Separator, eam::ui::theme::V(eam::ui::theme::kBorder));
+    ImGui::Separator();
+    ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0, S(4)));
-
-    // Sidebar list (left) + detail pane (right, takes the rest of the width).
-    const float avail = ImGui::GetContentRegionAvail().x;
-    const float listWidth = std::clamp(avail * 0.34f, S(260.0f), S(420.0f));
-
-    ImGui::BeginChild("AddonList", ImVec2(listWidth, -1), false);
     if (addons.empty()) {
         widgets::EmptyState(listWidth, "No addons installed yet", "Use Install addon above, or drop a folder, .zip or .dll onto this window.");
     }
@@ -470,7 +475,7 @@ void RenderTabAddons(AddonManager* manager) {
         if (widgets::AddonCard(addons[i], i, i == sel, &toggled))
             SelectAddon(addons[i]);
         if (toggled) ApplyToggle(manager, i, addons[i].enabled);
-        ImGui::Dummy(ImVec2(0, S(2)));
+        ImGui::Dummy(ImVec2(0, S(1)));
     }
     ImGui::EndChild();
 
