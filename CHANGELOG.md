@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- **Neural Rendering works on HDR games.** HDR frames used to stop it with "unsupported frame format". Now it takes 16-bit float (scRGB)
+  and 10-bit (HDR10, PQ) frames as well as 8-bit ones. The model and the look controls work on the frame's SDR view: light relative to
+  Windows' *SDR content brightness*, a curve that leaves everything up to 75% of white alone and rolls brighter light off smoothly, then
+  sRGB. Only the change goes back into the frame, in its own encoding, so highlights above what the SDR view holds and colours outside
+  Rec.709 come back as they were. The change also fades out over the top of the rolled-off range.
+  - **Automatic encoding.** 8-bit frames are SDR and 16-bit float frames are scRGB. 10-bit frames are HDR10 when Windows runs that display
+    in HDR, and 10-bit SDR otherwise.
+  - **Override.** A new *Frame encoding* setting (Advanced: Automatic, SDR, HDR) overrides that for the 10-bit and 16-bit frames when a
+    setup is decided wrongly.
+  - **Status.** Technical status shows what was decided, and the log names it whenever it changes.
+  - **Tests and limits.** Two new matrix scenarios, `hdr_scrgb` and `hdr_pq`, present HDR frames with a band of 1000-nit highlights. The
+    picture must change, the highlights must stay as they were, and no NaN may be written. This is untested on a real HDR display so far.
+  - **The upscalers** still take 8-bit frames only; their HDR is a separate step.
+- **DLSS 4 Upscaler: why DLSS did not start.** The error names NGX's own reason (the feature's init result), or the driver version DLSS
+  needs, and where it looked for NVIDIA's runtime. NGX's errors and warnings go into the addon's log.
+
 ## 0.9.4 (2026-09-25)
 
 The step toward 1.0: a finished interface, the upscalers out of preview, and the documentation rewritten around what comes with it.

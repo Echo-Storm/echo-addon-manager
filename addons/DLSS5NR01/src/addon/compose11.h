@@ -33,6 +33,7 @@ public:
         uint32_t compare = 0;                          // 0 enhanced, 1 split (the left side original), 2 original only
         float splitPos = 0.5f;                         // where the split is, 0..1 of the width
         uint32_t marker = 0;                           // a corner square as feedback: 1 green, 2 red, 3 amber, 4 blue, 5 purple
+        uint32_t encoding = 0; float whiteNits = 200;  // what the target holds (0 SDR, 1 scRGB, 2 HDR10, hdr.h) and the SDR white in nits
     };
     bool Init(ID3D11Device* dev, LogFn log);
     void Shutdown();

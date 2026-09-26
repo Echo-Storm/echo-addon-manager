@@ -290,7 +290,8 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     // the shared textures: the frame as RGBA8 (the grab pass reads BGRA as RGBA), the picture in the output's format, which the upscaler
     // writes through a UAV
     const DXGI_FORMAT inFmt = DXGI_FORMAT_R8G8B8A8_UNORM, outFmt = Bridge::ViewFormat(pass.outFmt);
-    if (!Bridge::FormatSupported(pass.inFmt) || (outFmt != DXGI_FORMAT_R8G8B8A8_UNORM && outFmt != DXGI_FORMAT_R10G10B10A2_UNORM && outFmt != DXGI_FORMAT_R16G16B16A16_FLOAT)) {
+    const DXGI_FORMAT inView = Bridge::ViewFormat(pass.inFmt);
+    if ((inView != DXGI_FORMAT_R8G8B8A8_UNORM && inView != DXGI_FORMAT_B8G8R8A8_UNORM) || (outFmt != DXGI_FORMAT_R8G8B8A8_UNORM && outFmt != DXGI_FORMAT_R10G10B10A2_UNORM && outFmt != DXGI_FORMAT_R16G16B16A16_FLOAT)) {
         if (!m_loggedFormat) { Log("%s upscaler: frame format %d -> %d is not one the upscaler can take here; NIS stays", kUpscalerName, (int)pass.inFmt, (int)pass.outFmt); m_loggedFormat = true; }
         return false;
     }

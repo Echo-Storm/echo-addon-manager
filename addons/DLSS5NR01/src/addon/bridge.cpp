@@ -43,10 +43,11 @@ DXGI_FORMAT Bridge::ViewFormat(DXGI_FORMAT f) {
         return DXGI_FORMAT_UNKNOWN;
     }
 }
-// The model is fed 8-bit display-referred frames only (no HDR yet).
+// 8-bit frames, and 10-bit and half-float ones (HDR, or 10-bit SDR): the engine's shrink pass gives the model their SDR view (hdr_hlsl.h).
 bool Bridge::FormatSupported(DXGI_FORMAT f) {
     const DXGI_FORMAT view = ViewFormat(f);
-    return view == DXGI_FORMAT_R8G8B8A8_UNORM || view == DXGI_FORMAT_B8G8R8A8_UNORM;
+    return view == DXGI_FORMAT_R8G8B8A8_UNORM || view == DXGI_FORMAT_B8G8R8A8_UNORM || view == DXGI_FORMAT_R10G10B10A2_UNORM ||
+           view == DXGI_FORMAT_R16G16B16A16_FLOAT;
 }
 
 bool Bridge::MakeFence(SharedFence& f, const char* name) {

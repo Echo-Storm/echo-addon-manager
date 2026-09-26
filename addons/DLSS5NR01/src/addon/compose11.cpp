@@ -1,5 +1,6 @@
 #include "addon/compose11.h"
 #include "addon/bridge.h"
+#include "engine/hdr_hlsl.h"
 #include <d3dcompiler.h>
 #include <windows.h>
 #include <algorithm>
@@ -10,7 +11,7 @@
 
 namespace {
 
-const char* const kComposeHlsl = R"HLSL(
+const char* const kComposeHlsl = NR_HDR_HLSL R"HLSL(
 SamplerState sLinear : register(s0);
 Texture2D<float4>   tFrame : register(t0);   // a copy of the buffer being presented
 Texture2D<float4>   tDelta : register(t1);   // the delta of real frame d, at the working size
@@ -46,6 +47,8 @@ cbuffer Constants : register(b0) {
     uint   hudCount;
     float  hudFeather;
     float4 hud[6];        // left, top, right, bottom, 0..1
+    uint   encoding;      // the frame's: 0 SDR, 1 scRGB, 2 HDR10 (hdr_hlsl.h)
+    float  white;         // the SDR white, in nits (HDR only)
 };
 static const float3 kLuma = float3(0.299, 0.587, 0.114);
 static const float3 kHudGreen = float3(0.49, 0.70, 0.26);
@@ -80,6 +83,9 @@ float3 Sharpen(float3 n, float3 w, float3 c, float3 e, float3 s, float amount) {
     const float3 k = room * (-1.0 / lerp(8.0, 5.0, amount));
     return saturate((n * k + w * k + e * k + s * k + c) / (1.0 + 4.0 * k));
 }
+
+// The frame's SDR view (the identity for an SDR frame): everything below works on it, as the model did.
+float3 Sdr(float3 c) { return ToSdr(c, encoding, white); }
 
 // Tone on the encoded (display) values, as a monitor's controls work: contrast around mid-grey, brightness, then the gamma curve (above 1
 // brightens the mid-tones and leaves black and white alone).
@@ -122,11 +128,13 @@ float3 MarkerColour() {
 void CSCompose(uint3 id : SV_DispatchThreadID) {
     if (id.x >= size.x || id.y >= size.y) return;
     const float4 frame = tFrame[id.xy];
+    const float3 fs = Sdr(frame.rgb);
+    bool replaced = false;   // a debug view or an overlay: written as it is, not as a change to the frame
     const float2 uv = (float2(id.xy) + 0.5) / float2(size);
     const float hudInside = HudInside(uv);
     const bool plain = debugView == 0 || debugView == 3;   // the views that show the picture as it will be seen
     const bool original = compare == 2 || (compare == 1 && uv.x < splitPos) || (hudInside > 0.999 && plain);
-    float3 c = frame.rgb;
+    float3 c = fs;
     if (!original) {
         const float4 flow = (flags & 1u) ? tFlow.SampleLevel(sLinear, uv, 0) : float4(0, 0, 0, 0);
         // where this pixel's content was in frame d
@@ -136,22 +144,23 @@ void CSCompose(uint3 id : SV_DispatchThreadID) {
             uvInD = uv + offset * tMotion.SampleLevel(sLinear, uv, 0) / float2(mw, mh);
         }
         const float ghost = GhostWeight(flow);
-        const float highlightFade = hiProtect < 0.999 ? 1.0 - smoothstep(hiProtect, 1.0, dot(frame.rgb, kLuma)) : 1.0;
+        const float highlightFade = hiProtect < 0.999 ? 1.0 - smoothstep(hiProtect, 1.0, dot(fs, kLuma)) : 1.0;
         const float3 d = clamp(tDelta.SampleLevel(sLinear, uvInD, 0).rgb * ghost * intensity, -maxDelta, maxDelta) * highlightFade;
-        c = saturate(frame.rgb + d);
+        c = saturate(fs + d);
         if (plain) {
             if (sharpen > 0.001) {   // the delta is smooth, so the neighbours take the centre's delta rather than more flow and delta reads
                 const int2 p = int2(id.xy), last = int2(size) - 1;
-                c = Sharpen(saturate(tFrame[clamp(p + int2(0, -1), 0, last)].rgb + d), saturate(tFrame[clamp(p + int2(-1, 0), 0, last)].rgb + d), c,
-                            saturate(tFrame[clamp(p + int2(1, 0), 0, last)].rgb + d), saturate(tFrame[clamp(p + int2(0, 1), 0, last)].rgb + d), saturate(sharpen));
+                c = Sharpen(saturate(Sdr(tFrame[clamp(p + int2(0, -1), 0, last)].rgb) + d), saturate(Sdr(tFrame[clamp(p + int2(-1, 0), 0, last)].rgb) + d), c,
+                            saturate(Sdr(tFrame[clamp(p + int2(1, 0), 0, last)].rgb) + d), saturate(Sdr(tFrame[clamp(p + int2(0, 1), 0, last)].rgb) + d), saturate(sharpen));
             }
             if (abs(brightness) > 0.0005 || abs(contrast - 1.0) > 0.002 || abs(gamma - 1.0) > 0.002) c = Tone(c);
             if (abs(shadows) > 0.005 || abs(highlights) > 0.005) c = TonalRanges(c);
             if (abs(saturation - 1.0) > 0.002 || vibrance > 0.002) c = Colour(c);
             if (grain > 0.002) c = Grain(c, id.xy);
-            if (hudInside > 0.0) c = lerp(c, frame.rgb, hudInside);
+            if (hudInside > 0.0) c = lerp(c, fs, hudInside);
         }
-        if      (debugView == 1) c = frame.rgb;
+        replaced = debugView >= 2u;
+        if      (debugView == 1) c = fs;
         else if (debugView == 2) c = saturate(0.5 + d * 4.0);
         else if (debugView == 3) c = saturate(c + ((flags & 2u) ? float3(0.15, 0, 0) : float3(0, 0.15, 0)));
         else if (debugView == 4) c = saturate(float3(0.5 + flow.xy / 16.0, 0.5));
@@ -167,13 +176,24 @@ void CSCompose(uint3 id : SV_DispatchThreadID) {
             if (abs(nearest) < edgeWidth) edge = 1.0;
         }
         c = edge > 0.5 ? kHudGreen : lerp(c, kHudGreen, inside * 0.22);
+        replaced = replaced || edge > 0.5 || inside > 0.0;
     }
-    if (compare == 1 && abs((float)id.x + 0.5 - splitPos * (float)size.x) < max(1.0, (float)size.x / 2000.0)) c = float3(0.9, 0.9, 0.9);   // the split
+    if (compare == 1 && abs((float)id.x + 0.5 - splitPos * (float)size.x) < max(1.0, (float)size.x / 2000.0)) { c = float3(0.9, 0.9, 0.9); replaced = true; }   // the split
     if (marker != 0u) {
         const uint side = max(12u, size.x / 150u);
-        if (id.x < side && id.y < side) c = MarkerColour();
+        if (id.x < side && id.y < side) { c = MarkerColour(); replaced = true; }
     }
-    uOut[id.xy] = float4(c, frame.a);
+    float3 result = c;
+    if (encoding != 0u) {
+        if (replaced) result = FromSdr(c, encoding, white);
+        else {
+            // Only the change goes back, so what was not changed (highlights brighter than the SDR view holds, colours outside Rec.709) stays
+            // as it was; and the change fades out over the top of the rolled-off range, where a step in the SDR view is a large one in light.
+            const float keep = 1.0 - smoothstep(0.90, 0.99, max(fs.r, max(fs.g, fs.b)));
+            result = frame.rgb + (FromSdr(lerp(fs, c, keep), encoding, white) - FromSdr(fs, encoding, white));
+        }
+    }
+    uOut[id.xy] = float4(result, frame.a);
 }
 )HLSL";
 
@@ -186,8 +206,10 @@ struct Constants {
     float gamma, shadows, highlights, grain;
     uint32_t grainSeed; float grainSize; uint32_t hudCount; float hudFeather;
     float hud[6][4];
+    uint32_t encoding; float white; uint32_t pad[2];
 };
-static_assert(offsetof(Constants, gamma) == 80 && offsetof(Constants, hud) == 112 && sizeof(Constants) == 208, "Constants must match the shader's cbuffer");
+static_assert(offsetof(Constants, gamma) == 80 && offsetof(Constants, hud) == 112 && offsetof(Constants, encoding) == 208 && sizeof(Constants) == 224,
+              "Constants must match the shader's cbuffer");
 
 template <class T> void SafeRelease(T*& p) { if (p) { p->Release(); p = nullptr; } }
 
@@ -297,7 +319,7 @@ bool Compose11::Run(ID3D11DeviceContext* ctx, const Args& a) {
     LARGE_INTEGER freq, start; QueryPerformanceFrequency(&freq); QueryPerformanceCounter(&start);
     D3D11_TEXTURE2D_DESC desc; a.target->GetDesc(&desc);
     const DXGI_FORMAT view = Bridge::ViewFormat(desc.Format);
-    if (view == DXGI_FORMAT_UNKNOWN || desc.SampleDesc.Count != 1) {   // 8-bit, 10-bit and half-float buffers work: the delta is display-referred either way
+    if (view == DXGI_FORMAT_UNKNOWN || desc.SampleDesc.Count != 1) {   // 8-bit, 10-bit and half-float buffers work: the pass changes their SDR view
         const uint64_t key = 0xC000000000000000ull | (uint32_t)desc.Format;
         if (key != m_lastFailure) { m_lastFailure = key; Log("Compose11: presented frames of format %d (or multisampled) cannot be composed", (int)desc.Format); }
         return false;
@@ -320,6 +342,7 @@ bool Compose11::Run(ID3D11DeviceContext* ctx, const Args& a) {
     c.saturation = a.saturation; c.vibrance = a.vibrance; c.brightness = a.brightness; c.contrast = a.contrast; c.gamma = a.gamma;
     c.shadows = a.shadows; c.highlights = a.highlights; c.grain = a.grain; c.grainSeed = a.grainSeed; c.grainSize = std::clamp(a.grainSize, 1.0f, 4.0f);
     c.hudCount = std::min(a.hudCount, 6u); c.hudFeather = a.hudFeather; memcpy(c.hud, a.hud, sizeof c.hud);
+    c.encoding = a.encoding; c.white = a.whiteNits > 1.0f ? a.whiteNits : 200.0f;
     D3D11_MAPPED_SUBRESOURCE mapped{};
     if (SUCCEEDED(ctx->Map(m_constants, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) { memcpy(mapped.pData, &c, sizeof c); ctx->Unmap(m_constants, 0); }
 

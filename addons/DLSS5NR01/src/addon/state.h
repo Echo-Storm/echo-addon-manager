@@ -57,6 +57,7 @@ extern std::mutex g_autoMutex;
 extern AutoQuality g_auto;
 
 extern std::mutex g_textMutex;
+extern std::string g_encodingText;   // what the frames hold (hdr.h), for the panel
 extern std::string g_status, g_offReason, g_frameText, g_cardName, g_tappedDeviceText, g_focusExe;
 extern std::string g_scalerGame;   // the upscalers: the game whose settings are in use (under g_settingsMutex; empty until one had focus)
 extern bool g_cardDrivesDisplay;

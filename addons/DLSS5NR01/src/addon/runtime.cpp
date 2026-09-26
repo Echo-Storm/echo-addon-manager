@@ -13,6 +13,7 @@
 #include "addon/present_hook.h"
 #include "addon/screenshot.h"
 #include "addon/scaler11.h"
+#include "addon/hdr.h"
 #include "engine/sr_engine.h"
 #include <windows.h>
 #include <d3d11.h>
@@ -171,6 +172,27 @@ void LogProgress(const NrStats& st) {
 void OnPresent(IDXGISwapChain* sc);
 void Compose(IDXGISwapChain* sc);
 void PresentTap(IDXGISwapChain* sc);
+
+// What frames of this format hold, on the display the chain is on (hdr.h), with the SDR white; logged when it changes.
+nr::FrameEncoding FrameEncodingOf(DXGI_FORMAT format, IDXGISwapChain* chain, float* white) {
+    int setting;
+    { std::lock_guard<std::mutex> lock(g_settingsMutex); setting = g_config.frameEncoding; }
+    const nr::DisplayHdr display = nr::QueryDisplayHdr(chain, g_tapDevice);
+    const nr::FrameEncoding e = nr::EncodingOf(Bridge::ViewFormat(format), setting, display.hdr);
+    *white = display.whiteNits;
+    static uint64_t said = ~0ull;
+    const uint64_t key = (uint64_t)e << 48 | (uint64_t)format << 32 | (uint32_t)display.whiteNits | (display.hdr ? 1ull << 31 : 0);
+    if (key != said) {
+        said = key;
+        Log("frames of format %d are %s (display in %s, SDR white %.0f nits%s)", (int)format, nr::EncodingName(e), display.hdr ? "HDR" : "SDR",
+            display.whiteNits, setting ? ", set by hand" : "");
+        char text[96];
+        if (e == nr::FrameEncoding::Sdr) snprintf(text, sizeof text, "SDR");
+        else snprintf(text, sizeof text, "%s, SDR white %.0f nits", nr::EncodingName(e), display.whiteNits);
+        std::lock_guard<std::mutex> lock(g_textMutex); g_encodingText = text;
+    }
+    return e;
+}
 void FollowFrameGeneration(bool allowed);
 void ScalerPresentGuarded(IDXGISwapChain* sc);
 
@@ -219,6 +241,7 @@ void Tap(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     { char text[96]; snprintf(text, sizeof text, "%ux%u %s slot %d", frame.Width, frame.Height, FormatName(frame.Format), d.frameSlot);
       std::lock_guard<std::mutex> lock(g_textMutex); g_frameText = text; }
     if (!g_bridge.Ensure(frame.Width, frame.Height, frame.Format)) { SetStatus("unsupported frame format"); ReleaseDecision(d); return; }
+    { float white; const nr::FrameEncoding e = FrameEncodingOf(frame.Format, g_lsChain, &white); g_engine.SetFrameEncoding(static_cast<uint32_t>(e), white); }
 
     NrParams p; float watchdogMs; bool lsFirst; AutoQuality::Settings autoSettings;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); p = g_config.p; watchdogMs = g_config.watchdogMs; lsFirst = g_config.lsFirst;
@@ -449,6 +472,7 @@ void PresentTap(IDXGISwapChain* sc) {   // under g_frameMutex, on the presenting
     const bool fits = frame.Width >= 64 && frame.Height >= 64 && g_bridge.Ensure(frame.Width, frame.Height, frame.Format);
     if (!fits && frame.Width >= 64 && frame.Height >= 64) SetStatus("frame generation off: the presented frame's format cannot be given to the model");
     if (fits) {
+        { float white; const nr::FrameEncoding e = FrameEncodingOf(frame.Format, sc, &white); g_engine.SetFrameEncoding(static_cast<uint32_t>(e), white); }
         { char text[96]; snprintf(text, sizeof text, "%ux%u %s at Present (frame generation off)", frame.Width, frame.Height, FormatName(frame.Format));
           std::lock_guard<std::mutex> lock(g_textMutex); g_frameText = text; }
         NrParams p; float watchdogMs; bool lsFirst; AutoQuality::Settings autoSettings;
@@ -526,6 +550,7 @@ void Compose(IDXGISwapChain* sc) {
     a.shadows = p.shadows; a.highlights = p.highlights; a.grain = p.grain; a.grainSize = p.grainSize; a.grainSeed = static_cast<uint32_t>(g_presents);
     a.hudCount = p.hudCount; memcpy(a.hud, p.hud, sizeof a.hud); a.hudFeather = p.hudFeather; a.hudShow = g_showHud;
     a.compare = static_cast<uint32_t>(compare); a.splitPos = g_splitPos; a.marker = marker;
+    { D3D11_TEXTURE2D_DESC desc; buffer->GetDesc(&desc); a.encoding = static_cast<uint32_t>(FrameEncodingOf(desc.Format, sc, &a.whiteNits)); }
     g_bridge.BeginDeltaUse(deltaFrame);
     t_ownWork = true;
     const bool composed = g_compose.Run(g_bridge.Context(), a);

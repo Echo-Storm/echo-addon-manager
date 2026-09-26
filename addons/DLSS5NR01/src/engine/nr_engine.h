@@ -101,6 +101,8 @@ public:
     ID3D12Fence* OpenSharedFence(HANDLE h);
     // LSFG's flow for the next runs (borrowed: the bridge drains the engine before it lets go of it); null for none.
     void SetFlowInput(ID3D12Resource* flow, uint32_t w, uint32_t h);
+    // What the frames hold (0 SDR, 1 scRGB, 2 HDR10) and the SDR white in nits: the shrink pass gives the model the frame's SDR view.
+    void SetFrameEncoding(uint32_t encoding, float whiteNits) { m_encoding = encoding; m_whiteNits = whiteNits > 1.0f ? whiteNits : 200.0f; }
 
     // Readies the runs for this frame size and format and these settings. A new working size (the frame's size times the working scale)
     // needs the model's feature and the scratch textures made again, which takes a few hundred ms: that happens on a thread of its own, the
@@ -121,6 +123,7 @@ public:
 
 private:
     FlowEstimator m_estimator;            // the model's motion measured from the proxy (NrParams::modelMotion 0)
+    uint32_t m_encoding = 0; float m_whiteNits = 200.0f;
     bool m_estimatedLast = false; uint64_t m_estimates = 0;
     static const int kSlots = 4;          // command allocators in rotation
     static const int kPassDescriptors = 6, kPasses = 3;   // per pass: t0..t3, u0, u1; the passes: shrink, motion, delta

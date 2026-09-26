@@ -171,6 +171,7 @@ Loaded LoadSettings(IHost* host, const char* id) {
     c.freshFlow = flag("freshFlow", true);
     c.presentMode = flag("presentMode", true);
     c.presentWait = flag("presentWait", false);
+    c.frameEncoding = std::clamp(integer("frameEncoding", 0), 0, 2);
     c.hotkeys = flag("hotkeys", true);
     c.keyAB = integer("keyAB", VK_F6); c.keySplit = integer("keySplit", VK_F7); c.keySharpDn = integer("keySharpDn", VK_F8);
     c.keySharpUp = integer("keySharpUp", VK_F9); c.keyPreset = integer("keyPreset", VK_F10); c.keyShot = integer("keyShot", VK_F11);
@@ -217,6 +218,7 @@ void SaveSettings(IHost* host, const char* id, const Config& c, const std::vecto
 
     put("model", std::to_string(c.model)); put("dlaaPreset", std::to_string(c.dlaaPreset)); put("scalerHandoff", std::to_string(c.scalerHandoff)); put("motionSource", std::to_string(c.motionSource)); putFlag("scalerGpuWait", c.scalerGpuWait); put("scalerStability", Number(c.scalerStability)); put("scalerEdges", Number(c.scalerEdges));
     putFlag("enabled", c.enabled); putFlag("lsFirst", c.lsFirst); putFlag("freshFlow", c.freshFlow); putFlag("presentMode", c.presentMode); putFlag("presentWait", c.presentWait); putFlag("hotkeys", c.hotkeys);
+    put("frameEncoding", std::to_string(c.frameEncoding));
     put("keyAB", std::to_string(c.keyAB)); put("keySplit", std::to_string(c.keySplit)); put("keySharpDn", std::to_string(c.keySharpDn));
     put("keySharpUp", std::to_string(c.keySharpUp)); put("keyPreset", std::to_string(c.keyPreset)); put("keyShot", std::to_string(c.keyShot));
     put("screenshotFolder", c.screenshotFolder);

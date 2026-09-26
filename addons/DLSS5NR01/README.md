@@ -93,7 +93,9 @@ including why each hook is the kind it is, is in [docs/architecture.md](docs/arc
 
 ## Limitations
 
-- 8-bit display-referred frames only (RGBA8 / BGRA8). HDR output is not processed.
+- HDR frames (scRGB 16-bit float, HDR10 10-bit) are worked on through an SDR view of them relative to Windows' SDR content
+  brightness; only the change goes back, so highlights keep their brightness. If an HDR picture comes out washed out or too dark,
+  set *Frame encoding* (Advanced) by hand. Not yet tried on a real HDR display. The upscalers take 8-bit frames only.
 - The 310.8 DLSSNR build ignores depth and does no upsampling of its own; the addon feeds LSFG's
   optical flow as motion vectors and does the scaling itself.
 - Ampere runs the model in FP16; expect the working scale to sit between 0.3 and 0.5 there.

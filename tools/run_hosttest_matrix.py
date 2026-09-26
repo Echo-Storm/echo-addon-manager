@@ -103,6 +103,17 @@ def scenario_present_mode(ctx, res, text, frame):
     res.check('...with no failure', 'SwitchOff' not in text and 'switched off:' not in text.lower() and 'bridge init failed' not in text)
 
 
+def scenario_hdr(ctx, res, text, frame):
+    # frame generation off and the presented frames HDR (scRGB or HDR10): the model takes their SDR view and only its change goes back
+    line = re.search(r'\[check-hdr\] .*', text)
+    res.check('the HDR frames reach the model', 'unsupported frame format' not in text and "cannot be given to the model" not in text and line is not None,
+              line.group(0)[12:] if line else 'no check-hdr line')
+    res.check('...its result goes onto them', 'HDR COMPOSED' in text)
+    res.check('...highlights far above SDR white stay as they were', 'HIGHLIGHTS KEPT' in text)
+    res.check('...and no NaN or infinity is written', '(CLEAN)' in text)
+    res.check('...with no failure', 'SwitchOff' not in text and 'switched off:' not in text.lower() and 'Compose11: HLSL' not in text)
+
+
 def scenario_base(ctx, res, text, frame):
     res.check('compose applied', 'COMPOSE APPLIED' in text)
     mc = motion_counts(text)
@@ -399,6 +410,8 @@ SCENARIOS = [
     ('base', ['presentMode=0'], scenario_base),   # present mode off: with frame generation off the old result must go (present_mode tests it on)
     ('present_mode', ['offframes=150'], scenario_present_mode),   # frame generation off for 6 s: the model takes the presented frames
     ('present_wait', ['offframes=150', 'presentWait=1'], scenario_present_mode),   # the same, each frame waiting for its own result
+    ('hdr_scrgb', ['offframes=150', 'hdr=scrgb'], scenario_hdr),   # ...then the presented frames HDR: 16-bit float scRGB
+    ('hdr_pq', ['offframes=150', 'hdr=pq'], scenario_hdr),         # ...and HDR10 (10-bit PQ)
     ('hud_left_half', ['hud=0,0,0.5,1', 'hudFeather=0'], scenario_hud),
     ('sharpen', ['sharpen=0.8'], scenario_sharpen),
     ('shadows_up', ['shadows=1'], scenario_shadows_up),
@@ -443,7 +456,7 @@ SCENARIOS = [
 # The everyday set (--quick): the frame reaching the model with its own motion, the older timing, an exit with no AddonShutdown, the DLSS 4
 # Upscaler in place of NIS, and the two addons loaded together. The
 # rest (looks, HUD, grain, smoothing, the self-test, the upscaler with preset M, the panel shot) run with no option, before a release.
-QUICK = {'base', 'present_mode', 'present_wait', 'flow_previous', 'exit_abrupt', 'scaler', 'fsr_scaler', 'pair'}
+QUICK = {'base', 'present_mode', 'present_wait', 'hdr_scrgb', 'flow_previous', 'exit_abrupt', 'scaler', 'fsr_scaler', 'pair'}
 
 
 def selftest_exe_checks(nr_dir, snippet):

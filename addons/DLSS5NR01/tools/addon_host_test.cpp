@@ -7,6 +7,7 @@
 #include <d3d11_4.h>
 #include <dxgi1_6.h>
 #include <d3dcompiler.h>
+#include <DirectXPackedVector.h>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -121,6 +122,66 @@ static void Fill(ID3D11DeviceContext* ctx, ID3D11Texture2D* t, UINT w, UINT h) {
     std::vector<uint32_t> px(w * h); for (UINT y = 0; y < h; ++y) for (UINT x = 0; x < w; ++x) px[y * w + x] = Pattern(x, y, w, h);
     ctx->UpdateSubresource(t, 0, nullptr, px.data(), w * 4, 0);
 }
+// hdr=: the pattern as an HDR frame, in the encoding's own values per channel (scRGB: 1.0 = 80 nits; PQ: 0..1 of the 10-bit code), with a band
+// across the middle of highlights at 1000 nits, far above any SDR white. kHdrWhite is the white the pattern's own white is put at.
+static const float kHdrWhite = 80.0f;
+static bool InHdrBand(UINT y, UINT h) { return y >= h * 45 / 100 && y < h * 55 / 100; }
+static float SrgbToLin(float c) { return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f); }
+static float NitsToPq(float n) {
+    const float m1 = 0.1593017578125f, m2 = 78.84375f, c1 = 0.8359375f, c2 = 18.8515625f, c3 = 18.6875f;
+    const float y = powf(std::clamp(n / 10000.0f, 0.0f, 1.0f), m1);
+    return powf((c1 + c2 * y) / (1.0f + c3 * y), m2);
+}
+static void HdrPixel(UINT x, UINT y, UINT w, UINT h, bool pq, float out[3]) {
+    const uint32_t p = Pattern(x, y, w, h);
+    float lin[3] = { SrgbToLin(((p >> 16) & 255) / 255.0f), SrgbToLin(((p >> 8) & 255) / 255.0f), SrgbToLin((p & 255) / 255.0f) };
+    const bool band = InHdrBand(y, h);
+    if (!pq) { for (int i = 0; i < 3; ++i) out[i] = band ? 12.5f : lin[i] * kHdrWhite / 80.0f; return; }
+    const float m[3][3] = { { 0.6274f, 0.3293f, 0.0433f }, { 0.0691f, 0.9195f, 0.0114f }, { 0.0164f, 0.0880f, 0.8956f } };
+    for (int i = 0; i < 3; ++i) out[i] = std::round(NitsToPq(band ? 1000.0f : (m[i][0] * lin[0] + m[i][1] * lin[1] + m[i][2] * lin[2]) * kHdrWhite) * 1023.0f) / 1023.0f;
+}
+static ID3D11Texture2D* MakeHdrPicture(ID3D11Device* dev, ID3D11DeviceContext* dc, UINT w, UINT h, bool pq) {
+    D3D11_TEXTURE2D_DESC d{}; d.Width = w; d.Height = h; d.MipLevels = 1; d.ArraySize = 1; d.SampleDesc.Count = 1; d.Usage = D3D11_USAGE_DEFAULT;
+    d.Format = pq ? DXGI_FORMAT_R10G10B10A2_UNORM : DXGI_FORMAT_R16G16B16A16_FLOAT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    ID3D11Texture2D* t = nullptr; if (FAILED(dev->CreateTexture2D(&d, nullptr, &t))) return nullptr;
+    std::vector<uint64_t> px(w * h);
+    for (UINT y = 0; y < h; ++y) for (UINT x = 0; x < w; ++x) {
+        float v[3]; HdrPixel(x, y, w, h, pq, v);
+        if (pq) { uint32_t r = (uint32_t)std::lround(v[0] * 1023), g = (uint32_t)std::lround(v[1] * 1023), b = (uint32_t)std::lround(v[2] * 1023);
+                  reinterpret_cast<uint32_t*>(px.data())[y * w + x] = r | g << 10 | b << 20 | 3u << 30; }
+        else { using namespace DirectX::PackedVector;
+               px[y * w + x] = (uint64_t)XMConvertFloatToHalf(v[0]) | (uint64_t)XMConvertFloatToHalf(v[1]) << 16 | (uint64_t)XMConvertFloatToHalf(v[2]) << 32 | (uint64_t)XMConvertFloatToHalf(1.0f) << 48; }
+    }
+    dc->UpdateSubresource(t, 0, nullptr, px.data(), w * (pq ? 4 : 8), 0);
+    return t;
+}
+// Reads an HDR buffer back against the picture: how many pixels outside the band changed, how many inside it, and any NaN or infinity.
+struct HdrCheck { uint64_t base = 0, baseChanged = 0, band = 0, bandChanged = 0, bad = 0; double baseChange = 0; };
+static HdrCheck CheckHdr(ID3D11Device* dev, ID3D11DeviceContext* dc, ID3D11Texture2D* t, UINT w, UINT h, bool pq) {
+    HdrCheck r;
+    D3D11_TEXTURE2D_DESC sd; t->GetDesc(&sd); sd.MipLevels = 1; sd.ArraySize = 1; sd.SampleDesc.Count = 1; sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0;
+    sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ; sd.MiscFlags = 0;
+    ID3D11Texture2D* st = nullptr; dev->CreateTexture2D(&sd, nullptr, &st); if (!st) return r;
+    dc->CopyResource(st, t); D3D11_MAPPED_SUBRESOURCE m{}; if (FAILED(dc->Map(st, 0, D3D11_MAP_READ, 0, &m))) { st->Release(); return r; }
+    for (UINT y = 0; y < h; ++y) for (UINT x = 0; x < w; ++x) {
+        float want[3], got[3]; HdrPixel(x, y, w, h, pq, want);
+        const char* row = (const char*)m.pData + y * m.RowPitch;
+        if (pq) { const uint32_t v = reinterpret_cast<const uint32_t*>(row)[x]; for (int i = 0; i < 3; ++i) got[i] = ((v >> (10 * i)) & 1023) / 1023.0f; }
+        else { using namespace DirectX::PackedVector; const uint16_t* v = reinterpret_cast<const uint16_t*>(row) + x * 4; for (int i = 0; i < 3; ++i) got[i] = XMConvertHalfToFloat(v[i]); }
+        bool changed = false; double diff = 0;
+        for (int i = 0; i < 3; ++i) {
+            if (!std::isfinite(got[i])) { r.bad++; changed = true; continue; }
+            const float tol = pq ? 1.5f / 1023.0f : 0.002f + 0.004f * fabsf(want[i]);
+            if (fabsf(got[i] - want[i]) > tol) changed = true;
+            diff += fabsf(got[i] - want[i]);
+        }
+        if (InHdrBand(y, h)) { r.band++; if (changed) r.bandChanged++; }
+        else { r.base++; if (changed) { r.baseChanged++; r.baseChange += diff / 3.0; } }
+    }
+    dc->Unmap(st, 0); st->Release();
+    return r;
+}
+
 // Reads a BGRA8 texture back and counts the pixels that differ from the pattern.
 static uint64_t CountChanged(ID3D11Device* dev, ID3D11DeviceContext* dc, ID3D11Texture2D* t, UINT w, UINT h, double* meanAbs, const char* bmpName) {
     D3D11_TEXTURE2D_DESC sd{}; sd.Width = w; sd.Height = h; sd.MipLevels = 1; sd.ArraySize = 1; sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM; sd.SampleDesc.Count = 1; sd.Usage = D3D11_USAGE_STAGING; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
@@ -158,6 +219,9 @@ int main(int argc, char** argv) {
     // flowsplit=1: the right half of the fake LSFG flow has both fields pointing the same way (they disagree), the left half agrees
     bool flowSplit = false;
     for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "flowsplit=", 10)) flowSplit = atoi(argv[i] + 10) != 0;
+    // hdr=scrgb|pq: after the rest, the presented frames in HDR (see [check-hdr])
+    int hdrMode = 0;
+    for (int i = 4; i < argc; ++i) { if (!strcmp(argv[i], "hdr=scrgb")) hdrMode = 1; if (!strcmp(argv[i], "hdr=pq")) hdrMode = 2; }
 
     // ImGui: headless normally; with shot= it renders through the DX11 backend into an offscreen target, in the manager's theme
     ImGuiContext* ctx = ImGui::CreateContext(); ImGuiIO& io = ImGui::GetIO(); io.DisplaySize = ImVec2(1280, 800); io.DeltaTime = 1.0f / 60; io.IniFilename = nullptr;
@@ -174,9 +238,11 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "nisedge", 7) || !strncmp(argv[i], "nisline", 7) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "nisedge", 7) || !strncmp(argv[i], "nisline", 7) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12) || !strncmp(argv[i], "hdr=", 4)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
+    // a 10-bit frame is HDR10 only when the display runs in HDR, and the test's display may not: the addon is told so, as a user can
+    if (hdrMode == 2 && !host.cfg.count("frameEncoding")) { host.cfg["frameEncoding"] = "2"; printf("cfg frameEncoding = 2 (hdr=pq)\n"); }
     if (shotMode) host.imageDevice = shot.dev;
     Init(&host, ctx, (void*)af, (void*)ff, ud);
     // second=<dll>: the other addon of the pair, loaded as well. Only one may work on the frames: the second, found the first in charge at its
@@ -531,6 +597,37 @@ int main(int argc, char** argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
         }
         printf("[check-off] frame generation off for a second: %llu pixels changed on the last presents (%s)\n", (unsigned long long)stale, stale == 0 ? "OLD RESULT DROPPED" : "OLD RESULT STILL SHOWN");
+
+        // hdr=: frame generation still off, the swap chain now HDR: a 16-bit float scRGB one, or a 10-bit one holding HDR10. The model takes the
+        // presented frames (their SDR view) and its result goes back into them: the picture must change, the highlights far above SDR white
+        // must stay as they were, and no NaN may be written.
+        if (hdrMode) {
+            const bool pq = hdrMode == 2;
+            const DXGI_FORMAT hf = pq ? DXGI_FORMAT_R10G10B10A2_UNORM : DXGI_FORMAT_R16G16B16A16_FLOAT;
+            ID3D11Texture2D* pic = MakeHdrPicture(dev, dc, W2, H2, pq);
+            const HRESULT hr = sc->ResizeBuffers(2, W2, H2, hf, 0);
+            if (!pic || FAILED(hr)) printf("[check-hdr] the HDR swap chain could not be made (0x%08x)\n", (unsigned)hr);
+            else {
+                HdrCheck last; int samples = 0, applied = 0;
+                for (int fr = 0; fr < 300; ++fr) {
+                    ID3D11Texture2D* bb = nullptr; sc->GetBuffer(0, IID_PPV_ARGS(&bb));
+                    if (fr >= 200 && fr % 10 == 0) {   // what the present two back showed, the addon's work on it included
+                        const HdrCheck c = CheckHdr(dev, dc, bb, W2, H2, pq); samples++;
+                        if (c.baseChanged > c.base / 20) { applied++; last = c; } else if (!last.base) last = c;
+                    }
+                    dc->CopyResource(bb, pic);
+                    bb->Release(); sc->Present(0, 0); pump();
+                    if (fr % 60 == 0) frame("hdr"); else emptyFrame();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+                }
+                printf("[check-hdr] %s: the picture changed on %llu of %llu pixels (mean %.4f) in %d of %d samples (%s); highlights changed on %llu of %llu (%s); "
+                       "NaN or infinity: %llu (%s)\n", pq ? "HDR10 (PQ)" : "scRGB", (unsigned long long)last.baseChanged, (unsigned long long)last.base,
+                       last.baseChanged ? last.baseChange / last.baseChanged : 0.0, applied, samples, applied >= samples / 2 && samples ? "HDR COMPOSED" : "HDR NOT COMPOSED",
+                       (unsigned long long)last.bandChanged, (unsigned long long)last.band, last.bandChanged <= last.band / 100 ? "HIGHLIGHTS KEPT" : "HIGHLIGHTS CHANGED",
+                       (unsigned long long)last.bad, last.bad == 0 ? "CLEAN" : "BAD VALUES");
+            }
+            if (pic) pic->Release();
+        }
 
     }
     host.PublishEvent(EAM_EVENT_D3D11_DEVICE_CHANGED, nullptr, 0);

@@ -17,7 +17,8 @@ constexpr int kFloatGetterSlot = 14;                   // the parameter block's 
 enum Pass { kShrink = 0, kMotion = 1, kDeltaPass = 2 };
 
 // Root constants b0, twelve dwords, as the shaders declare them (nr_shaders.h).
-struct PassConstants { uint32_t dstW, dstH, srcW, srcH; uint32_t flags; float flowScale; float smoothAmount; uint32_t pad[5]; };
+struct PassConstants { uint32_t dstW, dstH, srcW, srcH; uint32_t flags; float flowScale; float smoothAmount; uint32_t encoding; float white; uint32_t pad[3]; };
+static_assert(sizeof(PassConstants) == 48, "twelve root constants");
 
 const char* NgxResultName(int r) {
     switch (static_cast<NVSDK_NGX_Result>(r)) {
@@ -418,7 +419,8 @@ bool NrEngine::StartBuild(uint32_t ww, uint32_t wh, const NrTuning& tuning) {
         m_buildList->Close();
     }
     Log("Prepare: frame %ux%u (%s) -> model input %ux%u (%.2f MP), style %u intensity %.2f: made on a thread of its own", m_w, m_h,
-        m_fmt == DXGI_FORMAT_B8G8R8A8_UNORM ? "BGRA8" : m_fmt == DXGI_FORMAT_R8G8B8A8_UNORM ? "RGBA8" : "fmt?", ww, wh, ww * wh / 1e6, tuning.style, tuning.intensity);
+        m_fmt == DXGI_FORMAT_B8G8R8A8_UNORM ? "BGRA8" : m_fmt == DXGI_FORMAT_R8G8B8A8_UNORM ? "RGBA8" : m_fmt == DXGI_FORMAT_R10G10B10A2_UNORM ? "RGB10A2"
+        : m_fmt == DXGI_FORMAT_R16G16B16A16_FLOAT ? "RGBA16F" : "fmt?", ww, wh, ww * wh / 1e6, tuning.style, tuning.intensity);
     m_buildW = ww; m_buildH = wh; m_buildTuning = tuning; m_buildError[0] = 0;
     m_buildState = kBuilding;
     m_buildThread = CreateThread(nullptr, 0, BuildThread, this, 0, nullptr);
@@ -574,7 +576,7 @@ bool NrEngine::Run(ID3D12Resource* sharedIn, ID3D12Resource* sharedDelta, ID3D12
 
     // 1. the frame, shrunk to the proxy
     Transition(m_proxy, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    dispatch(m_psoShrink, kShrink, PassConstants{ m_ww, m_wh, m_w, m_h });
+    { PassConstants shrink{ m_ww, m_wh, m_w, m_h }; shrink.encoding = m_encoding; shrink.white = m_whiteNits; dispatch(m_psoShrink, kShrink, shrink); }
     Transition(m_proxy, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     // 2. the model's motion vectors, in working-size pixels. Measured from the proxy itself (the default: per pixel, this frame's own, the

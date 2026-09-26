@@ -38,6 +38,7 @@ std::mutex g_autoMutex;
 AutoQuality g_auto;
 std::mutex g_textMutex;
 std::string g_scalerGame;
+std::string g_encodingText = "SDR";
 std::string g_status = "waiting for device", g_offReason, g_frameText, g_cardName, g_tappedDeviceText = "none yet", g_focusExe;
 bool g_cardDrivesDisplay = false;
 uint64_t g_runs = 0, g_otherPasses = 0, g_lsPresents = 0, g_composed = 0, g_lastDelta = 0;

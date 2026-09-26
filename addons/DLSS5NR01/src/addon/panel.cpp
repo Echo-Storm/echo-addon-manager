@@ -54,7 +54,7 @@ void DrawPanel() {
 
     // status
     std::string status = Status(), frameInfo, adapterName; bool hasDisplay;
-    { std::lock_guard<std::mutex> lk(g_textMutex); frameInfo = g_frameText; adapterName = g_cardName; hasDisplay = g_cardDrivesDisplay; }
+    { std::lock_guard<std::mutex> lk(g_textMutex); frameInfo = g_frameText.empty() ? g_frameText : g_frameText + " (" + g_encodingText + ")"; adapterName = g_cardName; hasDisplay = g_cardDrivesDisplay; }
     Block("Status", true);
     if (g_off) {
         std::string why; { std::lock_guard<std::mutex> lock(g_textMutex); why = g_offReason; }
@@ -315,6 +315,16 @@ void DrawPanel() {
             "but the model's whole run (several milliseconds) comes before every frame is shown, which can make frames miss the display's refresh.");
         ImGui::Unindent();
         if (!c.presentMode) ImGui::EndDisabled();
+        {
+            static const char* const encodings[] = { "Automatic", "SDR", "HDR" };
+            ImGui::SetNextItemWidth(220.0f);
+            if (ImGui::Combo("Frame encoding", &c.frameEncoding, encodings, 3)) changed = true;
+            Tip("What the frames hold, so an HDR picture is worked on as the model and the look controls expect. Automatic (the default): 8-bit frames are "
+                "SDR, 16-bit float ones HDR (scRGB), and 10-bit ones HDR (HDR10) when Windows runs the display in HDR, SDR otherwise. HDR frames are "
+                "brought to an SDR view with Windows' SDR content brightness as white, and only the change goes back into the frame, so highlights keep "
+                "their brightness. SDR or HDR here overrides that for the 10-bit and 16-bit frames (8-bit ones are always SDR): set it only if the "
+                "picture comes out washed out, too dark or too bright. The Technical status section shows what was decided.");
+        }
         }
     }
     if (kScalerAddon && eam::ui::SectionHeader("Upscaling")) {

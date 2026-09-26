@@ -3,8 +3,9 @@
 // flow to the model's motion vectors), the model, then CSDelta or CSDeltaSmooth (model minus proxy, into the shared delta). The delta is put
 // on the presented frames by the D3D11 side (compose11.cpp).
 #pragma once
+#include "engine/hdr_hlsl.h"
 
-static const char* kNrModelHlsl = R"HLSL(
+static const char* kNrModelHlsl = NR_HDR_HLSL R"HLSL(
 SamplerState sLinear : register(s0);
 Texture2D<float4>   tFrame  : register(t0);   // CSDown: the frame, full size
 Texture2D<float4>   tProxy  : register(t1);   // CSDelta: the frame as the model saw it
@@ -19,10 +20,12 @@ cbuffer Constants : register(b0) {
     uint  flags;      // 1: a flow texture is bound
     float flowScale;  // CSFlowToMvec: working-size pixels per flow unit
     float smoothAmount;
-    uint  pad0; uint4 pad1;
+    uint  encoding;   // CSDown: the frame's encoding (0 SDR, 1 scRGB, 2 HDR10)
+    float white;      // CSDown: the SDR white, in nits (HDR only)
+    uint3 pad1;
 };
 
-// The frame shrunk to the working size. Four bilinear reads spread over each output pixel's footprint: one read aliases once the frame is more
+// The frame shrunk to the working size, in its SDR view (an HDR frame tone-mapped, see hdr_hlsl.h), which is what the model works on. Four bilinear reads spread over each output pixel's footprint: one read aliases once the frame is more
 // than twice the size, and aliasing in the model's input comes out of it as noise.
 [numthreads(8, 8, 1)]
 void CSDown(uint3 id : SV_DispatchThreadID) {
@@ -30,8 +33,10 @@ void CSDown(uint3 id : SV_DispatchThreadID) {
     const float2 texel = 1.0 / float2(outSize);
     const float2 uv = (float2(id.xy) + 0.5) * texel;
     const float2 q = texel * 0.25;
-    uOut[id.xy] = 0.25 * (tFrame.SampleLevel(sLinear, uv + float2(-q.x, -q.y), 0) + tFrame.SampleLevel(sLinear, uv + float2(q.x, -q.y), 0) +
-                          tFrame.SampleLevel(sLinear, uv + float2(-q.x, q.y), 0) + tFrame.SampleLevel(sLinear, uv + float2(q.x, q.y), 0));
+    float3 sum = 0;
+    [unroll] for (int k = 0; k < 4; ++k)
+        sum += ToSdr(tFrame.SampleLevel(sLinear, uv + float2(k & 1 ? q.x : -q.x, k & 2 ? q.y : -q.y), 0).rgb, encoding, white);
+    uOut[id.xy] = float4(sum * 0.25, 1.0);
 }
 
 // LSFG's flow (xy: current -> previous frame) as motion vectors in working-size pixels; zero without flow.
@@ -64,7 +69,7 @@ RWTexture2D<float4> uHistory : register(u1);   // the history for the next run
 
 cbuffer Constants : register(b0) {
     uint2 outSize; uint2 inSize;
-    uint  flags; float flowScale; float smoothAmount; uint pad0; uint4 pad1;
+    uint  flags; float flowScale; float smoothAmount; uint encoding; float white; uint3 pad1;
 };
 
 [numthreads(8, 8, 1)]

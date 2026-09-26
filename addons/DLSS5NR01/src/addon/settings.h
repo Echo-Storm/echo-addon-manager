@@ -39,6 +39,7 @@ struct Config {
     NrParams p;                          // the look, and the few model settings that are not part of a look
     bool presentMode = true;             // with frame generation off, the model takes the presented frame (see Present in runtime.cpp)
     bool presentWait = false;            // ...and each frame waits on the GPU for its own result (off: the newest ready one, moved along the motion)
+    int frameEncoding = 0;               // what 10-bit and half-float frames hold (hdr.h EncodingOf): 0 automatic, 1 SDR, 2 HDR
     bool freshFlow = true;               // run the model once LSFG has this frame's own motion (off: at capture, with the frame before's)
     bool lsFirst = true;                 // give Lossless Scaling's GPU work priority over the model's
     bool hotkeys = true;                 // Ctrl+Shift + an F key, read at every present
