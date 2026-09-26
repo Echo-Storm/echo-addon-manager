@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
     FakeHost host; host.cfg["snippetPath"] = argc > 3 ? argv[3] : "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\nvngx_dlssnr.dll";
     for (int i = 4; i < argc; ++i) {   // extra key=value pairs override addon config (workingScale=0.5 debugView=3 ...)
         const char* eq = strchr(argv[i], '='); if (!eq) continue;
-        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "nisedge", 7) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
+        if (!strncmp(argv[i], "shot", 4) || !strncmp(argv[i], "nisnoflow", 9) || !strncmp(argv[i], "nisbgra", 7) || !strncmp(argv[i], "nismove", 7) || !strncmp(argv[i], "nisW", 4) || !strncmp(argv[i], "nisH", 4) || !strncmp(argv[i], "nisScale", 8) || !strncmp(argv[i], "nisvp", 5) || !strncmp(argv[i], "nisedge", 7) || !strncmp(argv[i], "nisline", 7) || !strncmp(argv[i], "unload", 6) || !strncmp(argv[i], "nisgap", 6) || !strncmp(argv[i], "gpuload", 7) || !strncmp(argv[i], "offframes", 9) || !strncmp(argv[i], "devflags", 8) || !strncmp(argv[i], "second", 6) || !strncmp(argv[i], "flowsplit", 9) || !strncmp(argv[i], "exitmode", 8) || !strncmp(argv[i], "sectionsOpen", 12)) continue;   // the host's own keys
         host.cfg[std::string(argv[i], (size_t)(eq - argv[i]))] = eq + 1; printf("cfg %.*s = %s\n", (int)(eq - argv[i]), argv[i], eq + 1);
     }
     if (shotMode) host.imageDevice = shot.dev;
@@ -344,6 +344,17 @@ int main(int argc, char** argv) {
             for (UINT y = 0; y < NH; ++y) for (UINT x = 0; x < NW; ++x) px[(size_t)y * NW + x] = edgeDistance(x + 0.5, y + 0.5) > 0.0 ? 0xFFFFFFFFu : 0xFF000000u;
             dc->UpdateSubresource(nisIn, 0, nullptr, px.data(), NW * 4, 0);
         }
+        // nisline=1: a thin bright line swaying sideways (as a wire in the wind) over a still background: its own motion, unlike the blocks
+        // around it. The output is measured against the true picture near the line ([check-line])
+        bool nisLine = false; for (int i = 4; i < argc; ++i) if (!strcmp(argv[i], "nisline=1")) nisLine = true;
+        auto lineX = [&](double v, int fr) { return NW * 0.5 + (v - NH * 0.5) * 0.35 + 2.5 * std::sin(fr * 0.7); };   // in frame pixels
+        auto linePixel = [&](UINT x, UINT y, int fr) { return std::abs(x + 0.5 - lineX(y + 0.5, fr)) < 0.6 ? 0xFFFFFFFFu : Pattern(x, y, NW, NH); };
+        std::vector<uint32_t> linePx;
+        auto fillLine = [&](int fr) {
+            linePx.resize((size_t)NW * NH);
+            for (UINT y = 0; y < NH; ++y) for (UINT x = 0; x < NW; ++x) linePx[(size_t)y * NW + x] = linePixel(x, y, fr);
+            dc->UpdateSubresource(nisIn, 0, nullptr, linePx.data(), NW * 4, 0);
+        };
         // gpuload=<n>: before each NIS pass, n thousand iterations of busy work on this (Lossless Scaling's) queue, as a game at its GPU
         // limit keeps the card busy; the upscaler's frame read and signal then queue behind it (Fallout: New Vegas, 2026-09-25)
         int gpuLoad = 0; for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "gpuload=", 8)) gpuLoad = std::clamp(atoi(argv[i] + 8), 0, 1000);
@@ -370,6 +381,7 @@ int main(int argc, char** argv) {
         int nisGap = 12; for (int i = 4; i < argc; ++i) if (!strncmp(argv[i], "nisgap=", 7)) nisGap = std::clamp(atoi(argv[i] + 7), 0, 24);
         for (int fr = 0; fr < kFrames; ++fr) {
             if (nisMove) FillMoving(dc, nisIn, NW, NH, fr);
+            if (nisLine) fillLine(fr);
             if (nisNoFlow) { nisPass(); std::this_thread::sleep_for(std::chrono::milliseconds(16)); if (fr % 30 == 0) frame("nis"); else emptyFrame(); continue; }
             Fill(dc, cur, W, H);
             dc->CSSetShaderResources(0, 1, &sCur); dc->CSSetUnorderedAccessViews(0, 4, uPyr, nullptr); dc->CSSetShader(csPyr, nullptr, 0); host.Dispatch(dc, W * 7 / 10 / 8, H * 7 / 10 / 8, 1);
@@ -384,7 +396,7 @@ int main(int argc, char** argv) {
         // read the output back: how much of it is the fake pass's magenta, and how close its average colour is to the frame's
         D3D11_TEXTURE2D_DESC sd{}; nisOut->GetDesc(&sd); sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
         ID3D11Texture2D* st = nullptr; dev->CreateTexture2D(&sd, nullptr, &st);
-        uint64_t magenta = 0, borderLit = 0, edgePixels = 0; double sum[3] = {}, want[3] = {}, detail = 0, edgeError = 0;   // detail: the average step between neighbouring pixels (sharpening raises it)
+        uint64_t magenta = 0, borderLit = 0, edgePixels = 0, linePixels = 0; double sum[3] = {}, want[3] = {}, detail = 0, edgeError = 0, lineError[3] = {};   // detail: the average step between neighbouring pixels (sharpening raises it)
         double moveError[3] = {};   // nismove: how far the picture is from the moving picture of the last three frames (the one shown is a frame late)
         if (st) {
             dc->CopyResource(st, nisOut);
@@ -396,6 +408,18 @@ int main(int argc, char** argv) {
                     if (!inside) { if (px[0] | px[1] | px[2]) ++borderLit; continue; }   // Lossless Scaling's borders: nothing may be drawn there
                     const UINT x = ox - OX, y = oy - OY;   // within the viewport, as NIS's picture
                     if (px[0] == 255 && px[1] == 0 && px[2] == 255) ++magenta;
+                    if (nisLine) {   // near the line (within 4 frame pixels of it in any of the last three frames): off the true picture of each
+                        const double u = (x + 0.5) / NS, v = (y + 0.5) / NS;
+                        bool nearLine = false;
+                        for (int k = 0; k < 3; ++k) nearLine = nearLine || std::abs(u - lineX(v, kFrames - 1 - k)) < 4.0;
+                        if (nearLine && y > 8 && y + 8 < VH) {
+                            ++linePixels;
+                            for (int k = 0; k < 3; ++k) {
+                                const uint32_t t = linePixel(std::min((UINT)u, NW - 1), std::min((UINT)v, NH - 1), kFrames - 1 - k);   // B, G, R in memory; nisbgra
+                                lineError[k] += (std::abs(int(px[0]) - int((t >> 16) & 255)) + std::abs(int(px[1]) - int((t >> 8) & 255)) + std::abs(int(px[2]) - int(t & 255))) / 3.0;
+                            }
+                        }
+                    }
                     if (nisEdge) {   // near the edge: how far from the ideal (a box filter one frame pixel wide over the true edge)
                         const double d = edgeDistance((x + 0.5) / NS, (y + 0.5) / NS);
                         if (std::abs(d) < 3.0 && x > 8 && y > 8 && x + 8 < VW && y + 8 < VH) {
@@ -421,10 +445,15 @@ int main(int argc, char** argv) {
             printf("[check-move] the picture is off the moving picture by %.2f levels a channel (frame shown: %d before the last; the others %.2f, %.2f, %.2f)\n",
                    moveError[shown] / n, shown, moveError[0] / n, moveError[1] / n, moveError[2] / n);
         }
+        if (nisLine && linePixels) {
+            int shown = 0; for (int k = 1; k < 3; ++k) if (lineError[k] < lineError[shown]) shown = k;
+            printf("[check-line] near the swaying line the picture is off the true one by %.2f levels over %llu pixels (frame shown: %d before the last)\n",
+                   lineError[shown] / linePixels, (unsigned long long)linePixels, shown);
+        }
         if (nisEdge) printf("[check-edge] the slanted edge is off the ideal smooth edge by %.2f levels over %llu pixels\n", edgePixels ? edgeError / edgePixels : 0.0,
                             (unsigned long long)edgePixels);
         for (UINT y = 0; y < NH; ++y) for (UINT x = 0; x < NW; ++x) {
-            const uint32_t v = nisEdge ? (edgeDistance(x + 0.5, y + 0.5) > 0.0 ? 0xFFFFFFFFu : 0xFF000000u)
+            const uint32_t v = nisLine ? linePixel(x, y, kFrames - 1) : nisEdge ? (edgeDistance(x + 0.5, y + 0.5) > 0.0 ? 0xFFFFFFFFu : 0xFF000000u)
                              : nisMove ? MovingPixel((int)x, (int)y, kFrames - 1) : Pattern(x, y, NW, NH);   // in memory: B, G, R
             if (nisBgra) { want[0] += (v >> 16) & 255; want[1] += (v >> 8) & 255; want[2] += v & 255; }   // the RGBA8 output holds R, G, B
             else { want[0] += v & 255; want[1] += (v >> 8) & 255; want[2] += (v >> 16) & 255; }

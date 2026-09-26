@@ -43,7 +43,10 @@ multisampling (MSAA 4x/8x) costs a lot and adds little here; keep the game's own
 - **Stability** (off to start with): less shimmer on thin lines, wires and leaves, for a little more trailing behind what moves. The motion
   measurement then judges trust by a pixel's surroundings rather than the pixel itself, so flicker is no longer reported as "do not trust the
   history here" and the upscaler averages it out; FSR 3 also keeps more history and reacts less to small shading changes (AMD's tuning keys).
-  Real motion is followed as before. 0.5 is a good start.
+  Real motion is followed as before. 0.5 is a good start. A thin line that sways (a wire in the wind) is the exception: the motion
+  is measured right (its block locks onto it), but blending its history, a line thinner than a pixel at other places, blurs it, and
+  stability blends more (test host `fsr_line` / `fsr_line_stable`: 8.8 against 10.2 levels off the true picture). Around 0.3 keeps
+  most of the calm with little of that.
 - **Edge smoothing** (off to start with): anti-aliasing along the edges of the upscaled picture, for games without anti-aliasing of
   their own. It finds where the brightness steps, which way the edge runs and how far, and blends across it by the part of a pixel the true
   edge would cover (our own pass, in the family of FXAA). It runs after the upscaler, before the sharpening: smoothing the game's frame

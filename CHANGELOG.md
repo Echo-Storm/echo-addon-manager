@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Test host: `nisline=1`, a thin line swaying sideways over a still background (a wire in the wind), measured against the true picture
+  near it; scenarios `fsr_line`, `fsr_line_stable`. It showed that the motion is measured right there (the line's block locks onto it; a
+  search of small extra shifts for such pixels was tried and changed nothing), and that stability's extra history is what blurs the line
+  (8.8 against 10.2 levels): documented as the slider's trade-off.
 - **Upscalers: settings per game** (on by default). Sharpening, stability, edge smoothing, the DLSS model and the motion are kept for each
   game by its program name and come back when it takes focus (checked about once a second). Only the window being scaled counts (its
   inside is the frame's size: a chat program in front was taken for a game in the first test), and Lossless Scaling's own windows do not,

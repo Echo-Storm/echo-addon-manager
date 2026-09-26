@@ -302,6 +302,18 @@ def scenario_scaler_edges(ctx, res, text, frame):
     res.check('edge smoothing runs with DLSS too', re.search(r'after the upscaler [0-9.]+ ms \(edge smoothing 1\.00', text) is not None)
 
 
+def line_error(text):
+    m = re.search(r'\[check-line\] near the swaying line the picture is off the true one by ([0-9.]+) levels', text)
+    return float(m.group(1)) if m else None
+
+
+def scenario_fsr_line(ctx, res, text, frame):
+    res.check('the FSR 3 Upscaler runs', 'FSR 3 upscaler ready on its own D3D12 device' in text and 'FSR 3 dispatch failed' not in text)
+    res.check('...in place of the NIS pass', 'DLSS REPLACED NIS' in text)
+    e = line_error(text)
+    res.check('a thin swaying line is measured against the true picture', e is not None, '%s levels' % e)
+
+
 def stable_checks(ctx, res, text, none_key, name):
     # Stability at 1: the upscaler must still follow a sliding picture (the slide is real motion, not flicker), and FSR takes its settings
     err = move_error(text)
@@ -403,6 +415,8 @@ SCENARIOS = [
     ('fsr_edges_1x', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisedge=1', 'sharpen=0', 'nisScale=1', 'scalerEdges=1'], scenario_fsr),   # (numbers only)
     ('fsr_edges_sharp', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisedge=1', 'sharpen=1', 'sharpenScale=1.6', 'scalerEdges=1'], scenario_fsr_edges_sharp),   # edges, then our sharpening
     ('scaler_edges', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisedge=1', 'sharpen=0', 'scalerEdges=1'], scenario_scaler_edges),
+    ('fsr_line', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisline=1', 'sharpen=0'], scenario_fsr_line),   # a wire swaying in the wind
+    ('fsr_line_stable', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisline=1', 'sharpen=0', 'scalerStability=0.5'], scenario_fsr_line),
     ('scaler_4_3', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisvp=1', 'nisW=960', 'nisH=720', 'nisScale=1.5'], scenario_viewport),   # 4:3 on 16:9
     ('fsr_4_3', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisvp=1', 'nisW=960', 'nisH=720', 'nisScale=1.5'], scenario_fsr_viewport),
     ('scaler_stable', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'scalerStability=1'], scenario_stable),   # stability at 1 on the slide
