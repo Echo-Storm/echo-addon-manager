@@ -55,8 +55,8 @@ What it has to do (and what it must never do):
   - **Text and HUD.** A game's HUD is drawn into the captured frame, so the upscaler sees it; DLSS softens thin text a little (FSR 3 less).
     A game with DLSS built in draws its HUD after upscaling. Options: areas that keep NIS's picture (drawn like Neural Rendering's HUD areas),
     or finding the HUD automatically, which would be an addon of its own.
-  - **Windows of another shape than the screen** (4:3 games): Lossless Scaling scales them into part of the screen, which the upscalers
-    leave to NIS for now. Taking that case too matters for old games.
+  - **Windows of another shape than the screen** (4:3 games): done after 0.9.1 (the upscalers read NIS's viewports); to confirm in a real
+    4:3 game.
   - Then: drop the WIP label (0.9.1 ships them as a preview, switched off), and a user-guide chapter.
 
 ## Ideas for after 1.0

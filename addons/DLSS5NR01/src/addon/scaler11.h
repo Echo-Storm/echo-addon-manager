@@ -20,8 +20,15 @@ class SrEngine;
 namespace nr {
 
 // The NIS pass, recognised from what is bound when it is dispatched; false for any other pass.
-struct NisPass { ID3D11Resource* in = nullptr; ID3D11Resource* out = nullptr; uint32_t inW = 0, inH = 0, outW = 0, outH = 0; DXGI_FORMAT inFmt = DXGI_FORMAT_UNKNOWN, outFmt = DXGI_FORMAT_UNKNOWN; };
-bool FindNisPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z, NisPass& pass);   // AddRef's in/out: ReleaseNisPass
+// in/out and their sizes are the viewports NIS scales between: the whole textures, or, for a window of another shape than the screen (a 4:3
+// game on a 16:9 screen), the part of each NIS reads and writes (inX/inY, outX/outY their top-left corners), taken from NIS's constants.
+struct NisPass {
+    ID3D11Resource* in = nullptr; ID3D11Resource* out = nullptr; uint32_t inW = 0, inH = 0, outW = 0, outH = 0; DXGI_FORMAT inFmt = DXGI_FORMAT_UNKNOWN, outFmt = DXGI_FORMAT_UNKNOWN;
+    uint32_t inX = 0, inY = 0, outX = 0, outY = 0;
+    bool Partial() const { return inX || inY || outX || outY; }
+};
+// AddRef's in/out: ReleaseNisPass. log: where a pass that looks like NIS covers only part of its output, what its constants say (once a shape).
+bool FindNisPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z, NisPass& pass, const std::function<void(const char*)>& log = nullptr);
 void ReleaseNisPass(NisPass& pass);
 
 class ScalerLink {
@@ -73,6 +80,7 @@ private:
     void DescribeTargets(const NisPass& pass);
     bool MakeGrabShader();
     void Probe(uint64_t shown, bool inFresh);
+    void PlacePicture(const NisPass& pass, ID3D11Texture2D* picture);
 
     LogFn m_log;
     SrEngine* m_engine = nullptr;
@@ -82,6 +90,7 @@ private:
     // The frame is read into m_in by a small compute pass through the NIS pass's own t0 view, not copied: with frame generation off that
     // frame is a keyed-mutex texture shared from Lossless Scaling's capture device, and CopyResource from it gave all black (2026-09-24).
     ID3D11ComputeShader* m_grab = nullptr;
+    ID3D11Buffer* m_grabOrigin = nullptr;   // the grab's constants: the input viewport's corner
     static const int kIn = 2, kOut = 3;   // frames with the engine at most; pictures in turn (the one shown is never one being written)
     ID3D11UnorderedAccessView* m_inUav[kIn] = {};
     Shared m_in[kIn], m_out[kOut], m_flow[kIn];   // frame n reads m_in[n % kIn] (and m_flow[n % kIn]) and writes m_out[n % kOut]
@@ -98,7 +107,7 @@ private:
     // once per link: how bright the frame DLSS gets and the picture it makes are (a black picture shows here)
     ID3D11Texture2D* m_probe[2] = {};
     int m_probeState = 0;
-    bool m_loggedFormat = false, m_described = false;
+    bool m_loggedFormat = false, m_described = false, m_loggedPartial = false;
 };
 
 } // namespace nr

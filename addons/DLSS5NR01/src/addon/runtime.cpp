@@ -751,7 +751,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     LogPassTable();
 
     NisPass pass;
-    if (!FindNisPass(ctx, x, y, z, pass)) return false;
+    if (!FindNisPass(ctx, x, y, z, pass, [](const char* m) { Log("%s", m); })) return false;
     ++g_nisSeen; ++g_nisSinceTap;
     g_scaleInW = pass.inW; g_scaleInH = pass.inH; g_scaleOutW = pass.outW; g_scaleOutH = pass.outH;
     ReadHotkeys();

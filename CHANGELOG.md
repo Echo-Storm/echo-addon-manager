@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Upscalers: windows of another shape than the screen** (a 4:3 game on a 16:9 screen). Lossless Scaling scales such a window into part
+  of the screen, and its NIS pass then covers only that part, which the upscalers used to leave to NIS. Now they read NIS's two viewports
+  from its constants (NVIDIA's NISConfig; copied once per pass shape and read back a frame later, never waiting), use them only when they
+  agree with the dispatch, the textures and NIS's own scale factor, upscale the input viewport into the output viewport and leave the
+  borders alone. The log gives the viewports once, or why NIS was kept. Test host: `nisvp=1` (a 4:3 frame on a 16:9 output with NIS's
+  constants); scenarios `scaler_4_3`, `fsr_4_3`.
 - **Upscalers: a Stability slider** (DLSS 4 and FSR 3, off by default) for shimmer on thin lines and leaves. Without the game's sub-pixel
   camera shifts a line thinner than a pixel flickers from frame to frame, and the motion measurement reported that flicker as "do not trust
   the history here", so the upscaler passed it straight through. With stability up, the distrust mask judges by the average brightness of a

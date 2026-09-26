@@ -259,6 +259,18 @@ def scenario_move(ctx, res, text, frame):
               '%s against %s levels without' % (err, none))
 
 
+def scenario_viewport(ctx, res, text, frame, name='DLSS'):
+    # a 4:3 window on a 16:9 screen: NIS scales into the middle; the upscaler must read NIS's viewports, fill the middle and leave the borders
+    scenario_scaler_noflow(ctx, res, text, frame) if name == 'DLSS' else scenario_fsr(ctx, res, text, frame)
+    res.check("the upscaler reads NIS's viewports from its constants", 'the upscaler takes that part' in text)
+    vp = re.search(r'\[check-vp\] .*?: (\d+) pixels of the borders lit', text)
+    res.check("...and leaves Lossless Scaling's borders as they are", vp is not None and int(vp.group(1)) == 0, vp.group(0)[11:] if vp else 'no check-vp line')
+
+
+def scenario_fsr_viewport(ctx, res, text, frame):
+    scenario_viewport(ctx, res, text, frame, 'FSR 3')
+
+
 def stable_checks(ctx, res, text, none_key, name):
     # Stability at 1: the upscaler must still follow a sliding picture (the slide is real motion, not flicker), and FSR takes its settings
     err = move_error(text)
@@ -355,6 +367,8 @@ SCENARIOS = [
     ('scaler_bgra', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_scaler_noflow),   # frame generation off: only NIS, on the BGRA8 capture
     ('scaler_move_none', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'motionSource=2'], scenario_move_none),   # a sliding picture, DLSS told nothing moves
     ('scaler_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1'], scenario_move),
+    ('scaler_4_3', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisvp=1', 'nisW=960', 'nisH=720', 'nisScale=1.5'], scenario_viewport),   # 4:3 on 16:9
+    ('fsr_4_3', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nisvp=1', 'nisW=960', 'nisH=720', 'nisScale=1.5'], scenario_fsr_viewport),
     ('scaler_stable', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'scalerStability=1'], scenario_stable),   # stability at 1 on the slide
     ('dlaa_4k_move', ['addon=DLSS4DLAA.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1', 'nismove=1', 'nisW=3840', 'nisH=2160', 'nisScale=1'], scenario_move_4k),   # DLAA at 4K on the sliding picture: the estimate's cost
     ('fsr_scaler', ['addon=FSR3UPSC.dll', 'nis=1', 'nisbgra=1', 'nisnoflow=1'], scenario_fsr),   # the FSR 3 Upscaler, frame generation off

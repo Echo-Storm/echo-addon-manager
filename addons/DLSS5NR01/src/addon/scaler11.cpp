@@ -3,6 +3,7 @@
 #include "addon/product.h"
 #include "engine/sr_engine.h"
 #include <d3dcompiler.h>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -43,22 +44,92 @@ struct SavedBindings {
     }
 };
 
-// The grab pass: the frame, read the way NIS reads it (through the pass's t0 view), written into the shared frame texture.
+// The grab pass: the frame, read the way NIS reads it (through the pass's t0 view), written into the shared frame texture; from the input
+// viewport's corner on (0, 0 for the whole frame).
 const char* const kGrabHlsl = R"HLSL(
 Texture2D<float4>   tFrame : register(t0);
 RWTexture2D<float4> uOut   : register(u0);
+cbuffer C : register(b0) { uint2 origin; uint2 unused; };
 [numthreads(8, 8, 1)]
 void CSGrab(uint3 id : SV_DispatchThreadID) {
     uint w, h; uOut.GetDimensions(w, h);
-    if (id.x < w && id.y < h) uOut[id.xy] = tFrame.Load(int3(id.xy, 0));
+    if (id.x < w && id.y < h) uOut[id.xy] = tFrame.Load(int3(id.xy + origin, 0));
 }
 )HLSL";
+
+// ---- NIS's viewports
+//
+// NVIDIA's NIS scales between two viewports, which its constant buffer (NISConfig, b0) holds, and dispatches one group per 32x24 pixels of
+// the output viewport. For a window of the screen's shape both are the whole textures; for another shape Lossless Scaling scales the window
+// into part of the screen. The constants are read once per pass shape without waiting (copied now, mapped on a later pass), and only a
+// layout that agrees with everything else (the dispatch, the textures, NIS's own scale factor) is used.
+struct NisConfigView {   // NISConfig (NVIDIA Image Scaling SDK 1.0), the part read here: 18 floats, then the viewports
+    float f[18]; uint32_t inX, inY, inW, inH, outX, outY, outW, outH;
+};
+static_assert(sizeof(NisConfigView) == 104, "NISConfig's viewports start at byte 72");
+
+struct ViewportReader {
+    struct Key { uint32_t inW, inH, outW, outH, x, y; bool operator==(const Key& k) const { return !memcmp(this, &k, sizeof k); } };
+    ID3D11Device* dev = nullptr;
+    ID3D11Buffer* staging = nullptr;
+    Key key{}; int state = 0;         // 0 nothing, 1 a copy in flight, 2 known good, 3 known unusable
+    NisConfigView cfg{};
+    uint32_t tries = 0;
+    void Reset() { if (staging) staging->Release(); staging = nullptr; dev = nullptr; state = 0; tries = 0; }
+};
+ViewportReader g_viewports;
+
+// True with the viewports filled in, once known; false meanwhile (NIS runs as usual) and for a layout that does not fit.
+bool ResolveViewports(ID3D11DeviceContext* ctx, const D3D11_TEXTURE2D_DESC& in, const D3D11_TEXTURE2D_DESC& o, uint32_t x, uint32_t y, NisPass& pass,
+                      const std::function<void(const char*)>& log) {
+    ID3D11Device* dev = nullptr; ctx->GetDevice(&dev);
+    if (dev) dev->Release();   // only compared
+    const ViewportReader::Key key{ in.Width, in.Height, o.Width, o.Height, x, y };
+    ViewportReader& r = g_viewports;
+    if (r.dev != dev || !(r.key == key)) { r.Reset(); r.dev = dev; r.key = key; }
+    auto say = [&](const char* fmt, auto... args) { if (log) { char text[400]; snprintf(text, sizeof text, fmt, args...); log(text); } };
+    if (r.state == 0) {
+        if (++r.tries > 3) { r.state = 3; return false; }
+        ID3D11Buffer* cb = nullptr; ctx->CSGetConstantBuffers(0, 1, &cb);
+        if (!cb) { say("NIS pass on part of its output (%ux%u -> %ux%u, %ux%u groups): it has no constants bound; NIS stays", in.Width, in.Height, o.Width, o.Height, x, y); r.state = 3; return false; }
+        D3D11_BUFFER_DESC d{}; cb->GetDesc(&d);
+        if (d.ByteWidth < sizeof(NisConfigView)) { say("NIS pass on part of its output: its constants are %u bytes, too few for NIS's; NIS stays", d.ByteWidth); cb->Release(); r.state = 3; return false; }
+        D3D11_BUFFER_DESC sd{}; sd.ByteWidth = d.ByteWidth; sd.Usage = D3D11_USAGE_STAGING; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        if (!r.staging && FAILED(dev->CreateBuffer(&sd, nullptr, &r.staging))) { cb->Release(); r.state = 3; return false; }
+        ctx->CopyResource(r.staging, cb);
+        cb->Release();
+        r.state = 1;
+        return false;
+    }
+    if (r.state == 1) {
+        D3D11_MAPPED_SUBRESOURCE m{};
+        if (ctx->Map(r.staging, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &m) != S_OK) return false;   // not back yet
+        memcpy(&r.cfg, m.pData, sizeof r.cfg);
+        ctx->Unmap(r.staging, 0);
+        const NisConfigView& c = r.cfg;
+        const float scaleX = c.outW ? static_cast<float>(c.inW) / c.outW : 0.0f, scaleY = c.outH ? static_cast<float>(c.inH) / c.outH : 0.0f;
+        const bool fits = c.inW && c.inH && c.outW && c.outH && c.inX + c.inW <= in.Width && c.inY + c.inH <= in.Height &&
+                          c.outX + c.outW <= o.Width && c.outY + c.outH <= o.Height && x == (c.outW + 31) / 32 && y == (c.outH + 23) / 24 &&
+                          c.outW >= c.inW && c.outH >= c.inH &&
+                          std::abs(c.f[12] - scaleX) < 0.02f * scaleX + 1e-4f && std::abs(c.f[13] - scaleY) < 0.02f * scaleY + 1e-4f;   // kScaleX, kScaleY
+        say("NIS pass on part of its output: frame %ux%u, output %ux%u, %ux%u groups; its constants: input viewport %u,%u %ux%u, output viewport %u,%u %ux%u, "
+            "scale %.4f x %.4f -> %s", in.Width, in.Height, o.Width, o.Height, x, y, c.inX, c.inY, c.inW, c.inH, c.outX, c.outY, c.outW, c.outH, c.f[12], c.f[13],
+            fits ? "the upscaler takes that part" : "they do not fit together; NIS stays");
+        r.state = fits ? 2 : 3;
+        if (!fits) return false;
+    }
+    if (r.state != 2) return false;
+    const NisConfigView& c = r.cfg;
+    pass.inX = c.inX; pass.inY = c.inY; pass.inW = c.inW; pass.inH = c.inH;
+    pass.outX = c.outX; pass.outY = c.outY; pass.outW = c.outW; pass.outH = c.outH;
+    return true;
+}
 
 } // namespace
 
 // ---- recognising the NIS pass
 
-bool FindNisPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z, NisPass& pass) {
+bool FindNisPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z, NisPass& pass, const std::function<void(const char*)>& log) {
     pass = {};
     if (z != 1) return false;
     ID3D11ShaderResourceView* srvs[3] = {}; ID3D11UnorderedAccessView* uav = nullptr;
@@ -68,14 +139,16 @@ bool FindNisPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z, N
     if (uav) uav->GetResource(&out);
     D3D11_TEXTURE2D_DESC in{}, c1{}, c2{}, o{};
     auto coefficients = [](const D3D11_TEXTURE2D_DESC& d) { return d.Width == 2 && d.Height == 64 && d.Format == DXGI_FORMAT_R32G32B32A32_FLOAT; };
-    const bool ok = Texture2D(res[0], in) && Texture2D(res[1], c1) && Texture2D(res[2], c2) && Texture2D(out, o) &&
-                    coefficients(c1) && coefficients(c2) && o.Width >= in.Width && o.Height >= in.Height &&   // 1:1 too (DLSS then runs as DLAA)
-                    x == (o.Width + 31) / 32 && y == (o.Height + 23) / 24;
+    const bool nis = Texture2D(res[0], in) && Texture2D(res[1], c1) && Texture2D(res[2], c2) && Texture2D(out, o) && coefficients(c1) && coefficients(c2);
+    const bool whole = nis && o.Width >= in.Width && o.Height >= in.Height &&   // 1:1 too (DLSS then runs as DLAA)
+                       x == (o.Width + 31) / 32 && y == (o.Height + 23) / 24;
     for (auto*& v : srvs) SafeRelease(v);
     SafeRelease(uav); SafeRelease(res[1]); SafeRelease(res[2]);
-    if (!ok) { SafeRelease(res[0]); SafeRelease(out); return false; }
-    pass.in = res[0]; pass.out = out; pass.inW = in.Width; pass.inH = in.Height; pass.outW = o.Width; pass.outH = o.Height;
-    pass.inFmt = in.Format; pass.outFmt = o.Format;
+    // NIS's bindings with a dispatch over less than the output: a window of another shape, scaled into part of the screen
+    const bool part = nis && !whole && x <= (o.Width + 31) / 32 && y <= (o.Height + 23) / 24 && ResolveViewports(ctx, in, o, x, y, pass, log);
+    if (!whole && !part) { SafeRelease(res[0]); SafeRelease(out); pass = {}; return false; }
+    pass.in = res[0]; pass.out = out; pass.inFmt = in.Format; pass.outFmt = o.Format;
+    if (whole) { pass.inW = in.Width; pass.inH = in.Height; pass.outW = o.Width; pass.outH = o.Height; }
     return true;
 }
 
@@ -123,7 +196,7 @@ bool ScalerLink::Fit(Shared& t, uint32_t w, uint32_t h, DXGI_FORMAT fmt, bool en
 }
 
 bool ScalerLink::Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, SrEngine* engine, LogFn log) {
-    m_log = std::move(log); m_engine = engine; m_ctx = ctx; m_frame = 0; for (auto& h : m_holds) h = 0; m_described = false;
+    m_log = std::move(log); m_engine = engine; m_ctx = ctx; m_frame = 0; for (auto& h : m_holds) h = 0; m_described = false; m_loggedPartial = false;
     m_count = Counters(); m_lastShown = 0;
     m_atPresent = m_copiedAtPresent = 0; m_probeState = 0; m_pendingReset = false;
     if (FAILED(dev->QueryInterface(IID_PPV_ARGS(&m_dev))) || FAILED(ctx->QueryInterface(IID_PPV_ARGS(&m_ctx4)))) {
@@ -141,6 +214,8 @@ bool ScalerLink::MakeGrabShader() {
     const HRESULT hr = m_dev->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &m_grab);
     code->Release();
     if (FAILED(hr)) { Log("%s upscaler: the grab shader could not be made: 0x%08x", kUpscalerName, (unsigned)hr); return false; }
+    D3D11_BUFFER_DESC cb{}; cb.ByteWidth = 16; cb.Usage = D3D11_USAGE_DYNAMIC; cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER; cb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    if (FAILED(m_dev->CreateBuffer(&cb, nullptr, &m_grabOrigin))) { Log("%s upscaler: the grab's constants could not be made", kUpscalerName); return false; }
     return true;
 }
 
@@ -162,7 +237,8 @@ void ScalerLink::Shutdown() {
         m_done.d3d12->Signal(m_frame);
     }
     for (auto*& v : m_inUav) SafeRelease(v);
-    SafeRelease(m_grab);
+    SafeRelease(m_grab); SafeRelease(m_grabOrigin);
+    g_viewports.Reset();   // read again on the next device
     for (auto& t : m_in) t.Release();
     for (auto& t : m_out) t.Release();
     for (auto& t : m_flow) t.Release();
@@ -253,12 +329,20 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
         ID3D11Texture2D* flowTex = nullptr;
         if (!estimate && flow && flowW && flowH && Fit(m_flow[in], flowW, flowH, DXGI_FORMAT_R16G16B16A16_FLOAT, false, in ? "second flow" : "flow")) flowTex = m_flow[in].d3d11;
         ID3D11ShaderResourceView* frame = saved.srvs[0];   // the NIS pass's own view of the frame
+        ID3D11Buffer* nisConstants = nullptr; m_ctx->CSGetConstantBuffers(0, 1, &nisConstants);
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (SUCCEEDED(m_ctx->Map(m_grabOrigin, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+            const uint32_t origin[4] = { pass.inX, pass.inY, 0, 0 }; memcpy(mapped.pData, origin, sizeof origin); m_ctx->Unmap(m_grabOrigin, 0);
+        }
         m_ctx->CSSetShader(m_grab, nullptr, 0);
         m_ctx->CSSetShaderResources(0, 1, &frame);
         m_ctx->CSSetUnorderedAccessViews(0, 1, &m_inUav[in], nullptr);
+        m_ctx->CSSetConstantBuffers(0, 1, &m_grabOrigin);
         m_ctx->Dispatch((pass.inW + 7) / 8, (pass.inH + 7) / 8, 1);
         ID3D11ShaderResourceView* noSrv = nullptr; ID3D11UnorderedAccessView* noUav = nullptr;
         m_ctx->CSSetShaderResources(0, 1, &noSrv); m_ctx->CSSetUnorderedAccessViews(0, 1, &noUav, nullptr);
+        m_ctx->CSSetConstantBuffers(0, 1, &nisConstants);   // NIS's, for the passes after (with NIS kept, its own dispatch)
+        SafeRelease(nisConstants);
         if (flowTex) m_ctx->CopyResource(flowTex, flow);
         m_ctx4->Signal(m_copied.d3d11, n);
         m_ctx->Flush();   // the engine's queue waits for this signal: hand it to the GPU now
@@ -271,7 +355,7 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
         if (m_handoff == Handoff::Wait) {
             if (!ran) return false;
             m_ctx4->Wait(m_done.d3d11, n);   // a GPU wait: Lossless Scaling's queue holds until the picture is written
-            m_ctx->CopyResource(pass.out, m_out[out].d3d11);
+            PlacePicture(pass, m_out[out].d3d11);
             return true;
         }
     } else {
@@ -301,8 +385,19 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
     if (!show || m_holds[show % kOut] != show) return false;   // nothing finished yet: NIS this once
     if (show == m_lastShown) { ++m_count.repeats; if (close) ++m_count.closeRepeats; }
     m_lastShown = show;
-    m_ctx->CopyResource(pass.out, m_out[show % kOut].d3d11);
+    PlacePicture(pass, m_out[show % kOut].d3d11);
     return true;
+}
+
+// The picture into the pass's output: the whole of it, or its output viewport (the rest, Lossless Scaling's borders, is left as it is).
+void ScalerLink::PlacePicture(const NisPass& pass, ID3D11Texture2D* picture) {
+    if (!pass.Partial()) { m_ctx->CopyResource(pass.out, picture); return; }
+    m_ctx->CopySubresourceRegion(pass.out, 0, pass.outX, pass.outY, 0, picture, 0, nullptr);
+    if (!m_loggedPartial) {
+        m_loggedPartial = true;
+        Log("%s upscaler: the window is scaled into part of the screen: %ux%u from %u,%u of the frame -> %ux%u at %u,%u", kUpscalerName, pass.inW, pass.inH,
+            pass.inX, pass.inY, pass.outW, pass.outH, pass.outX, pass.outY);
+    }
 }
 
 void ScalerLink::PresentCopy(IDXGISwapChain* sc) {
@@ -311,7 +406,7 @@ void ScalerLink::PresentCopy(IDXGISwapChain* sc) {
     if (FAILED(sc->GetBuffer(0, IID_PPV_ARGS(&back)))) return;
     ID3D11Device* dev = nullptr; back->GetDevice(&dev);
     D3D11_TEXTURE2D_DESC d{}; back->GetDesc(&d);
-    const Shared& picture = m_out[m_atPresent % kOut];
+    const Shared& picture = m_out[m_atPresent % kOut];   // (a picture for part of the screen does not match the back buffer's size: not copied)
     if (dev == m_dev && d.Width == picture.w && d.Height == picture.h && m_holds[m_atPresent % kOut] == m_atPresent) {
         m_ctx->CopyResource(back, picture.d3d11);
         if (++m_copiedAtPresent == 1) Log("%s upscaler: first picture copied into the back buffer at Present", kUpscalerName);
