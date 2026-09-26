@@ -3,7 +3,7 @@
 What 1.0 should mean: someone who has never seen this project can **install it, keep it up to date, understand what it does and does not do, and get help**, without
 editing files by hand, and the promises it makes (the addon API, the settings file, safety) are stable. This page is honest about where each part stands.
 
-Status on 2026-09-25, at version 0.9.4 (the current work is on `main`).
+Status on 2026-09-26, at version 0.9.5 (the current work is on `main`).
 
 | # | For 1.0 | State | Notes |
 |---|---------|-------|-------|
@@ -18,6 +18,7 @@ Status on 2026-09-25, at version 0.9.4 (the current work is on `main`).
 | 9 | **Model compatibility data** | **Done** on `main`, needs data | The self-test writes a shareable report (`--report`, and an *Open the compatibility report* button) and `docs/model-compatibility.md` is the table. It has one row (the maintainer's card); more come from other people's reports. |
 | 11 | **A finished interface** | **Done** (0.9.4) | The header with the machine's load on every tab, a slim addon list with each addon's icon and live status, icons for the features and the plugins (addons can ship an `icon.svg`), a "What comes with it" page, and screenshots rendered from the real window. |
 | 12 | **The upscalers out of preview** | **Done** (0.9.4) | No longer marked work in progress; still off until switched on. Stability, edge smoothing, settings per game and 4:3 windows since 0.9.1. |
+| 13 | **Runtimes you can see and switch** | **Done** (0.9.5) | The Runtimes list under the addons: each DLSS, FSR and model file with its version and signature, a tick when loaded, and **+** to switch files while the game runs (the shipped one always first). FSR 4 comes as the FSR Upscaler's second choice. |
 | 10 | **Automated builds** | **Done** on `main` (green on GitHub) | `.github/workflows/build.yml` runs `tools/ci.ps1` (manager, installer and sample addon from a clean checkout, and the tests that need no GPU) on every push and pull request. Neural Rendering needs NVIDIA's SDK and the window tests need a desktop, so those stay on the maintainer's machine. |
 
 ## The installer, in detail
@@ -54,8 +55,10 @@ What it has to do (and what it must never do):
 - Tried in World of Warcraft: Forever (1440p -> 4K, and 4K DLAA) and Fallout: New Vegas (1080p -> 4K, frame generation on and off).
 - Since 0.9.1: a GPU wait instead of a repeated picture, Stability (and swaying wires kept sharp), Edge smoothing, settings per game, and
   windows of another shape than the screen (4:3 games: the upscalers read NIS's viewports).
-- 0.9.4 took them out of preview. Still open:
+- 0.9.4 took them out of preview. 0.9.5 added FSR 4 (the OptiScaler team's build, until AMD's own FSR 4 runs on every card: then
+  AMD's signed one takes its place), DLSS model E, colour and tone controls, and FSR set up as AMD's SDK 2.3 asks. Still open:
   - **A real 4:3 game**, to confirm what the test host shows.
+  - **FSR 4 in real use:** its cost in games, on NVIDIA and AMD cards (the panel shows it), and AMD's own build once it covers every card.
   - **Text and HUD.** A game's HUD is drawn into the captured frame, so the upscaler sees it; DLSS softens thin text a little (FSR 3 less).
     A game with DLSS built in draws its HUD after upscaling. Options: areas that keep NIS's picture (drawn like Neural Rendering's HUD areas),
     or finding the HUD automatically, which would be an addon of its own. On hold.
@@ -72,6 +75,12 @@ Agreed as worth doing, in no particular order; none of them is started. They com
 - **A display mode per game.** Many TVs run 120 Hz only below 4K (1440p 120 Hz against 4K 60 Hz). A per-game choice (for example "World of Warcraft: Forever: 2560×1440 at 120 Hz")
   that the manager switches to when the game starts scaling and puts back when it ends, with Lossless Scaling's frame generation target to match.
 - **A before/after capture.** One key saves a matching pair of screenshots with and without Neural Rendering, for comparing looks and for bug reports.
+- **Frame generation of our own.** Whether AMD's FSR 3 frame interpolation, fed with this project's motion measurement, beats Lossless
+  Scaling's own frame generation. First an offline comparison on real footage (the recorder's `.lsrec` files, frames dropped and rebuilt
+  and scored against the real ones); only if it clearly wins, the work of putting it in Lossless Scaling's place.
+- **Updating from the manager.** Today the update check only says a new version exists; an "Update now?" would download and run Setup.
+  It needs care (a program that downloads and runs an unsigned file), so it waits.
+- **Translations.** The interface's text in other languages, once the text lives in one table rather than in the code.
 - **A session summary.** When a game closes: average and worst frame time, peak temperature and power, how long the limiter or the auto mode was active. Real numbers for the "tested with" list.
 - **A stuck-state watchdog.** If Lossless Scaling's frames stop arriving while a game runs, say so and offer to restart Neural Rendering's engine, instead of leaving the person to guess.
 - **HUD areas found automatically.** The areas are drawn on a snapshot now (0.8.0). Next: suggest likely HUD areas (parts of the picture that stay put while the scene moves,

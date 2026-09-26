@@ -6,13 +6,19 @@
 
 **Addon Manager for Lossless Scaling** (LS Addon Manager for short) loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it an
 addon system. It comes with three addons that do what Lossless Scaling alone cannot: **DLSS 5 Neural Rendering** gives any game a new look, and the **DLSS** and
-**FSR Upscalers** put a real temporal upscaler in place of Lossless Scaling's NIS scaler, so old games that never had DLSS or FSR get one. Around them, the manager
+**FSR Upscalers** put a real temporal upscaler in place of Lossless Scaling's NIS scaler (FSR 4 included, on any card), so old games that never had DLSS or FSR get one. Around them, the manager
 installs and switches addons, shows the machine's load at a glance, says what limits your frame rate, and backs every setting up. It is free and MIT-licensed, and an
 unofficial project, not affiliated with the Lossless Scaling developers: read the [disclaimer](DISCLAIMER.md) before you install it.
 
 [![build](https://github.com/Echo-Storm/ls-addon-manager/actions/workflows/build.yml/badge.svg)](https://github.com/Echo-Storm/ls-addon-manager/actions/workflows/build.yml)
 
-Status: **0.9.4**, getting ready for 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
+Status: **0.9.5**, getting ready for 1.0 (the [roadmap](ROADMAP.md) says what is left). You need Lossless Scaling 3.2.2.0 and Windows 10 or 11, x64.
+
+> [!TIP]
+> **New in 0.9.5:** **FSR 4 on any graphics card** (the OptiScaler team's build, one click in the FSR Upscaler), a **Runtimes** list that shows every DLSS and FSR
+> file with its version and signature and switches them while you play, **vibrance, saturation, shadows, highlights, brightness, contrast and gamma** in both
+> upscalers, a third DLSS model (**E**), **HDR games** in Neural Rendering, and a **recorder** that turns a bug into a file we can replay (Ctrl+Shift+F5).
+> The [release notes](https://github.com/Echo-Storm/ls-addon-manager/releases/tag/v0.9.5) and the [changelog](CHANGELOG.md) have the rest.
 
 > [!IMPORTANT]
 > **DLSS 5 Neural Rendering needs a file you provide yourself:** your own copy of `nvngx_dlssnr.dll`. It is **not included**, this project **does not download it**,
@@ -28,7 +34,7 @@ Status: **0.9.4**, getting ready for 1.0 (the [roadmap](ROADMAP.md) says what is
 - [What is in it](#what-is-in-it): the three addons, the built-in features, and the manager
 - [Get started](#get-started)
 - [Screenshots](#screenshots)
-- [Using it](#using-it), [keeping it up to date](#keeping-it-up-to-date), [if something goes wrong](#if-something-goes-wrong), [installing by hand](#installing-by-hand)
+- [Using it](#using-it) and [the hotkeys](#hotkeys), [keeping it up to date](#keeping-it-up-to-date), [if something goes wrong](#if-something-goes-wrong), [installing by hand](#installing-by-hand)
 - [How it works](#how-it-works), [build from source](#build-from-source), [writing an addon](#writing-an-addon), [credits](#credits)
 
 ## What is in it
@@ -58,7 +64,7 @@ Scaling wait for it.
   and a ghost guard that fades the result where the motion cannot be trusted.
 - **HDR games too:** 16-bit (scRGB) and 10-bit (HDR10) frames are worked on through an SDR view of them, and only the change goes back, so
   highlights keep their brightness. Automatic, with a *Frame encoding* setting for a setup it gets wrong.
-- **Compare while you play:** before / after, a split view, screenshots of what you see (Ctrl+Shift+F6 to F11).
+- **Compare while you play:** before / after, a split view, screenshots of what you see ([hotkeys](#hotkeys) Ctrl+Shift+F6 to F11).
 - **Auto quality:** keeps the model within a time budget by picking its resolution; changing it never stalls the game.
 - **Requirements check** and a **compatibility test** that tries the model on your card before you play.
 
@@ -99,6 +105,9 @@ What they cost on an RTX 4070 Ti SUPER (everything the addon does, the motion me
 | 2560x1440 -> 3840x2160 | about 2.4 ms | about 1.85 ms |
 | 3840x2160 at 1:1 (anti-aliasing) | about 3.2 ms | about 2.2 ms |
 
+FSR 4 costs more than FSR 3.1 (it is a neural network, and on cards without AMD's matrix hardware it runs in an INT8 form): the panel's status line shows what it
+takes on yours, and *FSR version* switches back in a second.
+
 **Which one?** On an NVIDIA RTX card try both: DLSS smooths edges better by itself, FSR 3.1 costs less and keeps text crisper, and FSR 4 is the best in motion. On any other card, FSR. If the game has
 anti-aliasing of its own (MSAA), switch it on: it draws what no upscaler can put back, such as wires thinner than a pixel. The [upscalers' guide](addons/DLSS5NR01/docs/upscalers.md)
 covers the settings, what to expect and what to do when something is wrong.
@@ -122,6 +131,7 @@ covers the settings, what to expect and what to do when something is wrong.
   its version, a tick when it is loaded, a circle when its addon waits for a game, a cross when its addon is off, and *unsigned* or
   *modified* when the file is not as its maker signed it. Hover for the maker, the path and the SHA-256. **+** switches between the shipped
   file and others you add, while the game runs; *Shipped* is always the first choice, and updates never touch your files.
+  <p align="center"><img src="docs/images/runtimes.png" alt="The Runtimes list with the FSR menu open: the shipped FSR 3.1.4 and FSR 4.1.1b" width="75%"></p>
 - **Record a bug.** Each addon can keep the last few seconds of the frames it receives and save them (Ctrl+Shift+F5) as a file that plays the
   problem back on another computer.
 - **Each addon's own settings, inline**, with its live status in the list and in the status bar. Sliders reset on double-click, show a tick at their default, and
@@ -186,7 +196,7 @@ The Neural Rendering panel comes from the offline test host.</sub>
 
 | Tab | What it does |
 |-----|--------------|
-| **Addons** | The addons in a slim list at the left, each with its icon, state and live status, and a switch; the one you pick opens at the right with its own settings, an overview (description, tags, dependencies, errors) and its config file. |
+| **Addons** | The addons in a slim list at the left, each with its icon, state and live status, and a switch, and the Runtimes list under them; the one you pick opens at the right with its own settings, an overview (description, tags, dependencies, errors) and its config file. |
 | **Features** | The built-in features: ReShade input passthrough and Windowed mode. |
 | **Performance** | Frame rate and frame times, addon cost, GPU load, power, clocks, temperature, memory, and a short reading of what is limiting you. |
 | **Settings** | Backup and restore, interface size, open-at-start and the hotkey, updates, security level, log detail, the diagnostics file, and shortcuts to the logs and addons folders. |
@@ -194,6 +204,21 @@ The Neural Rendering panel comes from the offline test host.</sub>
 | **About** | What comes with it, version and update status, credits, and the Ko-fi link. |
 
 **Closing the window** does not stop anything: the manager hides to the notification area (Windows may keep its icon under the ^ arrow next to the clock).
+
+### Hotkeys
+
+They work while the game has focus; the Ctrl+Shift pair keeps them away from the game's own keys. Each addon can change its keys (Compare and hotkeys).
+
+| Keys | What they do | Where |
+|------|--------------|-------|
+| Ctrl+Shift+F12 | Show or hide the manager window | the manager (Settings) |
+| Ctrl+Shift+F6 | Before / after: the original picture (or Lossless Scaling's NIS) against ours | all three addons |
+| Ctrl+Shift+F7 | Split view: the original at the left of a line, ours at the right | Neural Rendering |
+| Ctrl+Shift+F8 / F9 | Sharpening down / up | all three addons |
+| Ctrl+Shift+F10 | The next saved look | Neural Rendering |
+| Ctrl+Shift+F11 | A screenshot of the picture as you see it | Neural Rendering |
+| Ctrl+Shift+F5 | Save the recording (the last few seconds, when *Recording* is on) | all three addons |
+| Home | ReShade input passthrough on and off | the manager (Features) |
 
 ## Keeping it up to date
 
@@ -214,6 +239,9 @@ IP address and the program's name and version, as with any download).
 | Setup wants to restart as administrator | The folder is in a protected place (Program Files, for example), where Windows only lets an administrator change files. Allow it, or use a copy of Lossless Scaling somewhere else. |
 | Windows SmartScreen or your antivirus objects to a file | The files in this project are not signed. If your antivirus removes `nr_selftest.exe`, the *Test compatibility* button says the test program is missing; nothing else is affected. |
 | Neural Rendering says the model file is missing | It needs your own `nvngx_dlssnr.dll` next to `LosslessScaling.exe`. Use Setup's **Copy my nvngx_dlssnr.dll...** or the addon's **Browse for the model file...**, then **Test compatibility**. |
+| FSR 4 looks wrong, costs too much or does not start | Set *FSR version* back to **FSR 3.1.4 (AMD, shipped)** in the FSR Upscaler's panel (or **+** next to FSR in the Runtimes list). If a chosen file goes missing, the addon falls back to the shipped one by itself. |
+| The Runtimes list shows a circle or a cross | A circle means the addon is on and waits for a game to be scaled; a cross means the addon is off. A file is only loaded once Lossless Scaling scales a game with that addon on (for the upscalers, with **NIS** as the Scaling Type). |
+| Something looks wrong in a game | Turn on *Recording* in the addon's panel, make it happen, press **Ctrl+Shift+F5**, and attach the `.lsrec` file (in `Videos\Lossless Scaling`) to your report: it lets us play the problem back. |
 | An upscaler is on but the picture looks like NIS | Choose **NIS** as the Scaling Type in Lossless Scaling: the upscalers take the place of that pass. The panel's status line says what it is doing; the [upscalers' guide](addons/DLSS5NR01/docs/upscalers.md#when-something-is-wrong) has the rest. |
 | Windowed mode does nothing | Its virtual display has to be in place before Lossless Scaling starts, so after switching it on, restart Lossless Scaling. |
 | A question that is not here | The [questions and answers](docs/faq.md) cover the rest, and [model compatibility](docs/model-compatibility.md) lists which model builds have been reported to work on which cards. |
@@ -232,7 +260,7 @@ Setup does exactly this, with backups. If you would rather copy files yourself:
 **After a Lossless Scaling update:** delete the stale `Lossless_original.dll`, rename the new `Lossless.dll` to `Lossless_original.dll`, and copy ours in again.
 **Uninstalling by hand:** delete our `Lossless.dll`, rename `Lossless_original.dll` back to `Lossless.dll`, and delete the `addons` folder if you like.
 
-Files the manager reads and writes, all inside the Lossless Scaling folder:
+Files the manager reads and writes, all inside the Lossless Scaling folder except the recordings:
 
 | File | What |
 |------|------|
@@ -240,6 +268,8 @@ Files the manager reads and writes, all inside the Lossless Scaling folder:
 | `addons\trusted_addons.json` | Optional: `{ "<addon id>": ["<sha256 of its DLL>"] }`, used by the Security setting. |
 | `addons\.removed\` | Addons you removed, each in a folder with a timestamp. |
 | `backups\` | What Setup replaced, and copies of settings made before a restore replaced them. |
+| `addons\<addon>\runtimes\` | Runtime files added with **+** in the Runtimes list (and the FSR 4 build the FSR Upscaler comes with), one folder each. Updates leave them alone. |
+| `Videos\Lossless Scaling\*.lsrec` | Recordings (outside the Lossless Scaling folder: in your Videos folder, or your profile's own when Videos is synced by OneDrive). |
 | `logs\LSAddonManager.log` | The manager's log. It rolls over to `.old` at 8 MB. The addons write their own logs here too (`DLSS5NR01.log`, `DLSS4DLAA.log`, `FSR3UPSC.log`). |
 
 ## How it works
@@ -280,7 +310,8 @@ Building the addons from source (not needed to use the release zip) also needs N
 `tools\fetch_ngx_sdk.ps1` fetches them from NVIDIA's public repository after you accept NVIDIA's licence. They are NVIDIA's, under NVIDIA's licence, so they are not in
 this repository; the release carries the parts it needs under NVIDIA's terms (see NOTICE.md). The FSR Upscaler loads AMD's FidelityFX runtime:
 `tools\fetch_ffx_sdk.ps1` fetches it from AMD's repository and checks it (a pinned SHA-256 and AMD's signature). It is MIT-licensed, like the FidelityFX API headers in
-`addons/DLSS5NR01/third_party/ffx`. The addons' offline test host and its scenario matrix (`tools\run_hosttest_matrix.py`) exercise every path without Lossless Scaling.
+`addons/DLSS5NR01/third_party/ffx`. `tools\fetch_fsr4.ps1` fetches the FSR 4.1.1b build the FSR Upscaler offers as its second choice (a pinned SHA-256; 7-Zip
+needed); it is AMD's upscaler as changed by the OptiScaler team, under AMD's FidelityFX SDK licence (`third_party/ffx4`). The addons' offline test host and its scenario matrix (`tools\run_hosttest_matrix.py`) exercise every path without Lossless Scaling.
 `tools\deploy.ps1 -What all -LsDir <Lossless Scaling folder>` copies a build into a Lossless Scaling folder with backups and refuses to run while Lossless Scaling or
 your game is open. The installer is its own small CMake project in [`installer/`](installer/).
 
@@ -303,7 +334,8 @@ Addon Manager for Lossless Scaling began as [LosslessProxy](https://github.com/F
 of a proxy `Lossless.dll` with addons, its addon interface (which is why its addons still load here) and the ReShade and Windowed features, which started there as
 addons. The manager's code has since been rewritten; about a tenth of its lines still match the original's, mostly declarations and common idioms
 (`tools/measure_original_share.py` measures it). Neural Rendering began as **andreiday**'s DLSS 5 plugin for LosslessProxy and has been rewritten and extended here;
-fewer than one line in ten still matches theirs. The upscalers run NVIDIA DLSS and AMD FidelityFX Super Resolution (AMD's FidelityFX SDK, MIT; FSR 4 as built by the OptiScaler team); their motion
+fewer than one line in ten still matches theirs. The upscalers run NVIDIA DLSS and AMD FidelityFX Super Resolution (FSR 3.1 from AMD's FidelityFX SDK, MIT; FSR 4 under AMD's FidelityFX SDK licence, as
+built by the OptiScaler team, with thanks); their motion
 measurement, stability and edge smoothing are this project's own. The full list, with licences, is in [NOTICE.md](NOTICE.md). NVIDIA, DLSS, AMD, FidelityFX and FSR
 are trademarks of their owners; this project is not affiliated with or endorsed by them. Lossless Scaling belongs to its author; this project is unofficial.
 
