@@ -159,6 +159,16 @@ int main(int argc, char** argv) {
     // Neural Rendering's model file, where a real install keeps it (the panel then shows its requirements met); nothing is loaded from it here
     if (GetFileAttributesW(L"D:\\Utilities\\Lossless Scaling\\nvngx_dlssnr.dll") != INVALID_FILE_ATTRIBUTES)
         host.cfg["DLSS5NR01/snippetPath"] = "D:\\Utilities\\Lossless Scaling\\nvngx_dlssnr.dll";
+    {   // EAM_PREVIEW_CFG="FSR3UPSC/scalerStability=0.4;...": settings the addons start with (for a picture with the sliders somewhere)
+        char* v = nullptr; size_t n = 0; _dupenv_s(&v, &n, "EAM_PREVIEW_CFG");
+        for (std::string rest = v ? v : ""; !rest.empty();) {
+            const size_t semi = rest.find(';');
+            const std::string item = rest.substr(0, semi);
+            if (const size_t eq = item.find('='); eq != std::string::npos) host.cfg[item.substr(0, eq)] = item.substr(eq + 1);
+            rest = semi == std::string::npos ? std::string() : rest.substr(semi + 1);
+        }
+        free(v);
+    }
     for (int i = 3; i < argc; ++i) {
         HMODULE h = LoadLibraryA(argv[i]);
         if (!h) { printf("cannot load %s (error %lu)\n", argv[i], GetLastError()); continue; }
@@ -174,6 +184,14 @@ int main(int argc, char** argv) {
 
     // 1. Addons tab: the slim list at the left, the selected addon at the right with its own panel (as tab_addons.cpp lays it out)
     char search[64] = {};
+    auto env = [](const char* name) { char* v = nullptr; size_t n = 0; _dupenv_s(&v, &n, name); std::string r = v ? v : ""; free(v); return r; };
+    const std::string previewScroll = env("EAM_PREVIEW_SCROLL");
+    std::vector<std::string> previewOpen;
+    for (std::string rest = env("EAM_PREVIEW_OPEN"); !rest.empty();) {
+        const size_t bar = rest.find('|');
+        previewOpen.push_back(rest.substr(0, bar));
+        rest = bar == std::string::npos ? std::string() : rest.substr(bar + 1);
+    }
     auto addonsTab = [&](int selected) {
         AddonInfo* list[3] = { &a, &b, &c };
         AddonInfo& chosen = *list[selected];
@@ -219,7 +237,11 @@ int main(int argc, char** argv) {
             ImGui::Dummy(ImVec2(0, S(4)));
             if (ImGui::BeginTabBar("##detail_tabs")) {
                 if (ImGui::BeginTabItem("Settings", nullptr, ImGuiTabItemFlags_SetSelected)) {
+                    // EAM_PREVIEW_OPEN="Motion|Upscaling": sections of the panel to show open; EAM_PREVIEW_SCROLL=<px>: how far down the panel starts
+                    // (both for a picture that shows the settings rather than the status; nothing else uses them)
+                    if (!previewScroll.empty() && selected == 2) ImGui::SetNextWindowScroll(ImVec2(0.0f, (float)atof(previewScroll.c_str())));
                     ImGui::BeginChild("##addon_settings", ImVec2(0, 0), false);
+                    for (const std::string& section : previewOpen) ImGui::GetStateStorage()->SetInt(ImGui::GetID(section.c_str()), 1);
                     auto it = panels.find(chosen.id);
                     if (it != panels.end()) it->second(); else ImGui::TextDisabled("(its panel was not given to the preview)");
                     ImGui::EndChild();
