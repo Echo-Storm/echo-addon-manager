@@ -41,6 +41,7 @@ static void Block(const char* title, bool first = false) {
 }
 
 void DrawPanel() {
+    FollowModelChoice();   // before the panel copies the settings: a model file chosen in the Runtimes list is not saved over
     Config c; { std::lock_guard<std::mutex> lk(g_settingsMutex); c = g_config; }
     bool changed = false, createChanged = false, tapChanged = false;
     // Every slider bound to a field of the params gets that field's default (a fresh NrParams): a tick on the groove, a ring on the
@@ -628,12 +629,15 @@ void DrawPanel() {
         if (!result.empty()) { ImGui::PushStyleColor(ImGuiCol_Text, ok ? eam::ui::theme::V(eam::ui::theme::kAccent) : eam::ui::theme::V(eam::ui::theme::kWarn)); ImGui::TextWrapped("%s", result.c_str()); ImGui::PopStyleColor(); }
     }
     if (eam::ui::SectionHeader("Recording (for bug reports and tests)")) {
-        Note(kScalerAddon ? "Keeps the last few seconds of the frames the upscaler receives (Lossless Scaling's frame before NIS scales it), losslessly, ready to "
+        Note(kScalerAddon ? "Keeps the last few seconds of the frames the upscaler receives (Lossless Scaling's frame as it goes to the upscaler, with the colour and tone settings), losslessly, ready to "
                             "save as a .lsrec file. Send one with a bug report and the problem can be replayed and fixed on another computer."
                           : "Keeps the last few seconds of the frames Neural Rendering receives (the game's frames before the model or anything else changes "
                             "them), losslessly, ready to save as a .lsrec file. Send one with a bug report and the problem can be replayed and fixed on "
                             "another computer.");
-        changed |= ImGui::Checkbox("Keep the last few seconds ready to save", &c.recordOn);
+        if (ImGui::Checkbox("Keep the last few seconds ready to save", &c.recordOn)) {
+            changed = true;
+            g_recorder.Configure(c.recordOn, c.recordSeconds, static_cast<uint32_t>(c.recordBudgetMb));   // off: its memory goes now, not at the next frame
+        }
         Tip("Off (the default) costs nothing. On: every frame is copied off the graphics card and compressed on a few background threads, which "
             "takes some processor time and the memory below. Nothing waits for it: a frame that comes while all the copies are busy is left out.");
         if (!c.recordOn) ImGui::BeginDisabled();

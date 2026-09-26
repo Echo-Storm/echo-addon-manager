@@ -89,7 +89,8 @@ void ReadSignature(const std::wstring& path, RuntimeFile& f) {
 
 // What is known of each file, by path: read again when its size or time changes. The reading runs on a thread of its own (a 34 MB file's
 // SHA-256 and signature take a moment); the list holds what was read last. Never freed: nothing may be joined as the process ends.
-struct Cached { uint64_t size = 0; FILETIME written{}; bool exists = false; RuntimeFile file; bool reading = false; ULONGLONG checkedAt = 0; };
+struct Cached { uint64_t size = 0; FILETIME written{}; bool exists = false; RuntimeFile file; bool reading = false; ULONGLONG checkedAt = 0;
+                bool loaded = false; ULONGLONG loadedAt = 0; };   // loaded: judged at most every two seconds (it opens files)
 struct Cache { std::mutex mutex; std::map<std::wstring, Cached> byPath; std::vector<std::wstring> modules; ULONGLONG modulesAt = 0; };
 
 // A file as Windows knows it (its volume and its number there): the same for every spelling of its path (slashes, 8.3 names, \\?\, case),
@@ -211,16 +212,19 @@ void FillFromCache(RuntimeFile& row, const std::string& shippedSha256, ULONGLONG
     const RuntimeFile& known = c.file;
     // loaded: a module of this process is this very file (by the file's identity; only modules of the same name are looked at)
     const std::vector<std::wstring>& modules = LoadedModules(cache, now);
-    row.loaded = false;
-    if (c.exists) {
-        const std::wstring name = Lower(BaseName(path));
-        FileId mine; bool mineRead = false;
-        for (const std::wstring& module : modules) {
-            if (Lower(BaseName(module)) != name) continue;
-            if (!mineRead) { mine = IdOf(path); mineRead = true; }
-            if (IdOf(module) == mine) { row.loaded = true; break; }
+    if (!c.loadedAt || now - c.loadedAt >= 2000) {
+        c.loadedAt = now; c.loaded = false;
+        if (c.exists) {
+            const std::wstring name = Lower(BaseName(path));
+            FileId mine; bool mineRead = false;
+            for (const std::wstring& module : modules) {
+                if (Lower(BaseName(module)) != name) continue;
+                if (!mineRead) { mine = IdOf(path); mineRead = true; }
+                if (IdOf(module) == mine) { c.loaded = true; break; }
+            }
         }
     }
+    row.loaded = c.loaded;
     row.exists = c.exists; row.read = known.read;
     row.signature = known.signature; row.version = known.version; row.description = known.description; row.company = known.company;
     row.signer = known.signer; row.sha256 = known.sha256; row.size = known.size;

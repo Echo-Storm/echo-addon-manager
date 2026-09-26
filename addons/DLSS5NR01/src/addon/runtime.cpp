@@ -776,6 +776,11 @@ std::wstring ChosenRuntimeDir() {
     if (chosen.empty()) return g_addonDir + (kFsrScaler ? L"\\fsr" : L"\\dlss");
     std::wstring w(chosen.size(), L'\0');
     w.resize(std::max(0, MultiByteToWideChar(CP_UTF8, 0, chosen.c_str(), (int)chosen.size(), w.data(), (int)w.size())));
+    if (GetFileAttributesW(w.c_str()) == INVALID_FILE_ATTRIBUTES) {   // moved or deleted by hand: the shipped one rather than no upscaler at all
+        static std::string said;
+        if (said != chosen) { said = chosen; Log("%s upscaler: the chosen runtime %s is not there: the shipped one runs", kUpscalerName, chosen.c_str()); }
+        return g_addonDir + (kFsrScaler ? L"\\fsr" : L"\\dlss");
+    }
     const size_t slash = w.find_last_of(L"\\/");
     return slash == std::wstring::npos ? w : w.substr(0, slash);
 }
@@ -787,16 +792,7 @@ void FollowRuntimeChoice() {
     const ULONGLONG now = GetTickCount64();
     if (now - checkedAt < 500 || !g_host) return;
     checkedAt = now;
-    if (!kScalerAddon) {
-        const std::string chosen = g_host->GetConfig(kAddonId, "snippetPath", "");
-        bool changed;
-        { std::lock_guard<std::mutex> lock(g_settingsMutex); changed = chosen != g_config.snippetPath; if (changed) g_config.snippetPath = chosen; }
-        if (!changed) return;
-        Log("the model file is now %s: the engine starts again on it", chosen.empty() ? "the one in Lossless Scaling's folder" : chosen.c_str());
-        ScanRequirements();
-        RestartEngine();
-        return;
-    }
+    if (!kScalerAddon) { FollowModelChoice(); return; }
     if (g_srStarting || g_srRuntimeDir.empty()) return;   // not started: it starts on the chosen file anyway
     const std::wstring dir = ChosenRuntimeDir();
     if (_wcsicmp(dir.c_str(), g_srRuntimeDir.c_str()) == 0) return;
@@ -879,7 +875,6 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
     if (!FindNisPass(ctx, x, y, z, pass, [](const char* m) { Log("%s", m); })) return false;
     ++g_nisSeen; ++g_nisSinceTap;
     FollowRuntimeChoice();
-    { ID3D11Texture2D* in = nullptr; if (pass.in && SUCCEEDED(pass.in->QueryInterface(IID_PPV_ARGS(&in)))) { Record(ctx, in, lsrec::kNisInput); in->Release(); } }
     if ((g_nisSeen & 63u) == 1) FollowScalerGame(pass.inW, pass.inH);
     g_scaleInW = pass.inW; g_scaleInH = pass.inH; g_scaleOutW = pass.outW; g_scaleOutH = pass.outH;
     ReadHotkeys();
@@ -918,6 +913,7 @@ bool ScalerPass(ID3D11DeviceContext* ctx, uint32_t x, uint32_t y, uint32_t z) {
                 replaced = g_link.Upscale(pass, flow, fw, fh, p.flowUnit, fraction, motion == 0, preset, p.sharpen * kScalerSharpenScale, g_resetRequested.exchange(false),
                                           static_cast<ScalerLink::Handoff>(handoff), gpuWait);
                 t_ownWork = false;
+                if (ID3D11Texture2D* grabbed = g_link.TakeGrabbed()) Record(ctx, grabbed, lsrec::kNisInput);   // the frame as DLSS or FSR got it
                 if (flow) flow->Release();
                 if (replaced) ++g_upscaled;
                 if (!replaced && g_sr.IsFailed()) SetStatus(g_sr.LastError());
@@ -1122,6 +1118,20 @@ void ChooseRuntimeFile(const std::wstring& path) {
     g_host->SetConfig(kAddonId, RuntimeKey(), Narrow(path).c_str());
     g_host->SaveConfig();
     Log("%s upscaler: runtime chosen in the panel: %s", kUpscalerName, path.empty() ? "the shipped one" : Narrow(path).c_str());
+}
+
+// Neural Rendering: the model file the manager's Runtimes list chose ("snippetPath", its + menu), taken into this addon's settings. From the
+// render thread and from the panel before it saves anything (else a save of the panel's copy, made in between, would put the old one back);
+// whichever sees the change first restarts the engine on it.
+void FollowModelChoice() {
+    if (kScalerAddon || !g_host) return;
+    const std::string chosen = g_host->GetConfig(kAddonId, "snippetPath", "");
+    bool changed;
+    { std::lock_guard<std::mutex> lock(g_settingsMutex); changed = chosen != g_config.snippetPath; if (changed) g_config.snippetPath = chosen; }
+    if (!changed) return;
+    Log("the model file is now %s: the engine starts again on it", chosen.empty() ? "the one in Lossless Scaling's folder" : chosen.c_str());
+    ScanRequirements();
+    RestartEngine();
 }
 
 } // namespace nr

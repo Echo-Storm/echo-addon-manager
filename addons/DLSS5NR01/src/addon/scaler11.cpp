@@ -246,6 +246,7 @@ void ScalerLink::Unblock() {
 }
 
 void ScalerLink::Shutdown() {
+    m_grabbed = nullptr;
     Unblock();
     if (m_engine && (m_in[0].d3d12 || m_copied.d3d12)) m_engine->Drain();
     // Lossless Scaling's queue may be waiting on the GPU for a picture (gpuWait): should the engine not have finished it, release the wait
@@ -362,6 +363,7 @@ bool ScalerLink::Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flo
         m_ctx->CSSetUnorderedAccessViews(0, 1, &m_inUav[in], nullptr);
         m_ctx->CSSetConstantBuffers(0, 1, &m_grabOrigin);
         m_ctx->Dispatch((pass.inW + 7) / 8, (pass.inH + 7) / 8, 1);
+        m_grabbed = m_in[in].d3d11;
         ID3D11ShaderResourceView* noSrv = nullptr; ID3D11UnorderedAccessView* noUav = nullptr;
         m_ctx->CSSetShaderResources(0, 1, &noSrv); m_ctx->CSSetUnorderedAccessViews(0, 1, &noUav, nullptr);
         m_ctx->CSSetConstantBuffers(0, 1, &nisConstants);   // NIS's, for the passes after (with NIS kept, its own dispatch)

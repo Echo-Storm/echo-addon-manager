@@ -69,6 +69,9 @@ public:
         }
     };
     void SetPicture(const Picture& p) { m_picture = p; }
+    // The frame the last Upscale handed to the engine, as the grab pass wrote it (for the recorder: NIS's own input may be a texture a plain
+    // copy reads as black, see the grab pass), or null when none was handed over. Taken once.
+    ID3D11Texture2D* TakeGrabbed() { ID3D11Texture2D* t = m_grabbed; m_grabbed = nullptr; return t; }
     bool Upscale(const NisPass& pass, ID3D11Resource* flow, uint32_t flowW, uint32_t flowH, float flowUnit, float motionFraction, bool estimate, unsigned preset,
                  float sharpen, bool reset, Handoff handoff = Handoff::Late, bool gpuWait = true);
 
@@ -83,6 +86,7 @@ public:
 
 private:
     Picture m_picture;
+    ID3D11Texture2D* m_grabbed = nullptr;   // not held: one of m_in, valid until the link is shut down
     struct Shared { ID3D11Texture2D* d3d11 = nullptr; ID3D12Resource* d3d12 = nullptr; uint32_t w = 0, h = 0; DXGI_FORMAT fmt = DXGI_FORMAT_UNKNOWN; void Release(); };
     struct Fence { ID3D11Fence* d3d11 = nullptr; ID3D12Fence* d3d12 = nullptr; void Release(); };
     bool Fit(Shared& t, uint32_t w, uint32_t h, DXGI_FORMAT fmt, bool engineWrites, const char* name);

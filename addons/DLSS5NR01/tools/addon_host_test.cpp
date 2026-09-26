@@ -333,7 +333,10 @@ int main(int argc, char** argv) {
     auto checkBackbuffer = [&](const char* bmp) {
         ID3D11Texture2D* bb = nullptr; sc->GetBuffer(0, IID_PPV_ARGS(&bb)); if (!bb) return;
         double mean = 0; uint64_t changed = CountChanged(dev, dc, bb, W, H, &mean, bmp); bb->Release();
-        checks++; if (changed > (uint64_t)W * H / 20) { composedSeen++; lastMean = mean; }
+        // counted from the first present that carries a result: the model's first build (NGX's, cold, up to a second) is not the compose's fault
+        const bool composed = changed > (uint64_t)W * H / 20;
+        if (!composed && !composedSeen) return;
+        checks++; if (composed) { composedSeen++; lastMean = mean; }
     };
     auto present = [&](bool real) {
         ID3D11Texture2D* bb = nullptr; sc->GetBuffer(0, IID_PPV_ARGS(&bb));

@@ -96,6 +96,7 @@ struct ScalerView { bool starting = false, ready = false, failed = false; std::s
 ScalerView GetScalerView();
 void StopScaler();
 bool NeuralRenderingOn();
+void FollowModelChoice();   // Neural Rendering: take a model file chosen in the manager's Runtimes list (the panel calls it before it saves)
 // The upscalers' runtime files to choose from (the panel's version list): the shipped one first (path empty), then those in the addon's
 // runtimes\<FSR|DLSS> folder, named by the ABOUT.txt beside them or their version. Chosen: the file in use (empty: the shipped one).
 struct RuntimeChoice { std::wstring path; std::string name; };

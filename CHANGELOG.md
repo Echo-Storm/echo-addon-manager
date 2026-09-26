@@ -33,6 +33,16 @@
 - **"FSR version" in the FSR Upscaler's panel** (and "DLSS version" in the DLSS 4 Upscaler's), right under the Enable switch. It is the
   same choice as the + in the manager's Runtimes list, and switching takes a second while the game runs.
 - **Fixed:** the Runtimes list's lines clashed with the addon cards' ImGui IDs ("2 visible items with conflicting ID").
+- **Bug sweep before 0.9.5:**
+  - **Upscaler recordings:** they now record the frame as it goes to DLSS or FSR (our own copy of it). Lossless Scaling's NIS input can
+    be a texture that a plain copy reads as black with frame generation off.
+  - **Recorder memory:** switching the recorder off in the panel lets its memory go at once.
+  - **A model file chosen with +** is no longer saved over by Neural Rendering's panel in the moment before the addon takes it.
+  - **Runtimes list:** it checks what is loaded at most every two seconds, rather than opening the files on every frame.
+  - **A chosen FSR or DLSS file that was moved or deleted** falls back to the shipped one, with a line in the log, instead of leaving
+    no upscaler.
+  - **Test host:** the compose check starts counting at the first result, so a slow first model build (NVIDIA's cold start, up to a
+    second) no longer fails it.
 - **DLSS model E** (DLSS 3's CNN model) as a third choice beside K and M: a user reports K and M soften a still picture here.
 - **Tests:** matrix scenarios `fsr_runtime_switch` and `dlss_runtime_switch` switch the runtime mid-run (the host test's `nisswitch=`).
 
