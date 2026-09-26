@@ -194,7 +194,16 @@ float Pixel(uint2 id) {
         const float around = abs((sc + 4.0 * tc) - (bestPrev + 4.0 * tp)) * (1.0 / 25.0);
         cost = lerp(bestCost, around, stability) / (1.0 + stability);
     }
-    const float distrust = saturate((cost - kTrusted) / (kUntrusted - kTrusted));
+    float distrust = saturate((cost - kTrusted) / (kUntrusted - kTrusted));
+    // A thin line that moves (a wire swaying, a branch): a ridge one pixel wide, brighter or darker than both its neighbours across it. Its
+    // history is the line at other sub-pixel places, which only blurs it, so the upscaler leans on this frame there, whatever stability
+    // says (test host: a swaying line 8.8 levels off the truth without stability, 10.2 with it, 2026-09-25)
+    if (stability > 0.001 && dot(best, best) > 0.0625) {
+        const float ridgeX = min(c[4] - max(c[3], c[5]), 1.0) , valleyX = min(min(c[3], c[5]) - c[4], 1.0);
+        const float ridgeY = min(c[4] - max(c[1], c[7]), 1.0), valleyY = min(min(c[1], c[7]) - c[4], 1.0);
+        const float thin = max(max(ridgeX, valleyX), max(ridgeY, valleyY));
+        distrust = max(distrust, saturate((thin - 0.04) / 0.08));
+    }
     uDistrust[id.xy] = distrust;
     return distrust;
 }

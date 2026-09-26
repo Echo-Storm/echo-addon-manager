@@ -312,6 +312,13 @@ def scenario_fsr_line(ctx, res, text, frame):
     res.check('...in place of the NIS pass', 'DLSS REPLACED NIS' in text)
     e = line_error(text)
     res.check('a thin swaying line is measured against the true picture', e is not None, '%s levels' % e)
+    if e is None:
+        return
+    if 'FSR 3 upscaler: stability 0.00' in text:
+        ctx['line_error_plain'] = e
+    elif ctx.get('line_error_plain') is not None:
+        plain = ctx['line_error_plain']
+        res.check('...and stability does not smear it (the thin moving line keeps leaning on the current frame)', e < plain * 1.05, '%.2f against %.2f without' % (e, plain))
 
 
 def stable_checks(ctx, res, text, none_key, name):
