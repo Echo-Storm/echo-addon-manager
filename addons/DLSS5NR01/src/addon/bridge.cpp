@@ -92,7 +92,7 @@ bool Bridge::Init(ID3D11Device* dev, ID3D11DeviceContext* ctx, NrEngine* engine,
     if (FAILED(ctx->QueryInterface(IID_PPV_ARGS(&m_ctx4)))) { Log("Bridge: Lossless Scaling's context has no ID3D11DeviceContext4"); Shutdown(); return false; }
     if (!MakeFence(m_copied, "copied") || !MakeFence(m_finished, "finished") || !MakeFence(m_released, "released")) { Shutdown(); return false; }
     if (!m_submitTimes.Init(m_dev) || !m_composeTimes.Init(m_dev)) Log("Bridge: GPU timing is not available (the rest works)");
-    m_inFlight = 0; m_newestSlot = -1; m_releaseCount = 0; m_runs = m_skipped = 0;
+    m_inFlight = m_inFlightBefore = 0; m_turn = 0; m_newestSlot = -1; m_releaseCount = 0; m_runs = m_skipped = m_doubled = 0;
     m_prevFrameQpc = 0; m_intervalMs = m_lastIntervalMs = m_cpuMs = 0; m_frameTimeCount = 0;
     Log("Bridge: shared fences up");
     return true;
@@ -110,7 +110,7 @@ void Bridge::Unblock() {
 void Bridge::Shutdown() {
     // Runs still queued on the model's side may use the shared textures and fences: release their waits, then let them finish.
     Unblock();
-    if (m_engine && (m_input.d3d12 || m_copied.d3d12)) m_engine->Drain();
+    if (m_engine && (m_input[0].d3d12 || m_copied.d3d12)) m_engine->Drain();
     // a compose on Lossless Scaling's side may wait on the GPU for a result the model did not finish: release it
     if (m_finished.d3d12 && m_finished.d3d12->GetCompletedValue() < m_inFlight) {
         Log("Bridge: the model had finished %llu of %llu; released Lossless Scaling's wait for it", (unsigned long long)m_finished.d3d12->GetCompletedValue(),
@@ -135,26 +135,27 @@ void Bridge::SetLsGpuPriority(int p) {
     m_lsPriority = p; m_lsPriorityApplied = SUCCEEDED(hr);
 }
 
-void Bridge::DropInput() { m_input.Release(); m_fmt = DXGI_FORMAT_UNKNOWN; }
-void Bridge::DropFlow() { if (m_engine) m_engine->SetFlowInput(nullptr, 0, 0); m_flow.Release(); }
+void Bridge::DropInput() { for (SharedTexture& t : m_input) t.Release(); m_fmt = DXGI_FORMAT_UNKNOWN; }
+void Bridge::DropFlow() { if (m_engine) m_engine->SetFlowInput(nullptr, 0, 0); for (SharedTexture& t : m_flow) t.Release(); }
 void Bridge::DropSlots() { for (Slot& s : m_slots) { s.delta.Release(); s.motion.Release(); s.frame = 0; s.releasedAt = 0; } m_newestSlot = -1; }
 
 bool Bridge::Ensure(uint32_t w, uint32_t h, DXGI_FORMAT fmt) {
     const DXGI_FORMAT view = ViewFormat(fmt);
-    if (m_input.d3d11 && m_input.w == w && m_input.h == h && m_fmt == view) return true;
+    if (m_input[0].d3d11 && m_input[0].w == w && m_input[0].h == h && m_fmt == view) return true;
     if (!FormatSupported(fmt)) { LogOnce(FailureKey('F', 0, 0, (uint32_t)fmt), "Bridge: frames of format %d cannot be fed to the model", (int)fmt); return false; }
-    if (m_input.d3d12) m_engine->Drain();
+    if (m_input[0].d3d12) m_engine->Drain();
     DropInput(); DropFlow(); DropSlots();
-    if (!MakeTexture(m_input, w, h, view, false, "input")) return false;
+    if (!MakeTexture(m_input[0], w, h, view, false, "input") || !MakeTexture(m_input[1], w, h, view, false, "second input")) { DropInput(); return false; }
     m_fmt = view;
     Log("Bridge: shared input %ux%u, format %d", w, h, (int)view);
     return true;
 }
 
 bool Bridge::FitFlow(uint32_t w, uint32_t h) {
-    if (m_flow.d3d11 && m_flow.w == w && m_flow.h == h) return true;
-    if (m_flow.d3d11) { m_engine->Drain(); DropFlow(); }
-    if (!MakeTexture(m_flow, w, h, DXGI_FORMAT_R16G16B16A16_FLOAT, false, "flow")) return false;
+    if (m_flow[0].d3d11 && m_flow[0].w == w && m_flow[0].h == h) return true;
+    if (m_flow[0].d3d11) { m_engine->Drain(); DropFlow(); }
+    if (!MakeTexture(m_flow[0], w, h, DXGI_FORMAT_R16G16B16A16_FLOAT, false, "flow") ||
+        !MakeTexture(m_flow[1], w, h, DXGI_FORMAT_R16G16B16A16_FLOAT, false, "second flow")) { DropFlow(); return false; }
     Log("Bridge: shared flow %ux%u, RGBA16F", w, h);
     return true;
 }
@@ -191,37 +192,46 @@ void Bridge::NoteFrameTime(int64_t now, int64_t freq) {
 // orderOnGpu (frame generation off), for the model's run before; otherwise the only waits are the model queue's.
 bool Bridge::Submit(ID3D11Texture2D* frame, ID3D11Texture2D* flow, uint32_t flowW, uint32_t flowH, const NrParams& params, bool reset, uint64_t frameIndex,
                     bool orderOnGpu) {
-    if (!m_input.d3d11 || !m_copied.d3d11 || !m_engine || !m_engine->IsReady()) return false;
+    if (!m_input[0].d3d11 || !m_copied.d3d11 || !m_engine || !m_engine->IsReady()) return false;
     LARGE_INTEGER freq; QueryPerformanceFrequency(&freq);
     const int64_t start = Now();
     NoteFrameTime(start, freq.QuadPart);
     struct CpuTime { Bridge& b; int64_t start, freq; ~CpuTime() { b.m_cpuMs = Smooth(b.m_cpuMs, Ms(Now() - start, freq)); } } cpuTime{ *this, start, freq.QuadPart };
 
-    if (!m_engine->Prepare(m_input.w, m_input.h, m_fmt, params)) return false;
+    if (!m_engine->Prepare(m_input[0].w, m_input[0].h, m_fmt, params)) return false;
     if (!FitSlots(m_engine->Stats().workW, m_engine->Stats().workH)) return false;
     // The model is still busy with an earlier frame: skip this one.
-    const bool busy = m_inFlight && m_finished.d3d12->GetCompletedValue() < m_inFlight;
-    if (busy && !orderOnGpu) { ++m_skipped; return false; }
+    // Room for this frame: the model has finished the run before; or, as long as it keeps up with the frame rate (a run well inside a frame's
+    // time, so a second one queued cannot pile up), the input this frame goes into is free (the run before that one has finished).
+    const uint64_t finished = m_finished.d3d12->GetCompletedValue();
+    const bool busy = m_inFlight && finished < m_inFlight;
+    const double runMs = m_engine->Stats().totalMs;
+    const bool keepsUp = runMs > 0.0 && m_intervalMs > 0.0 && runMs < 0.75 * m_intervalMs;
+    const bool inputFree = finished >= m_inFlightBefore;
+    const bool room = !busy || ((keepsUp || orderOnGpu) && inputFree);
+    if (!room && !orderOnGpu) { ++m_skipped; return false; }
     m_submitTimes.Begin(m_ctx);
-    if (busy) m_ctx4->Wait(m_finished.d3d11, m_inFlight);   // the copy below waits on the GPU until the model has read the frame before
+    if (!room) m_ctx4->Wait(m_finished.d3d11, m_inFlightBefore);   // the copy below waits on the GPU until the model has read that input
     m_submitTimes.Mark(m_ctx, 1);
     const bool withFlow = flow && params.useFlow && flowW && flowH && FitFlow(flowW, flowH);
-    m_engine->SetFlowInput(withFlow ? m_flow.d3d12 : nullptr, m_flow.w, m_flow.h);
+    const int k = m_turn;
+    m_engine->SetFlowInput(withFlow ? m_flow[k].d3d12 : nullptr, m_flow[k].w, m_flow[k].h);
 
     // The slots take turns. The newest holds the result the presents use now; the one before may still be read by a compose already recorded,
     // which is what the run waits on "released" for. So the next in turn is always free to write.
     const int s = (m_newestSlot + 1) % kSlots;
-    m_ctx->CopyResource(m_input.d3d11, frame);
-    if (withFlow) m_ctx->CopyResource(m_flow.d3d11, flow);
+    m_ctx->CopyResource(m_input[k].d3d11, frame);
+    if (withFlow) m_ctx->CopyResource(m_flow[k].d3d11, flow);
     m_submitTimes.Mark(m_ctx, 2);
     m_submitTimes.End(m_ctx);
     m_ctx4->Signal(m_copied.d3d11, frameIndex);
     const uint64_t queuedBefore = m_engine->Stats().frames;
-    const bool ok = m_engine->Run(m_input.d3d12, m_slots[s].delta.d3d12, m_copied.d3d12, frameIndex, m_released.d3d12, m_slots[s].releasedAt,
+    const bool ok = m_engine->Run(m_input[k].d3d12, m_slots[s].delta.d3d12, m_copied.d3d12, frameIndex, m_released.d3d12, m_slots[s].releasedAt,
                                   m_finished.d3d12, frameIndex, reset, m_slots[s].motion.d3d12);
     // A run that was never queued never signals "finished": waiting for it would skip every frame from now on.
     if (m_engine->Stats().frames == queuedBefore) return false;
-    m_inFlight = frameIndex; m_newestSlot = s;
+    if (busy) ++m_doubled;
+    m_inFlightBefore = m_inFlight; m_inFlight = frameIndex; m_newestSlot = s; m_turn = 1 - k;
     m_slots[s].frame = ok ? frameIndex : 0;   // a run whose model evaluation failed leaves no usable result
     if (ok) ++m_runs;
     return ok;

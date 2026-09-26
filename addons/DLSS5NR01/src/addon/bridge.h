@@ -1,8 +1,10 @@
 // Bridge: moves Lossless Scaling's frames to the model and the model's results back.
 //
 // Lossless Scaling draws with D3D11; the model runs on its own D3D12 queue (NrEngine) on the same graphics card. The two share textures and fences
-// through NT handles, and every wait between them is a GPU wait, never a CPU one. Lossless Scaling's queue never waits for the model: a frame that
-// arrives while the model is still busy is skipped (the model runs at whatever rate the working scale allows), and the presents keep warping the
+// through NT handles, and every wait between them is a GPU wait, never a CPU one. Lossless Scaling's queue never waits for the model. There are
+// two input textures, so a frame can go to the model while it is still on the one before (Lossless Scaling's GPU often runs a frame behind its
+// CPU, so the run before has not even started when the next frame comes), as long as the model keeps up with the frame rate; otherwise a frame
+// that arrives while the model is busy is skipped (the model runs at whatever rate the working scale allows), and the presents keep warping the
 // newest result forward.
 //
 // Each real frame (Submit, on Lossless Scaling's render thread): the frame and LSFG's flow are copied into the shared input, "copied" is signalled
@@ -49,7 +51,7 @@ public:
     void BeginDeltaUse(uint64_t d);   // before recording a compose that reads result d on Lossless Scaling's context
     void EndDeltaUse(uint64_t d);     // after it
     ID3D11DeviceContext* Context() const { return m_ctx; }
-    uint32_t Width() const { return m_input.w; }  uint32_t Height() const { return m_input.h; }  DXGI_FORMAT Format() const { return m_fmt; }
+    uint32_t Width() const { return m_input[0].w; }  uint32_t Height() const { return m_input[0].h; }  DXGI_FORMAT Format() const { return m_fmt; }
     double IntervalMs() const { return m_intervalMs; }        // time between frames, smoothed
     double LastIntervalMs() const { return m_lastIntervalMs; } // time between the last two frames
     // The time between frames (the game's frame time as Lossless Scaling sees it) since the last call: percentiles, the worst, and how many took
@@ -57,6 +59,7 @@ public:
     bool TakeFrameTimeWindow(float& p50, float& p95, float& p99, float& worst, int& n, int& over20, int& over33);
     double CpuMs() const { return m_cpuMs; }                   // CPU time Submit takes on Lossless Scaling's render thread, smoothed
     uint64_t Runs() const { return m_runs; }  uint64_t Skipped() const { return m_skipped; }
+    uint64_t Doubled() const { return m_doubled; }   // runs queued while the one before was still with the model
     // GPU thread priority of Lossless Scaling's D3D11 device (-7..7). Above 0 its work pre-empts the model's normal-priority queue, so LSFG's
     // pacing is not disturbed by the model sharing the graphics card. Set back to 0 at Shutdown.
     void SetLsGpuPriority(int p);
@@ -93,12 +96,15 @@ private:
     ID3D11Device5* m_dev = nullptr;
     ID3D11DeviceContext* m_ctx = nullptr;
     ID3D11DeviceContext4* m_ctx4 = nullptr;
-    SharedTexture m_input;                 // the frame copy, in the frame's view format
-    SharedTexture m_flow;                  // the flow copy, RGBA16F
+    SharedTexture m_input[2];              // the frame copies, in the frame's view format, in turn (m_turn)
+    SharedTexture m_flow[2];               // the flow copies, RGBA16F, with them
+    int m_turn = 0;                        // the input the next run reads
     Slot m_slots[kSlots];                  // the results, RGBA16F at the working size
     SharedFence m_copied, m_finished, m_released;
     DXGI_FORMAT m_fmt = DXGI_FORMAT_UNKNOWN;
     uint64_t m_inFlight = 0;               // the frame index of the last queued run (0 = none)
+    uint64_t m_inFlightBefore = 0;         // the one before it: the last to read the input the next run goes into
+    uint64_t m_doubled = 0;
     int m_newestSlot = -1;                 // the slot that run writes
     uint64_t m_releaseCount = 0;
     uint64_t m_runs = 0, m_skipped = 0;

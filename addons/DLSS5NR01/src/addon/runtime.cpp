@@ -136,9 +136,9 @@ void LogProgress(const NrStats& st) {
     const uint64_t taps = g_presentMode ? g_presentIndex : g_tap.Taps();
     if (!taps) return;
     if (taps == 1 || taps == 60 || taps % 300 == 0)
-        Log("%s #%llu: model %.1f ms (avg %.1f), run %.1f ms, GPU start +%.1f done +%.1f ms after submit, tap CPU %.2f ms, interval %.1f ms, runs %llu skipped %llu, fails %llu | presents %llu (%s), composed %llu, compose CPU %.2f ms, last delta frame %llu offset %.2f",
+        Log("%s #%llu: model %.1f ms (avg %.1f), run %.1f ms, GPU start +%.1f done +%.1f ms after submit, tap CPU %.2f ms, interval %.1f ms, runs %llu skipped %llu (two at once %llu), fails %llu | presents %llu (%s), composed %llu, compose CPU %.2f ms, last delta frame %llu offset %.2f",
             g_presentMode ? "presented frame" : "tap", (unsigned long long)taps, st.nrMs, g_avgModelMs, st.totalMs, st.startMs, st.doneMs, g_bridge.CpuMs(), g_bridge.IntervalMs(), (unsigned long long)g_bridge.Runs(),
-            (unsigned long long)g_bridge.Skipped(), (unsigned long long)st.fails, (unsigned long long)g_lsPresents, g_tap.PresentPattern(), (unsigned long long)g_composed,
+            (unsigned long long)g_bridge.Skipped(), (unsigned long long)g_bridge.Doubled(), (unsigned long long)st.fails, (unsigned long long)g_lsPresents, g_tap.PresentPattern(), (unsigned long long)g_composed,
             g_compose.CpuMs(), (unsigned long long)g_lastDelta, g_lastOffset);
     if (!g_presentMode && (taps == 60 || taps % 300 == 0))
         Log("motion vectors so far: this frame's flow %llu, the previous frame's %llu, frames dropped waiting for a flow pass %llu",

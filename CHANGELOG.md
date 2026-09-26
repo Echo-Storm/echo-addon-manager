@@ -39,6 +39,11 @@
     takes the newest result that is ready (usually the frame before's) and moves it along that frame's motion vectors, which the run hands
     over beside the result, to where the picture is now. Test host: the wait went from 4-5.5 ms to 0.02 ms per present. The old way stays as
     *Wait for each frame's own result* (`presentWait`, off); scenario `present_wait` keeps it tested.
+  - **The model runs on every frame it can keep up with.** In a game at 60 fps it ran on every other frame: Lossless Scaling's GPU runs about
+    a frame behind its CPU, so the run before had not even started when the next frame came, and the frame was skipped. The bridge now has
+    two input textures (and two flow textures): a frame goes to the model while it is still on the one before, as long as a run takes less
+    than three quarters of a frame's time (so a slower model never builds a queue and falls a frame further behind). The progress line
+    counts them ("two at once"); test host: 35 of 54 runs in present mode, none skipped.
   - The progress lines count presented frames in present mode (they were written on every frame: 1.8 MB in two minutes).
 - **Neural Rendering times Lossless Scaling's side on the GPU**: the hand-over copy, the compose pass, and how long Lossless Scaling's queue
   waits for the model (D3D11 timestamps, read back a few frames late, never stalling). Logged at 60 frames and every 1200.
