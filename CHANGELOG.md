@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.5 (not released yet)
 
 - **Runtimes, at the bottom of the addon list.** Each file the addons run on is listed: the DLSS 5 model, NVIDIA's DLSS and AMD's FSR.
   - **What each line shows:** a tick when the file is loaded right now, a circle when its addon is on and waits for a game to be

@@ -123,7 +123,8 @@ int main(int argc, char** argv) {
     // the runtimes, as the repository's addon.json files list them, read from the install in D:\Utilities\Lossless Scaling (as the real
     // list reads them: version, signature, SHA-256). EAM_PREVIEW_FSR=<file>: that file as the FSR runtime (only read, never loaded)
     const std::wstring lsDir = L"D:\\Utilities\\Lossless Scaling";
-    { AddonManifest m; if (ReadManifest(plugins / "addon.json", m)) a.manifest.runtimes = m.runtimes; }
+    // (the model file is the person's own: the tidy scene for the README leaves its line out rather than show this machine's copy)
+    { AddonManifest m; if (!clean && ReadManifest(plugins / "addon.json", m)) a.manifest.runtimes = m.runtimes; }
     { AddonManifest m; if (ReadManifest(plugins / "products" / "DLSS4DLAA" / "addon.json", m)) b.manifest.runtimes = m.runtimes; }
     { AddonManifest m; if (ReadManifest(plugins / "products" / "FSR3UPSC" / "addon.json", m)) c.manifest.runtimes = m.runtimes; }
     a.dllPath = lsDir + L"\\addons\\DLSS5NR01\\DLSS5NR01.dll";
@@ -146,7 +147,7 @@ int main(int argc, char** argv) {
     float model = 0.5f, sharpen = 0.0f, vib = 1.2f, blend = 0.72f, gamma = 1.0f; int passes = 1, grain = 2; bool sw = true, sw2 = false; int sel = 0;
     const float dModel = 0.35f, dSharpen = 0.0f, dVib = 0.0f, dBlend = 1.0f, dGamma = 1.0f; const int dPasses = 1, dGrain = 1;
     if (!clean) widgets::ToastShow("Installed 'Cool Addon' (switched off). Turn it on with its switch.", widgets::ToastType::Success, 1000.0f);
-    const std::string status = window::StatusCounts(3, 2);
+    std::string status = window::StatusCounts(3, 2);
 
     // live data for the cards and the Performance tab: 20 s of a game near 60 fps with a few hitches, a model at ~6.6 ms, a GPU at its cap
     {
@@ -169,7 +170,7 @@ int main(int argc, char** argv) {
             M.PublishAt("system", "gpu_power_w", 281.0f + (rnd() - 0.5f) * 4.0f, "W", t);
         }
         M.SetStatus("DLSS5NR01", "Running, model 5.2 ms, keeps up 99%", 1);
-        M.SetStatus("FSR3UPSC", "FSR 3 1920x1080 -> 3840x2160, 1.6 ms", 1);
+        M.SetStatus("FSR3UPSC", "FSR 3.1.4 1920x1080 -> 3840x2160, 1.6 ms", 1);
         SystemStats::Snapshot sys; sys.ok = true; sys.cpuPercent = 23; sys.ramUsedMB = 18841; sys.ramTotalMB = 32703;
         SystemStats::Instance().InjectForPreview(sys);
         GpuStats::Snapshot g; g.name = "NVIDIA GeForce RTX 4070 Ti SUPER"; g.driver = "616.92"; g.deviceCount = 1; g.utilGpu = 97; g.utilMem = 44;
@@ -192,6 +193,8 @@ int main(int argc, char** argv) {
             rest = semi == std::string::npos ? std::string() : rest.substr(semi + 1);
         }
         free(v);
+        // "DLSS5NR01/_enabled=0": Neural Rendering switched off in the manager, its card and the status bar with it
+        if (host.cfg["DLSS5NR01/_enabled"] == "0") { a.enabled = false; a.hModule = nullptr; status = window::StatusCounts(3, 1); }
     }
     for (int i = 3; i < argc; ++i) {
         HMODULE h = LoadLibraryA(argv[i]);
@@ -234,7 +237,7 @@ int main(int argc, char** argv) {
             ImGui::Dummy(ImVec2(0, S(4)));
             for (int i = 0; i < 3; ++i) { widgets::AddonCard(*list[i], i, i == selected); ImGui::Dummy(ImVec2(0, S(1))); }
             {   // as tab_addons.cpp: the runtimes at the bottom of the list
-                std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir);
+                std::vector<RuntimeFile> rows = RuntimeFiles({ a, b, c }, lsDir);   // the addons as the scene has them now (on or off)
                 for (RuntimeFile& r : rows) r.loaded = r.addonOn && r.exists && r.addonId == "DLSS5NR01";   // the preview loads none: one running, one waiting, one off
                 // EAM_PREVIEW_RUNTIME_MENU=<line>: that line's + menu shown open
                 char* mv = nullptr; size_t mn = 0; _dupenv_s(&mv, &mn, "EAM_PREVIEW_RUNTIME_MENU");
