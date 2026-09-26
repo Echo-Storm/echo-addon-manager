@@ -4,6 +4,9 @@
 #include <softpub.h>
 #include <wincrypt.h>
 #include <wintrust.h>
+#include <psapi.h>
+#include <algorithm>
+#include <cwctype>
 #include <filesystem>
 #include <map>
 #include <mutex>
@@ -85,8 +88,24 @@ void ReadSignature(const std::wstring& path, RuntimeFile& f) {
 // What is known of each file, by path: read again when its size or time changes. The reading runs on a thread of its own (a 34 MB file's
 // SHA-256 and signature take a moment); the list holds what was read last. Never freed: nothing may be joined as the process ends.
 struct Cached { uint64_t size = 0; FILETIME written{}; bool exists = false; RuntimeFile file; bool reading = false; ULONGLONG checkedAt = 0; };
-struct Cache { std::mutex mutex; std::map<std::wstring, Cached> byPath; };
+struct Cache { std::mutex mutex; std::map<std::wstring, Cached> byPath; std::vector<std::wstring> modules; ULONGLONG modulesAt = 0; };
 Cache& TheCache() { static Cache* c = new Cache; return *c; }
+
+std::wstring Lower(std::wstring s) { for (wchar_t& ch : s) ch = (wchar_t)towlower(ch); return s; }
+
+// The DLLs loaded in this process (Lossless Scaling's, the manager living in it), by full path in lower case: read at most every two seconds.
+const std::vector<std::wstring>& LoadedModules(Cache& cache, ULONGLONG now) {
+    if (cache.modulesAt && now - cache.modulesAt < 2000) return cache.modules;
+    cache.modulesAt = now;
+    cache.modules.clear();
+    HMODULE mods[1024]; DWORD bytes = 0;
+    if (K32EnumProcessModules(GetCurrentProcess(), mods, sizeof mods, &bytes))
+        for (DWORD i = 0; i < bytes / sizeof(HMODULE) && i < 1024; ++i) {
+            wchar_t name[MAX_PATH];
+            if (GetModuleFileNameW(mods[i], name, MAX_PATH)) cache.modules.push_back(Lower(name));
+        }
+    return cache.modules;
+}
 
 } // namespace
 
@@ -147,6 +166,8 @@ std::vector<RuntimeFile> RuntimeFiles(const std::vector<AddonInfo>& addons, cons
                 }
             }
             const RuntimeFile& known = c.file;
+            const std::vector<std::wstring>& modules = LoadedModules(cache, now);
+            row.loaded = c.exists && std::find(modules.begin(), modules.end(), Lower(path)) != modules.end();
             row.exists = c.exists; row.read = known.read;
             row.signature = known.signature; row.version = known.version; row.description = known.description; row.company = known.company;
             row.signer = known.signer; row.sha256 = known.sha256; row.size = known.size;

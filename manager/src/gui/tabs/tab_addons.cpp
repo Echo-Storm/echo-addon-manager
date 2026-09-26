@@ -488,8 +488,7 @@ void RenderTabAddons(AddonManager* manager) {
         if (!runtimes.empty()) {
             const widgets::RuntimeAction act = widgets::RuntimeListAtBottom(runtimes);
             if (act.kind != widgets::RuntimeAction::None)
-                widgets::ToastShow(act.kind == widgets::RuntimeAction::Choose ? "Choosing another runtime file comes in the next step (this is the preview of the list)."
-                                                                              : "Going back to the shipped file comes in the next step.", widgets::ToastType::Info, 5.0f);
+                widgets::ToastShow("Choosing another runtime file comes in the next step (this is the preview of the list).", widgets::ToastType::Info, 5.0f);
         }
     }
     ImGui::EndChild();

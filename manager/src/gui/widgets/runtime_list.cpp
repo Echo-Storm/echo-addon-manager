@@ -38,8 +38,7 @@ RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows) {
         const RuntimeFile& r = rows[i];
         ImGui::PushID(i);
         const float h = ImGui::GetFrameHeight(), w = ImGui::GetContentRegionAvail().x;
-        const bool canReset = r.exists && r.read && r.shippedKnown && !r.shipped;
-        const float buttons = h * (canReset ? 2.0f : 1.0f);
+        const float buttons = h;
         const ImVec2 p = ImGui::GetCursorScreenPos();
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -48,12 +47,14 @@ RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows) {
         const bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
         if (ImGui::IsItemHovered()) dl->AddRectFilled(p, ImVec2(p.x + w - buttons, p.y + h), th::U(th::kRowHover, a), 3.0f);
         const float ico = ImGui::GetFontSize() * 0.9f;
-        const char* glyph = ui::icons::kInfo; ImU32 tint = th::U(th::kMuted, a);
+        // a tick: loaded now; a cross: not (the addon is off, has not started on it yet, or the file is not there)
+        const char* glyph = r.loaded ? ui::icons::kCheck : ui::icons::kClose;
+        const ImU32 tint = r.loaded ? th::U(th::kAccent, a) : th::U(th::kMuted, a);
         std::string note;
-        if (!r.exists) { glyph = ui::icons::kClose; note = "not found"; }
+        if (!r.exists) note = "not found";
         else if (!r.read) note = "...";
-        else if (r.signature == RuntimeFile::Signature::Signed) { glyph = ui::icons::kCheck; tint = th::U(th::kAccent, a); }
-        else { glyph = ui::icons::kAlert; tint = th::U(th::kWarn, a); note = r.signature == RuntimeFile::Signature::Broken ? "changed" : "unsigned"; }
+        else if (r.signature == RuntimeFile::Signature::Broken) note = "modified";
+        else if (r.signature != RuntimeFile::Signature::Signed) note = "unsigned";
         ui::svg::Draw(dl, glyph, ImVec2(p.x + 2.0f, p.y + (h - ico) * 0.5f), ico, tint, 2.0f);
         float x = p.x + ico + ImGui::GetFontSize() * 0.55f;
         const float ty = p.y + (h - ImGui::GetFontSize()) * 0.5f, right = p.x + w - buttons - 4.0f;
@@ -65,20 +66,22 @@ RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows) {
             dl->AddText(nullptr, 0.0f, ImVec2(x, ty), th::U(th::kMuted, a), version.c_str(), nullptr, 0.0f, &clip);
             x += ImGui::CalcTextSize(version.c_str()).x + ImGui::GetFontSize() * 0.4f;
         }
-        if (!note.empty()) dl->AddText(nullptr, 0.0f, ImVec2(x, ty), r.exists && r.read ? th::U(th::kWarn, a) : th::U(th::kMuted, a), note.c_str(), nullptr, 0.0f, &clip);
+        if (!note.empty()) dl->AddText(nullptr, 0.0f, ImVec2(x, ty), th::U(th::kText, a * 0.75f), note.c_str(), nullptr, 0.0f, &clip);
 
         if (hovered) {
             ImGui::BeginTooltip();
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 32.0f);
             ImGui::Text("%s runtime, used by %s (%s)", r.label.c_str(), r.addonName.c_str(), r.addonOn ? "on" : "off");
-            if (!r.exists) ImGui::TextColored(th::V(th::kWarn), "Not found: %s", Utf8(r.path).c_str());
+            if (r.loaded) ImGui::TextColored(th::V(th::kAccent), "Loaded now");
+            else ImGui::TextDisabled("Not loaded now");
+            if (!r.exists) ImGui::Text("Not found: %s", Utf8(r.path).c_str());
             else if (!r.read) ImGui::TextDisabled("Reading the file...");
             else {
                 if (!r.description.empty() || !r.version.empty()) ImGui::TextUnformatted((r.description + (r.description.empty() ? "" : "  ") + r.version).c_str());
-                if (r.signature == RuntimeFile::Signature::Signed) ImGui::TextColored(th::V(th::kAccent), "Signed by %s", r.signer.empty() ? "its maker" : r.signer.c_str());
+                if (r.signature == RuntimeFile::Signature::Signed) ImGui::Text("Signed by %s", r.signer.empty() ? "its maker" : r.signer.c_str());
                 else if (r.signature == RuntimeFile::Signature::Broken)
-                    ImGui::TextColored(th::V(th::kWarn), "Signed by %s, then changed: the signature no longer matches the file", r.signer.empty() ? "its maker" : r.signer.c_str());
-                else ImGui::TextColored(th::V(th::kWarn), "Not signed%s", r.company.empty() ? "" : (" (it says it is " + r.company + "'s)").c_str());
+                    ImGui::Text("Modified: signed by %s, then changed, so the signature no longer matches the file", r.signer.empty() ? "its maker" : r.signer.c_str());
+                else ImGui::Text("Not signed%s", r.company.empty() ? "" : (" (it says it is " + r.company + "'s)").c_str());
                 if (r.shippedKnown) ImGui::TextDisabled(r.shipped ? "The file the addon ships with." : "Not the file the addon ships with.");
                 ImGui::TextDisabled("%s", Utf8(r.path).c_str());
                 if (!r.sha256.empty()) ImGui::TextDisabled("SHA-256 %s", r.sha256.c_str());
@@ -87,12 +90,7 @@ RuntimeAction RuntimeListAtBottom(const std::vector<RuntimeFile>& rows) {
             ImGui::EndTooltip();
         }
 
-        // + and, for a file that is not the shipped one, back to it
-        if (canReset) {
-            ImGui::SameLine(0, 0);
-            if (ui::IconButton("##reset", ui::icons::kReset, h)) action = { i, RuntimeAction::Reset };
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) ImGui::SetTooltip("Back to the file %s ships with", r.addonName.c_str());
-        }
+        // + : another file
         ImGui::SameLine(0, 0);
         if (ui::IconButton("##choose", ui::icons::kPlus, h)) action = { i, RuntimeAction::Choose };
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) ImGui::SetTooltip("Use another %s file...", r.label.c_str());

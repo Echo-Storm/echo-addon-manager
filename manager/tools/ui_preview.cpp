@@ -233,7 +233,8 @@ int main(int argc, char** argv) {
             ImGui::Dummy(ImVec2(0, S(4)));
             for (int i = 0; i < 3; ++i) { widgets::AddonCard(*list[i], i, i == selected); ImGui::Dummy(ImVec2(0, S(1))); }
             {   // as tab_addons.cpp: the runtimes at the bottom of the list
-                const std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir, noConfig);
+                std::vector<RuntimeFile> rows = RuntimeFiles(runtimeAddons, lsDir, noConfig);
+                for (RuntimeFile& r : rows) r.loaded = r.addonOn && r.exists;   // the preview loads none of them: as a running install shows them
                 widgets::RuntimeListAtBottom(rows);
             }
             ImGui::EndChild();

@@ -20,6 +20,7 @@ struct RuntimeFile {
     // from the file
     enum class Signature { Unknown, Signed, Unsigned, Broken } signature = Signature::Unknown;   // Broken: signed, then changed
     bool exists = false, read = false;   // read: the thread has looked at it (until then only `exists` is known)
+    bool loaded = false;                 // loaded in this process now (the addon is running on it)
     bool shipped = false;                // it is the file the addon ships with (its SHA-256 is the one in addon.json)
     bool shippedKnown = false;           // addon.json says which file it ships
     std::string version;                 // "310.9.1", from the file's version resource
