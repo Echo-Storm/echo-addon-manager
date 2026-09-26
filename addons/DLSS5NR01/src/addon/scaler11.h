@@ -1,4 +1,4 @@
-// DLSS Super Resolution as Lossless Scaling's scaler (the DLSS 4 Upscaler): the Lossless Scaling side.
+// DLSS Super Resolution as Lossless Scaling's scaler (the DLSS Upscaler): the Lossless Scaling side.
 //
 // Lossless Scaling scales every frame it presents, real and generated, with one compute pass. With NIS chosen that pass is easy to know: the
 // frame at the game's size in (t0), NIS's two 2x64 RGBA32F coefficient tables (t1, t2), the picture at the screen's size out (u0), and one

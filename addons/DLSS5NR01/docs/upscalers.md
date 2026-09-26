@@ -1,10 +1,10 @@
-# The DLSS 4 and FSR Upscalers
+# The DLSS and FSR Upscalers
 
 Two addons, built from Neural Rendering's sources, that take the place of Lossless Scaling's **NIS** scaler with a temporal upscaler:
 
 | Addon | Upscaler | Needs | Comes with |
 |-------|----------|-------|------------|
-| **DLSS 4 Upscaler** (`DLSS4DLAA`) | NVIDIA DLSS Super Resolution (models K and M) | an NVIDIA RTX card | NVIDIA's DLSS runtime 310.9.1 (`dlss\nvngx_dlss.dll`, NVIDIA's licence) |
+| **DLSS Upscaler** (`DLSS4DLAA`) | NVIDIA DLSS Super Resolution (models K and M) | an NVIDIA RTX card | NVIDIA's DLSS runtime 310.9.1 (`dlss\nvngx_dlss.dll`, NVIDIA's licence) |
 | **FSR Upscaler** (`FSR3UPSC`) | AMD FidelityFX Super Resolution 3.1 | any DirectX 12 card (AMD, NVIDIA, Intel) | AMD's FidelityFX runtime (`fsr\amd_fidelityfx_dx12.dll`, FidelityFX SDK v1.1.4, MIT, signed by AMD) |
 
 Both come in the download switched off: switch on the one you want. They were developed and tested with World of Warcraft: Forever and
@@ -35,7 +35,7 @@ has the graphics card to spare for it. A post-process anti-aliasing (FXAA, CMAA)
 
 ## Settings (the addon's panel)
 
-- **DLSS model** (DLSS 4 Upscaler only): *NVIDIA's default (K)* or *M (DLSS 4.5)*. M is heavier (about twice K's cost) and differs in how it
+- **DLSS model** (DLSS Upscaler only): *NVIDIA's default (K)* or *M (DLSS 4.5)*. M is heavier (about twice K's cost) and differs in how it
   treats fine detail; compare them in your game.
 - **Sharpening** (0.3 to start with): DLSS 4 has no sharpening of its own, so the DLSS addon sharpens its picture with the contrast-adaptive
   (CAS) formula; the FSR addon uses AMD's own RCAS. NIS sharpens too (Lossless Scaling's Sharpness), so without it the upscaler can look

@@ -33,7 +33,7 @@ $addons = @(
     @{ Id = 'DLSS5NR01'; Dir = "$root\addons\DLSS5NR01"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS5NR01.dll', 'nvngx.dll_dlss5nr01.dll', 'nr_selftest.exe');
        # NVIDIA's files, under NVIDIA's licence (NOTICE.md): the licence must travel with the binaries that contain NVIDIA's code
        Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt" } },
-    # DLSS 4 Upscaler (a preview since 0.9.1: its addon.json keeps it off until switched on): built from the same sources; its addon.json lives
+    # DLSS Upscaler (a preview since 0.9.1: its addon.json keeps it off until switched on): built from the same sources; its addon.json lives
     # in products\DLSS4DLAA, and NVIDIA's DLSS runtime ships in its dlss folder
     @{ Id = 'DLSS4DLAA'; Dir = "$root\addons\DLSS5NR01\products\DLSS4DLAA"; Bin = "$root\addons\DLSS5NR01\build\Release"; Files = @('DLSS4DLAA.dll');
        Extra = @{ 'NVIDIA-LICENSE.txt' = "$root\addons\DLSS5NR01\external\ngx\LICENSE.txt"; 'LICENSE.txt' = "$root\addons\DLSS5NR01\LICENSE";
@@ -147,7 +147,7 @@ Install by hand (Lossless Scaling 3.2.2.0 was the tested version)
 5. DLSS 5 Neural Rendering also needs nvngx_dlssnr.dll next to LosslessScaling.exe. It is not included and this project does not say where to
    find it. ReShade input passthrough and Windowed mode are built into the manager (its Features tab); they arrive switched off.
    If you used the old separate ReShade or Windowed addon folders, the manager ignores them; you can remove them.
-6. The DLSS 4 Upscaler (NVIDIA RTX) and the FSR Upscaler (any DirectX 12 graphics card) take the place of Lossless Scaling's NIS
+6. The DLSS Upscaler (NVIDIA RTX) and the FSR Upscaler (any DirectX 12 graphics card) take the place of Lossless Scaling's NIS
    scaler with DLSS or FSR 3, using motion they measure from the frames. They arrive switched off: switch one on in the addon list (only
    one of the two runs at a time), choose NIS as the Scaling Type in Lossless Scaling, and run the game in a window smaller than the
    screen (for example 2560x1440 on a 4K screen); at the screen's own size they anti-alias. 4:3 windows work too.

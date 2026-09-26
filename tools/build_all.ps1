@@ -1,5 +1,5 @@
 # Builds everything in the project: the manager (Lossless.dll, with the built-in features), the addons built from Neural Rendering's sources
-# (DLSS 5 Neural Rendering, the DLSS 4 Upscaler and the FSR Upscaler), the offscreen UI preview and the offline test host. Release x64.
+# (DLSS 5 Neural Rendering, the DLSS Upscaler and the FSR Upscaler), the offscreen UI preview and the offline test host. Release x64.
 # Nothing is deployed; see deploy.ps1.
 #   powershell -File build_all.ps1 [-Only host,nr]
 param([string[]]$Only = @())

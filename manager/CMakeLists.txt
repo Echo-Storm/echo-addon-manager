@@ -267,4 +267,8 @@ target_link_libraries(eam_guitest d3d11 dxgi d3dcompiler bcrypt minhook)
 add_executable(eam_updatetest EXCLUDE_FROM_ALL tools/update_test.cpp src/update/update_check.cpp src/config/config_manager.cpp src/log/logger.cpp)
 target_include_directories(eam_updatetest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 
+add_executable(eam_runtimetest EXCLUDE_FROM_ALL tools/runtime_test.cpp src/addon/runtime_files.cpp src/addon/addon_security.cpp src/config/config_manager.cpp src/log/logger.cpp)
+target_include_directories(eam_runtimetest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+target_link_libraries(eam_runtimetest bcrypt)
+
 install(DIRECTORY sdk/include/eam DESTINATION include)

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-  <!-- DLSS 4 Upscaler: a small frame grown into a large one (Echo-Storm, MIT) -->
+  <!-- DLSS Upscaler: a small frame grown into a large one (Echo-Storm, MIT) -->
   <path d="M4 13.5h6.5V20H4Z"/>
   <path d="M13.5 4H20v6.5"/>
   <path d="M20 4 13 11"/>

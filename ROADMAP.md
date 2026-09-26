@@ -46,7 +46,7 @@ What it has to do (and what it must never do):
 
 ## Done in 0.9: the upscalers
 
-- **DLSS 4 Upscaler** and **FSR Upscaler**: NVIDIA DLSS Super Resolution or AMD FSR 3.1 in place of Lossless Scaling's NIS pass, on a
+- **DLSS Upscaler** and **FSR Upscaler**: NVIDIA DLSS Super Resolution or AMD FSR 3.1 in place of Lossless Scaling's NIS pass, on a
   Direct3D 12 device of their own, with DLAA / native anti-aliasing when the game already fills the screen.
 - **Motion measured from the frames** (this project's own estimator), with a distrust mask where it cannot be trusted, so the upscalers work
   in any game, with frame generation on or off.
@@ -79,7 +79,7 @@ Agreed as worth doing, in no particular order; none of them is started. They com
 - **A DLSS 4.5 addon** next to Neural Rendering, for games where DLSS 5's look is not wanted. To look into first: which DLSS 4.5 features can work from what Lossless Scaling has (the captured frames and
   LSFG's optical flow, but no depth and no game motion vectors), and what NVIDIA's public SDK licence allows. Researched in
   [docs/dlss-4.5-research.md](docs/dlss-4.5-research.md). Built first as DLSS 4 DLAA on the captured frame, which changed nothing visible, then as the
-  **DLSS 4 Upscaler** in 0.9 (above), with DLSS 4.5's model M as a choice.
+  **DLSS Upscaler** in 0.9 (above), with DLSS 4.5's model M as a choice.
 - **Watching: openNR** (github.com/clshortfuse/openNR). It rebuilds a DLSS NR compatibility DLL from a person's own `nvngx_dlssnr.dll`, so it runs the same model, not a better one.
   It is early, with no quality or performance claims yet. Nothing to build here: if it ever produces a working DLL, the person points Neural Rendering at it and runs **Test compatibility**.
   We never ship, host or link the DLSS NR model, or files made from it.

@@ -27,7 +27,7 @@ struct Config {
     bool enabled = true;
     int model = 0;                       // 0 DLSS 5 Neural Rendering (the person's model file), 1 DLAA (NVIDIA's DLSS runtime, shipped)
     unsigned dlaaPreset = 0;             // DLAA's DLSS preset: 0 NVIDIA's default (K), 13 = M (DLSS 4.5)
-    int motionSource = 0;                // the DLSS 4 Upscaler's motion: 0 measured from the frames, 1 frame generation's flow, 2 none
+    int motionSource = 0;                // the DLSS Upscaler's motion: 0 measured from the frames, 1 frame generation's flow, 2 none
     // The upscalers: when no newer picture is finished, Lossless Scaling's queue waits on the GPU for the next one rather than show the same
     // picture again (ScalerLink::Upscale). A CPU wait tried before made repeats more frequent on a busy GPU and is gone (2026-09-25).
     bool scalerGpuWait = true;
@@ -35,7 +35,7 @@ struct Config {
     float scalerEdges = 0.0f;            // the upscalers: edge smoothing of the upscaled picture (SrEngine::SetEdgeSmoothing)
     bool scalerPerGame = true;           // the upscalers: their picture settings kept per game (scalerGames), back when the game takes focus
     std::vector<std::pair<std::string, struct ScalerProfile>> scalerGames;   // lower-case exe name, its settings
-    int scalerHandoff = 0;               // the DLSS 4 Upscaler's handoff (ScalerLink::Handoff): 0 one frame late, 1 GPU wait, 2 DLSS runs but NIS stays,
+    int scalerHandoff = 0;               // the DLSS Upscaler's handoff (ScalerLink::Handoff): 0 one frame late, 1 GPU wait, 2 DLSS runs but NIS stays,
                                          // 3 NIS runs and DLSS's picture is copied over it at Present
     NrParams p;                          // the look, and the few model settings that are not part of a look
     bool presentMode = true;             // with frame generation off, the model takes the presented frame (see Present in runtime.cpp)

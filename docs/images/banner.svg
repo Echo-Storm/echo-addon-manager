@@ -29,7 +29,7 @@
     <text x="290" y="142" font-size="50" font-weight="700" fill="#e8e8e8" letter-spacing="-0.5">Addon Manager</text>
     <rect x="292" y="160" width="300" height="3" rx="1.5" fill="url(#rule)"/>
     <text x="291" y="200" font-size="16" font-weight="600" fill="#7cb342" letter-spacing="3">FOR LOSSLESS SCALING</text>
-    <text x="291" y="234" font-size="17" fill="#8a8a8a">DLSS 5 Neural Rendering  ·  DLSS 4 and FSR 3 upscalers</text>
+    <text x="291" y="234" font-size="17" fill="#8a8a8a">DLSS 5 Neural Rendering  ·  DLSS and FSR upscalers</text>
     <text x="291" y="262" font-size="17" fill="#8a8a8a">ReShade passthrough  ·  Windowed mode</text>
   </g>
 

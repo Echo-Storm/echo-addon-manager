@@ -1,11 +1,11 @@
 <p align="center"><img src="docs/images/banner.svg" alt="Addon Manager for Lossless Scaling" width="100%"></p>
 
-<p align="center"><b>Lossless Scaling, extended.</b><br>DLSS 5 Neural Rendering, DLSS 4 and FSR upscaling for games that never had them, and an addon manager that keeps it all in one window.</p>
+<p align="center"><b>Lossless Scaling, extended.</b><br>DLSS 5 Neural Rendering, DLSS and FSR upscaling for games that never had them, and an addon manager that keeps it all in one window.</p>
 
 <p align="center"><img src="docs/images/addons.png" alt="The manager: the addons at the left, Neural Rendering's panel at the right, the machine's load in the header" width="100%"></p>
 
 **Addon Manager for Lossless Scaling** (LS Addon Manager for short) loads alongside [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) and gives it an
-addon system. It comes with three addons that do what Lossless Scaling alone cannot: **DLSS 5 Neural Rendering** gives any game a new look, and the **DLSS 4** and
+addon system. It comes with three addons that do what Lossless Scaling alone cannot: **DLSS 5 Neural Rendering** gives any game a new look, and the **DLSS** and
 **FSR Upscalers** put a real temporal upscaler in place of Lossless Scaling's NIS scaler, so old games that never had DLSS or FSR get one. Around them, the manager
 installs and switches addons, shows the machine's load at a glance, says what limits your frame rate, and backs every setting up. It is free and MIT-licensed, and an
 unofficial project, not affiliated with the Lossless Scaling developers: read the [disclaimer](DISCLAIMER.md) before you install it.
@@ -36,7 +36,7 @@ Status: **0.9.4**, getting ready for 1.0 (the [roadmap](ROADMAP.md) says what is
 | | What it is | Needs | Default |
 |---|---|---|---|
 | **DLSS 5 Neural Rendering** | NVIDIA's neural rendering model on every frame Lossless Scaling shows: a new look for any game | NVIDIA RTX, your own model file | on |
-| **DLSS 4 Upscaler** | NVIDIA DLSS in place of Lossless Scaling's NIS scaler: upscaling, or DLAA at the screen's own size | NVIDIA RTX (runtime included) | off |
+| **DLSS Upscaler** | NVIDIA DLSS in place of Lossless Scaling's NIS scaler: upscaling, or DLAA at the screen's own size | NVIDIA RTX (runtime included) | off |
 | **FSR Upscaler** | AMD FSR 3.1, or FSR 4, in the same place, on any graphics card | any DirectX 12 GPU (runtime included) | off |
 | **ReShade input passthrough** | Mouse and keyboard reach a ReShade overlay while Lossless Scaling scales the game | ReShade | off |
 | **Windowed mode and second monitor** | Lossless Scaling with a windowed game, or on a second monitor | | off |
@@ -62,7 +62,7 @@ Scaling wait for it.
 
 About 2.7 ms plus 1.8 ms per megapixel of model input on an RTX 4070 Ti SUPER (5.2 ms at 1912x1080). [The addon's README](addons/DLSS5NR01/README.md) has the rest.
 
-### DLSS 4 and FSR Upscalers
+### DLSS and FSR Upscalers
 
 <p align="center"><img src="docs/images/upscaler.png" alt="The FSR Upscaler's panel in the manager" width="100%"></p>
 
@@ -71,7 +71,7 @@ frames and the motion between them, which gives a steadier, more detailed pictur
 support from the game: **the addons measure the motion from the frames themselves.** In Lossless Scaling choose **NIS** as the Scaling Type and run the game in a window
 smaller than the screen (for example 2560x1440 on a 4K screen); at the screen's own size they anti-alias instead (DLAA, FSR native AA).
 
-- **DLSS 4 Upscaler:** NVIDIA DLSS Super Resolution, with the choice of NVIDIA's default model (K) or DLSS 4.5's M. NVIDIA RTX.
+- **DLSS Upscaler:** NVIDIA DLSS Super Resolution, with the choice of NVIDIA's default model (K) or DLSS 4.5's M. NVIDIA RTX.
 - **FSR Upscaler:** AMD FidelityFX Super Resolution 3.1 with AMD's own sharpening (RCAS). Any DirectX 12 graphics card: AMD, NVIDIA or Intel.
   FSR 4 (the OptiScaler team's 4.1.1b INT8 build, which runs on cards AMD's own FSR 4 does not) is one click away in the manager's
   Runtimes list: the + next to FSR, bottom left.

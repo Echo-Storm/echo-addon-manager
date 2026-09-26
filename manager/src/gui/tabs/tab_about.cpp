@@ -85,7 +85,7 @@ void RenderTabAbout() {
             { eam::ui::icons::kSparkles, "DLSS 5 Neural Rendering",
               "NVIDIA's neural rendering model on every frame Lossless Scaling shows, real and generated: a new look for any game, with its own "
               "motion measurement, saved looks and a look per game. NVIDIA RTX; needs your own copy of the model file." },
-            { eam::ui::icons::kUpscale, "DLSS 4 Upscaler",
+            { eam::ui::icons::kUpscale, "DLSS Upscaler",
               "NVIDIA DLSS in place of Lossless Scaling's NIS scaler: real upscaling (or DLAA at the screen's own size) for games that never had "
               "it, with motion measured from the frames. NVIDIA RTX." },
             { eam::ui::icons::kUpscaleFast, "FSR Upscaler",

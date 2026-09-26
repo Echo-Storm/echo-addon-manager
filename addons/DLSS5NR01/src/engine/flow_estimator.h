@@ -1,4 +1,4 @@
-// FlowEstimator: motion vectors measured from the frames themselves, for the DLSS 4 Upscaler (and any later upscaler) when the game gives
+// FlowEstimator: motion vectors measured from the frames themselves, for the DLSS Upscaler (and any later upscaler) when the game gives
 // none. It runs on the engine's own D3D12 device, inside the engine's command list, before DLSS.
 //
 // Each frame: its brightness at the game's size and at halved sizes down to about 64 pixels wide (a pyramid, kept for the next frame). Then,

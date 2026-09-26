@@ -273,7 +273,7 @@ def scenario_flow_previous(ctx, res, text, frame):
 
 
 def scenario_scaler(ctx, res, text, frame):
-    # the DLSS 4 Upscaler in place of Lossless Scaling's NIS pass (a fake one here, which paints its output magenta)
+    # the DLSS Upscaler in place of Lossless Scaling's NIS pass (a fake one here, which paints its output magenta)
     made = re.search(r'DLSS upscaler: (\d+)x(\d+) -> (\d+)x(\d+).*?made in (\d+) ms', text)
     res.check('DLSS runs on a D3D12 device of its own, never on Lossless Scaling\'s', 'ready on its own D3D12 device' in text)
     res.check('it finds the NIS pass and makes DLSS for its sizes', bool(made) and made.group(1, 2, 3, 4) == ('1920', '1080', '2880', '1620'),

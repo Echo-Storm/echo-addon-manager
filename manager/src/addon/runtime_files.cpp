@@ -91,6 +91,23 @@ void ReadSignature(const std::wstring& path, RuntimeFile& f) {
 // SHA-256 and signature take a moment); the list holds what was read last. Never freed: nothing may be joined as the process ends.
 struct Cached { uint64_t size = 0; FILETIME written{}; bool exists = false; RuntimeFile file; bool reading = false; ULONGLONG checkedAt = 0; };
 struct Cache { std::mutex mutex; std::map<std::wstring, Cached> byPath; std::vector<std::wstring> modules; ULONGLONG modulesAt = 0; };
+
+// A file as Windows knows it (its volume and its number there): the same for every spelling of its path (slashes, 8.3 names, \\?\, case),
+// which is how a loader may have written the path it loaded a DLL from (NVIDIA's writes "...\dlss/nvngx_dlss.dll").
+struct FileId { DWORD volume = 0, high = 0, low = 0; bool valid = false; bool operator==(const FileId& o) const { return valid && o.valid && volume == o.volume && high == o.high && low == o.low; } };
+FileId IdOf(const std::wstring& path) {
+    FileId id;
+    const HANDLE h = CreateFileW(path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return id;
+    BY_HANDLE_FILE_INFORMATION info{};
+    if (GetFileInformationByHandle(h, &info)) { id.volume = info.dwVolumeSerialNumber; id.high = info.nFileIndexHigh; id.low = info.nFileIndexLow; id.valid = true; }
+    CloseHandle(h);
+    return id;
+}
+std::wstring BaseName(const std::wstring& path) {
+    const size_t cut = path.find_last_of(L"\\/");
+    return cut == std::wstring::npos ? path : path.substr(cut + 1);
+}
 Cache& TheCache() { static Cache* c = new Cache; return *c; }
 
 std::wstring Lower(std::wstring s) { for (wchar_t& ch : s) ch = (wchar_t)towlower(ch); return s; }
@@ -192,8 +209,18 @@ void FillFromCache(RuntimeFile& row, const std::string& shippedSha256, ULONGLONG
         }
     }
     const RuntimeFile& known = c.file;
+    // loaded: a module of this process is this very file (by the file's identity; only modules of the same name are looked at)
     const std::vector<std::wstring>& modules = LoadedModules(cache, now);
-    row.loaded = c.exists && std::find(modules.begin(), modules.end(), Lower(path)) != modules.end();
+    row.loaded = false;
+    if (c.exists) {
+        const std::wstring name = Lower(BaseName(path));
+        FileId mine; bool mineRead = false;
+        for (const std::wstring& module : modules) {
+            if (Lower(BaseName(module)) != name) continue;
+            if (!mineRead) { mine = IdOf(path); mineRead = true; }
+            if (IdOf(module) == mine) { row.loaded = true; break; }
+        }
+    }
     row.exists = c.exists; row.read = known.read;
     row.signature = known.signature; row.version = known.version; row.description = known.description; row.company = known.company;
     row.signer = known.signer; row.sha256 = known.sha256; row.size = known.size;

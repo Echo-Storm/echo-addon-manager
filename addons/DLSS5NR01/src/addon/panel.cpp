@@ -123,7 +123,7 @@ void DrawPanel() {
         else ImGui::TextColored(eam::ui::theme::V(eam::ui::theme::kDanger), "AMD's FSR runtime is missing: the addon's fsr folder should hold amd_fidelityfx_dx12.dll. Reinstall the addon.");
         Note("Works on any graphics card with DirectX 12 (AMD, NVIDIA or Intel). In Lossless Scaling choose NIS as the Scaling Type (FSR takes the place of that pass), "
              "and let the game run in a window smaller than your screen, for example 2560x1440 on a 4K screen; at the screen's own size it anti-aliases instead. "
-             "Frame generation can be on or off. Only one of the FSR and DLSS 4 Upscalers works at a time.");
+             "Frame generation can be on or off. Only one of the FSR and DLSS Upscalers works at a time.");
     }
     else {   // ---- DLAA's requirements: an NVIDIA RTX card, and NVIDIA's runtime, which ships in the addon's dlss folder
         Block("Requirements");
@@ -222,7 +222,7 @@ void DrawPanel() {
         if (ImGui::Checkbox(label.c_str(), &c.enabled)) { changed = true; if (c.enabled) { ClaimFrames(); SwitchOn(); } else ReleaseFrames(); }
         Tip(kScalerAddon
                 ? "Master switch. Off = Lossless Scaling's NIS runs as usual and the upscaler stops.\nTo compare while playing, use the Before / after hotkey instead: it keeps the upscaler running.\n"
-                  "Only one of the DLSS 4 and FSR Upscalers works at a time (switching one on in the addon list switches the other off); either works beside DLSS 5 Neural Rendering."
+                  "Only one of the DLSS and FSR Upscalers works at a time (switching one on in the addon list switches the other off); either works beside DLSS 5 Neural Rendering."
                 : "Master switch. Off = Lossless Scaling runs untouched and the model stops.\nTo compare before and after while playing, use the Before / after hotkey instead: it keeps the model running.");
     }
     ImGui::SameLine(); if (ImGui::SmallButton("Reset history")) g_resetRequested = true;
@@ -375,7 +375,7 @@ void DrawPanel() {
         if (kFsrScaler) Tip("FSR's own sharpening (AMD's RCAS), part of its upscaling pass; above about 0.6 an extra pass adds more than RCAS can. Lossless Scaling's "
                             "NIS sharpens too (its Sharpness setting), so without it FSR can look softer next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
         else Tip("Contrast-adaptive sharpening of DLSS's picture (the FidelityFX CAS formula), which costs a fraction of a millisecond; above about 0.6 its effect is amplified "
-                 "past CAS's own maximum. DLSS 4 has no sharpening of its own, while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer "
+                 "past CAS's own maximum. DLSS has no sharpening of its own, while Lossless Scaling's NIS does (its Sharpness setting), so without it DLSS can look softer "
                  "next to NIS. 0.5 is a good start (Ctrl+Shift+F8 / F9 in the game).");
         // FSR 4 keeps its history its own way and takes none of FSR 3.1's tuning (nor the mask the slider widens): the slider would do nothing
         const bool fsr4 = kFsrScaler && GetScalerView().provider.rfind("4", 0) == 0;

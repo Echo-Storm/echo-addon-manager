@@ -725,7 +725,7 @@ void OnDeviceEvent(uint32_t id, const void*, uint32_t, void*) {
     // machine), not from these events, which come for every device Lossless Scaling makes.
 }
 
-// ---- DLSS as Lossless Scaling's scaler (the DLSS 4 Upscaler; see scaler11.h and engine/sr_engine.h)
+// ---- DLSS as Lossless Scaling's scaler (the DLSS Upscaler; see scaler11.h and engine/sr_engine.h)
 //
 // Every pass still goes through the frame tap, which follows frame generation's optical flow and tells real frames apart; the NIS pass is
 // replaced when DLSS is ready, and runs as usual until then, when DLSS fails, or while the Before / after hotkey shows the original.
