@@ -1,4 +1,4 @@
-# The README's two Setup pictures (docs\images\setup-start.png and setup-done.png): a throwaway fake Lossless Scaling folder, Setup's --shot
+# The README's two Setup pictures (docs\images\setup-install.png and setup-installed.png): a throwaway fake Lossless Scaling folder, Setup's --shot
 # mode (its window kept off the screen, it installs into that folder only and remembers nothing), then the BMPs as PNGs in -Out. The fake
 # folder is moved to %TEMP% afterwards, not deleted. Build the package first (tools\package.ps1): the Setup exe comes from dist.
 #   powershell -File tools\setup_shots.ps1 [-Folder 'C:\Games\Lossless Scaling'] [-Out folder]
@@ -20,4 +20,4 @@ if (-not $finished) { $p.Kill() }
 Move-Item $top (Join-Path $env:TEMP ('setup-shot-folder-' + (Get-Date -Format 'yyyyMMdd-HHmmss')))
 if (-not $finished) { Write-Host 'Setup did not finish.'; exit 1 }
 python "$PSScriptRoot\bmp2png.py" $Out
-Write-Host "Copy setup-start.png and setup-done.png from $Out into docs\images."
+Write-Host "Copy setup-start.png to docs\images\setup-install.png and setup-done.png to docs\images\setup-installed.png (from $Out)."

@@ -128,8 +128,8 @@ covers the settings, what to expect and what to do when something is wrong.
 
 <table>
 <tr>
-<td valign="top" width="50%"><b>Setup, before installing</b><br><img src="docs/images/setup-start.png" alt="Setup offering to install"></td>
-<td valign="top" width="50%"><b>Setup, when it is done</b><br><img src="docs/images/setup-done.png" alt="Setup after installing"></td>
+<td valign="top" width="50%"><b>Setup, before installing</b><br><img src="docs/images/setup-install.png" alt="Setup offering to install"></td>
+<td valign="top" width="50%"><b>Setup, when it is done</b><br><img src="docs/images/setup-installed.png" alt="Setup after installing"></td>
 </tr>
 </table>
 
