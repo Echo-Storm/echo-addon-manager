@@ -195,7 +195,7 @@ int main(int argc, char** argv) {
         if (shotMode) {
             ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ImVec2((float)shotW, 0.0f));
             ImGui::Begin("Addon Manager", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
-            for (const char* h : { "Model (what it does to the picture)", "Motion", "Quality and performance", "Picture (sharpness, tone, colour, grain)", "Keep the HUD untouched", "Compare and hotkeys", "Games (a look per program)", "Frame detection (advanced)", "Technical status", "Advanced" })
+            for (const char* h : { "Model (what it does to the picture)", "Motion", "Quality and performance", "Picture (sharpness, tone, colour, grain)", "Keep the HUD untouched", "Upscaling", "Compare and hotkeys", "Games (a look per program)", "Frame detection (advanced)", "Technical status", "Advanced" })
                 if (openSections) ImGui::GetStateStorage()->SetInt(ImGui::GetID(h), 1);
         } else { ImGui::SetNextWindowSize(ImVec2(900, 700)); ImGui::Begin("Addon Manager"); }
         Render(); ImGui::End();
